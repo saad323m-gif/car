@@ -7,11 +7,11 @@ import {
     collection, doc, setDoc, getDoc, getDocs, updateDoc, query, where, limit 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { renderDashboard, setCurrentUser } from "./members.js";
-import { renderLogsView, logAction } from "./logs.js";
+import { renderLogsView, logAction, setLogsCurrentUser } from "./logs.js";
 import { renderCarsView, setCarsCurrentUser } from "./cars.js";
 import { renderRequestsView, setRequestsCurrentUser } from "./requests.js";
-import { renderSearchView } from "./search.js";
-import { renderStatsView } from "./stats.js";
+import { renderSearchView, setSearchCurrentUser } from "./search.js";
+import { renderStatsView, setStatsCurrentUser } from "./stats.js";
 
 function updateDateTime() {
     const now = new Date();
@@ -30,7 +30,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            if (btn.disabled) return;
+            if (btn.disabled || btn.style.display === 'none') return;
+            
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             
@@ -50,16 +51,23 @@ window.addEventListener('DOMContentLoaded', () => {
             if (userDoc.exists()) {
                 let userData = userDoc.data();
                 userData.uid = user.uid;
+                
+                // Sync user data to all modules for Security Guards
                 setCurrentUser(userData);
                 setCarsCurrentUser(userData);
                 setRequestsCurrentUser(userData);
+                setLogsCurrentUser(userData);
+                setSearchCurrentUser(userData);
+                setStatsCurrentUser(userData);
                 
-                const reqTab = document.querySelector('.tab-btn[data-tab="requests"]');
-                if (userData.role === 'admin') {
-                    reqTab.style.display = 'block';
-                } else {
-                    reqTab.style.display = 'none';
-                }
+                // UI Obfuscation (Layer 3)
+                document.querySelectorAll('.tab-btn').forEach(tab => {
+                    if (userData.role === 'admin') {
+                        tab.style.display = 'block';
+                    } else {
+                        tab.style.display = tab.dataset.tab === 'cars' ? 'block' : 'none';
+                    }
+                });
                 
                 showDashboard();
             } else {
