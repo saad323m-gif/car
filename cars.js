@@ -4,6 +4,7 @@ import {
     query, where, limit, startAfter, orderBy, runTransaction, serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { logAction } from "./logs.js";
+import { createLinkRequest, createUnlinkRequest } from "./requests.js";
 
 let currentUserData = null;
 let lastVisibleCar = null;
@@ -58,8 +59,35 @@ export function renderCarsView() {
     } else {
         container.innerHTML = `
             <h2>My Assigned Cars</h2>
+            <div class="divider"></div>
+            <button class="btn-add-toggle" id="toggle-request-car">+ Request to Use a Car</button>
+            <div id="request-car-form-wrapper" class="hidden-form" style="margin-bottom: 30px;">
+                <form id="request-car-form" style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="form-group"><label>Plate Number</label><input type="text" id="req-plate-num" required pattern="\\d+"></div>
+                    <div class="form-group"><label>Plate Code</label><input type="text" id="req-plate-code" required></div>
+                    <div class="form-group">
+                        <label>Emirate</label>
+                        <select id="req-emirate" required>
+                            <option value="Abu Dhabi">Abu Dhabi</option>
+                            <option value="Dubai">Dubai</option>
+                            <option value="Sharjah">Sharjah</option>
+                            <option value="Ajman">Ajman</option>
+                            <option value="Fujairah">Fujairah</option>
+                            <option value="Umm Al Quwain">Umm Al Quwain</option>
+                            <option value="Ras Al Khaimah">Ras Al Khaimah</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="Grid-column: 1 / -1;"><button type="submit" class="btn" id="btn-submit-req">Send Request</button></div>
+                </form>
+            </div>
             <div id="cars-card-list" class="card-list"></div>
         `;
+
+        document.getElementById('toggle-request-car').addEventListener('click', () => {
+            document.getElementById('request-car-form-wrapper').classList.toggle('hidden-form');
+        });
+        document.getElementById('request-car-form').addEventListener('submit', createLinkRequest);
         fetchUserCars();
     }
 }
@@ -81,12 +109,9 @@ async function generateCarId() {
 async function handleAddCar(e) {
     e.preventDefault();
     const submitBtn = document.getElementById('btn-submit-car');
-    
-    // Prevent double clicking (Race Condition Fix)
     submitBtn.disabled = true;
     submitBtn.textContent = "Adding...";
 
-    // Strict trimming and lowercasing for uniqueness checks
     const plateNum = document.getElementById('car-plate-num').value.trim();
     const plateCode = document.getElementById('car-plate-code').value.trim().toLowerCase();
     const emirateSelect = document.getElementById('car-emirate');
@@ -101,12 +126,10 @@ async function handleAddCar(e) {
     const plateIdentifier = `${plateNum}-${plateCode}-${emirate}`;
 
     try {
-        // Check Unique Plate Combination
         const plateQ = query(collection(db, 'cars'), where('plateIdentifier', '==', plateIdentifier));
         const plateSnap = await getDocs(plateQ);
         if (!plateSnap.empty) throw new Error('This Plate combination already exists.');
 
-        // Check Unique VIN
         const vinQ = query(collection(db, 'cars'), where('vin', '==', vin));
         const vinSnap = await getDocs(vinQ);
         if (!vinSnap.empty) throw new Error('This VIN already exists.');
@@ -117,7 +140,7 @@ async function handleAddCar(e) {
             carId, 
             plateNumber: plateNum, 
             plateCode: plateCode.toUpperCase(),
-            emirate: emirateSelect.value, // Store original case for display
+            emirate: emirateSelect.value, 
             plateIdentifier, 
             type, ownerName: owner, vin, 
             licenseExpiry: new Date(licenseExp), insuranceExpiry: new Date(insuranceExp),
@@ -133,7 +156,6 @@ async function handleAddCar(e) {
     } catch (error) { 
         showMessage(`Error: ${error.message}`, 'error', 'dashboard');
     } finally {
-        // Re-enable button regardless of success or failure
         submitBtn.disabled = false;
         submitBtn.textContent = "Add Car";
     }
@@ -210,7 +232,10 @@ function renderCarCard(id, data, isUserView = false) {
             <div id="history-area-${id}" style="margin-top: 10px; display:none;"></div>
         `;
     } else {
-         actionsHtml = `<div id="history-area-${id}" style="margin-top: 10px; display:none;"></div>`;
+         actionsHtml = `
+            <button class="btn btn-sm btn-warning" id="req-unlink-${id}">Request Unlink</button>
+            <div id="history-area-${id}" style="margin-top: 10px; display:none;"></div>
+         `;
     }
 
     card.innerHTML = `
@@ -262,6 +287,11 @@ function renderCarCard(id, data, isUserView = false) {
             handleCarAction(id, e.target.value, data, topBarColor);
             e.target.value = "";
         });
+    }
+    
+    const reqUnlinkBtn = document.getElementById(`req-unlink-${id}`);
+    if (reqUnlinkBtn) {
+        reqUnlinkBtn.addEventListener('click', () => createUnlinkRequest(id, data));
     }
 }
 
