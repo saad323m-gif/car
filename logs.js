@@ -17,6 +17,7 @@ export async function logAction(actor, actionType, details = {}) {
             actionType: actionType,
             targetId: details.targetId || null,
             targetName: details.targetName || null,
+            assigneeId: details.assigneeId || null, // Used for User Activity Logs
             details: details.text || ''
         });
     } catch (error) {
@@ -25,7 +26,6 @@ export async function logAction(actor, actionType, details = {}) {
 }
 
 export function renderLogsView() {
-    // Security Guard
     if (!currentUserData || currentUserData.role !== 'admin') {
         document.getElementById('dashboard-container').innerHTML = '<h2>Access Denied</h2><p>You do not have permission to view this page.</p>';
         return;
@@ -33,10 +33,10 @@ export function renderLogsView() {
 
     const container = document.getElementById('dashboard-container');
     container.innerHTML = `
-        <h2>System Logs</h2>
+        <h2>System Logs Timeline</h2>
         <p style="text-align: center; color: #666; margin-bottom: 20px;">Immutable audit trail of all system activities.</p>
         <div class="divider"></div>
-        <div id="logs-card-list" class="card-list">
+        <div id="logs-timeline" class="timeline">
             <p class="loading-text">Loading logs...</p>
         </div>
         <div id="load-more-container" class="load-more-container"></div>
@@ -48,7 +48,7 @@ export function renderLogsView() {
 async function fetchLogs(loadMore = false) {
     if (currentUserData.role !== 'admin') return;
     
-    const listContainer = document.getElementById('logs-card-list');
+    const listContainer = document.getElementById('logs-timeline');
     const loadMoreContainer = document.getElementById('load-more-container');
     
     if (!loadMore) listContainer.innerHTML = '<p class="loading-text">Loading logs...</p>';
@@ -73,7 +73,7 @@ async function fetchLogs(loadMore = false) {
 
         snapshot.forEach((d) => {
             const data = d.data();
-            renderLogCard(d.id, data);
+            renderLogTimelineItem(listContainer, data);
         });
 
         if (snapshot.size === 10) {
@@ -87,31 +87,21 @@ async function fetchLogs(loadMore = false) {
     }
 }
 
-function renderLogCard(id, data) {
-    const listContainer = document.getElementById('logs-card-list');
-    const card = document.createElement('div');
-    card.className = 'card';
+function renderLogTimelineItem(container, data) {
+    const item = document.createElement('div');
+    item.className = 'timeline-item';
     
     let dateStr = 'Just now';
     if (data.timestamp) {
         dateStr = new Date(data.timestamp.toDate()).toLocaleString('en-GB', { timeZone: 'Asia/Dubai', year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true });
     }
 
-    card.innerHTML = `
-        <div class="card-header" id="header-${id}">
-            <span class="card-title">${data.actionType} - ${data.actorName}</span>
-            <div class="card-meta"><span class="timestamp-meta">${dateStr}</span></div>
-        </div>
-        <div class="card-body" id="body-${id}">
-            <div class="detail-grid">
-                <div class="detail-item"><span class="detail-label">Time</span><span class="detail-value">${dateStr}</span></div>
-                <div class="detail-item"><span class="detail-label">Action</span><span class="detail-value action-type">${data.actionType}</span></div>
-                <div class="detail-item"><span class="detail-label">Performed By</span><span class="detail-value">${data.actorName}</span></div>
-                ${data.targetName ? `<div class="detail-item"><span class="detail-label">Target</span><span class="detail-value">${data.targetName}</span></div>` : ''}
-                ${data.details ? `<div class="detail-item" style="grid-column: 1 / -1;"><span class="detail-label">Details</span><span class="detail-value">${data.details}</span></div>` : ''}
-            </div>
+    item.innerHTML = `
+        <div class="timeline-dot"></div>
+        <div class="timeline-content">
+            <div class="timeline-date">${dateStr}</div>
+            <div class="timeline-text"><strong>${data.actionType}</strong> by ${data.actorName} ${data.details ? '<br>' + data.details : ''}</div>
         </div>
     `;
-    listContainer.appendChild(card);
-    document.getElementById(`header-${id}`).addEventListener('click', () => card.classList.toggle('open'));
+    container.appendChild(item);
 }
