@@ -4,6 +4,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 let lastVisibleLog = null;
+let currentUserData = null;
+
+export const setLogsCurrentUser = (data) => currentUserData = data;
 
 export async function logAction(actor, actionType, details = {}) {
     try {
@@ -22,6 +25,12 @@ export async function logAction(actor, actionType, details = {}) {
 }
 
 export function renderLogsView() {
+    // Security Guard
+    if (!currentUserData || currentUserData.role !== 'admin') {
+        document.getElementById('dashboard-container').innerHTML = '<h2>Access Denied</h2><p>You do not have permission to view this page.</p>';
+        return;
+    }
+
     const container = document.getElementById('dashboard-container');
     container.innerHTML = `
         <h2>System Logs</h2>
@@ -37,6 +46,8 @@ export function renderLogsView() {
 }
 
 async function fetchLogs(loadMore = false) {
+    if (currentUserData.role !== 'admin') return;
+    
     const listContainer = document.getElementById('logs-card-list');
     const loadMoreContainer = document.getElementById('load-more-container');
     
@@ -83,10 +94,7 @@ function renderLogCard(id, data) {
     
     let dateStr = 'Just now';
     if (data.timestamp) {
-        dateStr = new Date(data.timestamp.toDate()).toLocaleString('en-GB', {
-            timeZone: 'Asia/Dubai', year: 'numeric', month: 'short', day: '2-digit',
-            hour: '2-digit', minute: '2-digit', hour12: true
-        });
+        dateStr = new Date(data.timestamp.toDate()).toLocaleString('en-GB', { timeZone: 'Asia/Dubai', year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true });
     }
 
     card.innerHTML = `
