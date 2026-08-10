@@ -11,7 +11,6 @@ export const setCurrentUser = (data) => currentUserData = data;
 export const getCurrentUser = () => currentUserData;
 
 export function renderDashboard() {
-    // Security Guard
     if (!currentUserData || currentUserData.role !== 'admin') {
         document.getElementById('dashboard-container').innerHTML = '<h2>Access Denied</h2><p>You do not have permission to view this page.</p>';
         return;
@@ -134,11 +133,21 @@ function renderUserCard(uid, data) {
             <select class="action-select" id="action-${uid}">
                 <option value="">Select Action</option>
                 <option value="edit">Edit Member</option>
+                <option value="activity">View Activity Log</option>
                 ${data.role === 'user' ? '<option value="promote">Promote</option>' : '<option value="demote">Demote</option>'}
                 ${data.status === 'active' ? '<option value="suspend">Suspend</option>' : '<option value="activate">Activate</option>'}
             </select>
+            <div id="activity-area-${uid}" style="margin-top: 15px; display: none;"></div>
         `;
-    } else { actionsHtml = `<span class="protected-badge">Protected</span>`; }
+    } else { 
+        actionsHtml = `
+            <select class="action-select" id="action-${uid}">
+                <option value="">Select Action</option>
+                <option value="activity">View Activity Log</option>
+            </select>
+            <div id="activity-area-${uid}" style="margin-top: 15px; display: none;"></div>
+        `; 
+    }
 
     card.innerHTML = `
         <div class="card-header" id="header-${uid}">
@@ -150,7 +159,7 @@ function renderUserCard(uid, data) {
         </div>
         <div class="card-body" id="body-${uid}">
             <div id="view-info-${uid}">
-                <div class="detail-grid">
+                <div class="detail-list">
                     <div class="detail-item"><span class="detail-label">Email</span><span class="detail-value">${data.email}</span></div>
                     <div class="detail-item"><span class="detail-label">Phone</span><span class="detail-value">${data.phone}</span></div>
                     ${currentUserData.role === 'admin' ? `<div class="detail-item" style="grid-column: 1 / -1;"><span class="detail-label">Notes</span><span class="detail-value">${data.notes || 'N/A'}</span></div>` : ''}
@@ -162,10 +171,15 @@ function renderUserCard(uid, data) {
     `;
     listContainer.appendChild(card);
 
-    document.getElementById(`header-${uid}`).addEventListener('click', () => card.classList.toggle('open'));
+    document.getElementById(`header-${uid}`).addEventListener('click', (e) => {
+        if(e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
+            card.classList.toggle('open');
+        }
+    });
 
-    if (!data.isProtected) {
-        document.getElementById(`action-${uid}`).addEventListener('change', (e) => {
+    const actionSelect = document.getElementById(`action-${uid}`);
+    if (actionSelect) {
+        actionSelect.addEventListener('change', (e) => {
             handleMemberAction(uid, e.target.value, data.username);
             e.target.value = "";
         });
@@ -176,16 +190,94 @@ async function handleMemberAction(uid, action, username) {
     if (currentUserData.role !== 'admin') return;
     if (!action) return;
     
+    const activityArea = document.getElementById(`activity-area-${uid}`);
+    if (activityArea) activityArea.style.display = 'none';
+    
     try {
         if (action === 'promote') { await updateDoc(doc(db, 'users', uid), { role: 'admin' }); await logAction(currentUserData, 'PROMOTE_USER', { targetId: uid, targetName: username, text: `Promoted ${username}` }); }
         else if (action === 'demote') { await updateDoc(doc(db, 'users', uid), { role: 'user' }); await logAction(currentUserData, 'DEMOTE_USER', { targetId: uid, targetName: username, text: `Demoted ${username}` }); }
         else if (action === 'suspend') { await updateDoc(doc(db, 'users', uid), { status: 'suspended' }); await logAction(currentUserData, 'SUSPEND_USER', { targetId: uid, targetName: username, text: `Suspended ${username}` }); }
         else if (action === 'activate') { await updateDoc(doc(db, 'users', uid), { status: 'active' }); await logAction(currentUserData, 'ACTIVATE_USER', { targetId: uid, targetName: username, text: `Activated ${username}` }); }
         else if (action === 'edit') { renderInlineEditForm(uid); return; }
+        else if (action === 'activity') { await renderUserActivity(uid); return; }
         
         showMessage(`Action completed for ${username}.`, 'success', 'dashboard');
         lastVisibleUser = null; fetchUsersForAdmin(false);
     } catch (error) { handleFirebaseError(error, 'dashboard'); }
+}
+
+// NEW: User-specific Activity Timeline
+async function renderUserActivity(uid) {
+    const activityArea = document.getElementById(`activity-area-${uid}`);
+    if (!activityArea) return;
+    activityArea.style.display = 'block';
+    activityArea.innerHTML = '<p class="loading-text" style="font-size: 0.85rem;">Loading activity...</p>';
+
+    try {
+        // Fetch actions done BY the user
+        const actorQ = query(collection(db, 'logs'), where('actorId', '==', uid), limit(20));
+        const actorSnap = await getDocs(actorQ);
+        
+        // Fetch actions done TO the user (Car assignments/unassignments)
+        const assigneeQ = query(collection(db, 'logs'), where('assigneeId', '==', uid), limit(20));
+        const assigneeSnap = await getDocs(assigneeQ);
+        
+        let logs = [];
+        actorSnap.forEach(d => logs.push(d.data()));
+        assigneeSnap.forEach(d => logs.push(d.data()));
+        
+        // Sort in memory
+        logs.sort((a, b) => {
+            const timeA = a.timestamp ? a.timestamp.toDate().getTime() : 0;
+            const timeB = b.timestamp ? b.timestamp.toDate().getTime() : 0;
+            return timeB - timeA;
+        });
+
+        if (logs.length === 0) {
+            activityArea.innerHTML = '<p style="font-size:0.85rem; text-align:center; color:#666;">No activity recorded.</p>';
+            return;
+        }
+
+        let html = '<div class="timeline">';
+        logs.slice(0, 15).forEach(log => {
+            let dateStr = 'Just now';
+            if (log.timestamp) {
+                dateStr = new Date(log.timestamp.toDate()).toLocaleString('en-GB', { timeZone: 'Asia/Dubai', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+            }
+            
+            let itemClass = 'timeline-item';
+            let text = log.details;
+            
+            // Highlight ongoing vs completed assignments
+            if (log.actionType === 'CAR_ASSIGN') {
+                itemClass += ' ongoing';
+                text = `Assigned car <strong>${log.targetId}</strong> (Ongoing)`;
+            } else if (log.actionType === 'CAR_UNASSIGN') {
+                itemClass += ' completed';
+                text = `Unassigned car <strong>${log.targetId}</strong> (Completed)`;
+            } else if (log.actionType === 'LOGIN') {
+                text = 'Logged into the system';
+            } else if (log.actionType === 'LOGOUT') {
+                text = 'Logged out';
+            }
+
+            html += `
+                <div class="${itemClass}">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-date">${dateStr}</div>
+                        <div class="timeline-text">${text}</div>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+
+        activityArea.innerHTML = html;
+
+    } catch (error) {
+        activityArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error: ${error.message}</p>`;
+    }
 }
 
 async function renderInlineEditForm(uid) {
