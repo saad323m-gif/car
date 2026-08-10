@@ -129,6 +129,9 @@ h3 { color: #1565c0; margin-bottom: 15px; }
 .status-active { color: #388e3c; font-weight: bold; }
 .status-suspended { color: #d32f2f; font-weight: bold; }
 .role-admin { color: #1976d2; font-weight: bold; }
+.role-user { color: #757575; font-weight: bold; }
+.action-type { font-weight: bold; color: #1976d2; text-transform: capitalize; }
+.timestamp-meta { font-size: 0.85rem; color: #888; }
 .protected-badge { color: #1976d2; font-weight: bold; font-size: 0.9rem; background: #e3f2fd; padding: 4px 8px; border-radius: 4px; }
 
 /* Pagination / Load More */
