@@ -41,7 +41,7 @@ export function renderCarsView() {
                     <div class="form-group"><label>License Expiry</label><input type="date" id="car-license-exp" required></div>
                     <div class="form-group"><label>Insurance Expiry</label><input type="date" id="car-insurance-exp" required></div>
                     <div class="form-group" style="grid-column: 1 / -1;"><label>Notes</label><input type="text" id="car-notes"></div>
-                    <div class="form-group" style="Grid-column: 1 / -1;"><button type="submit" class="btn">Add Car</button></div>
+                    <div class="form-group" style="Grid-column: 1 / -1;"><button type="submit" class="btn" id="btn-submit-car">Add Car</button></div>
                 </form>
             </div>
             <h3>Cars List (Sorted by Expiry)</h3>
@@ -80,10 +80,17 @@ async function generateCarId() {
 
 async function handleAddCar(e) {
     e.preventDefault();
+    const submitBtn = document.getElementById('btn-submit-car');
+    
+    // Prevent double clicking (Race Condition Fix)
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Adding...";
+
     // Strict trimming and lowercasing for uniqueness checks
     const plateNum = document.getElementById('car-plate-num').value.trim();
     const plateCode = document.getElementById('car-plate-code').value.trim().toLowerCase();
-    const emirate = document.getElementById('car-emirate').value.trim().toLowerCase();
+    const emirateSelect = document.getElementById('car-emirate');
+    const emirate = emirateSelect.value.trim().toLowerCase();
     const type = document.getElementById('car-type').value.trim();
     const owner = document.getElementById('car-owner').value.trim();
     const vin = document.getElementById('car-vin').value.trim().toLowerCase();
@@ -97,22 +104,22 @@ async function handleAddCar(e) {
         // Check Unique Plate Combination
         const plateQ = query(collection(db, 'cars'), where('plateIdentifier', '==', plateIdentifier));
         const plateSnap = await getDocs(plateQ);
-        if (!plateSnap.empty) return showMessage('Error: This Plate combination already exists.', 'error', 'dashboard');
+        if (!plateSnap.empty) throw new Error('This Plate combination already exists.');
 
         // Check Unique VIN
         const vinQ = query(collection(db, 'cars'), where('vin', '==', vin));
         const vinSnap = await getDocs(vinQ);
-        if (!vinSnap.empty) return showMessage('Error: This VIN already exists.', 'error', 'dashboard');
+        if (!vinSnap.empty) throw new Error('This VIN already exists.');
 
         const carId = await generateCarId();
 
         await setDoc(doc(db, 'cars', carId), {
             carId, 
             plateNumber: plateNum, 
-            plateCode: plateCode.toUpperCase(), // Store display value uppercase if preferred
-            emirate: document.getElementById('car-emirate').value, // Store original case for display
-            plateIdentifier, // Store lowercased identifier for strict querying
-            type, ownerName: owner, vin, // Store lowercased vin
+            plateCode: plateCode.toUpperCase(),
+            emirate: emirateSelect.value, // Store original case for display
+            plateIdentifier, 
+            type, ownerName: owner, vin, 
             licenseExpiry: new Date(licenseExp), insuranceExpiry: new Date(insuranceExp),
             notes, currentUserId: null, currentUserName: null, status: 'active'
         });
@@ -121,8 +128,15 @@ async function handleAddCar(e) {
         showMessage('Success: Car added successfully.', 'success', 'dashboard');
         document.getElementById('add-car-form').reset();
         document.getElementById('add-car-form-wrapper').classList.add('hidden-form');
-        lastVisibleCar = null; fetchCars(false);
-    } catch (error) { showMessage(`System Error: ${error.message}`, 'error', 'dashboard'); }
+        lastVisibleCar = null; 
+        fetchCars(false);
+    } catch (error) { 
+        showMessage(`Error: ${error.message}`, 'error', 'dashboard');
+    } finally {
+        // Re-enable button regardless of success or failure
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Add Car";
+    }
 }
 
 async function fetchCars(loadMore = false) {
