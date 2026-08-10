@@ -137,28 +137,16 @@ async function handleAddCar(e) {
         const carId = await generateCarId();
 
         await setDoc(doc(db, 'cars', carId), {
-            carId, 
-            plateNumber: plateNum, 
-            plateCode: plateCode.toUpperCase(),
-            emirate: emirateSelect.value, 
-            plateIdentifier, 
-            type, ownerName: owner, vin, 
-            licenseExpiry: new Date(licenseExp), insuranceExpiry: new Date(insuranceExp),
-            notes, currentUserId: null, currentUserName: null, status: 'active'
+            carId, plateNumber: plateNum, plateCode: plateCode.toUpperCase(), emirate: emirateSelect.value, plateIdentifier, type, ownerName: owner, vin, licenseExpiry: new Date(licenseExp), insuranceExpiry: new Date(insuranceExp), notes, currentUserId: null, currentUserName: null, status: 'active'
         });
 
         await logAction(currentUserData, 'CREATE_CAR', { targetId: carId, targetName: plateNum, text: `Created car ${carId} (${plateNum})` });
         showMessage('Success: Car added successfully.', 'success', 'dashboard');
         document.getElementById('add-car-form').reset();
         document.getElementById('add-car-form-wrapper').classList.add('hidden-form');
-        lastVisibleCar = null; 
-        fetchCars(false);
-    } catch (error) { 
-        showMessage(`Error: ${error.message}`, 'error', 'dashboard');
-    } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = "Add Car";
-    }
+        lastVisibleCar = null; fetchCars(false);
+    } catch (error) { showMessage(`Error: ${error.message}`, 'error', 'dashboard'); } 
+    finally { submitBtn.disabled = false; submitBtn.textContent = "Add Car"; }
 }
 
 async function fetchCars(loadMore = false) {
@@ -257,9 +245,7 @@ function renderCarCard(id, data, isUserView = false) {
                     </div>
                 </div>
             </div>
-            <div class="card-meta">
-                <span>${data.currentUserName ? 'Assigned' : 'Unassigned'}</span>
-            </div>
+            <div class="card-meta"><span>${data.currentUserName ? 'Assigned' : 'Unassigned'}</span></div>
         </div>
         <div class="card-body" id="body-${id}">
             <div class="detail-list">
@@ -313,37 +299,27 @@ async function handleCarAction(id, action, data, topBarColor) {
 function handlePrintCard(data, topBarColor) {
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
-        <html>
-        <head>
-            <title>Car Card - ${data.carId}</title>
-            <style>
-                body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
-                .print-logo { width: 80px; margin-bottom: 20px; }
-                .print-header { border-bottom: 2px solid #1976d2; margin-bottom: 20px; padding-bottom: 10px; }
-                .plate-container { display: inline-flex; align-items: center; gap: 15px; border: 2px solid #000; border-radius: 8px; padding: 10px 20px; margin: 20px 0; }
-                .plate-top-bar { width: 100%; height: 5px; margin-bottom: 5px; border-radius: 2px; background: ${topBarColor}; }
-                .plate-emirate { font-size: 12px; font-weight: bold; text-transform: uppercase; }
-                .plate-number { font-size: 32px; font-weight: bold; letter-spacing: 2px; font-variant-numeric: tabular-nums; }
-                .plate-code { font-size: 24px; font-weight: bold; color: #fff; background: #000; padding: 0 8px; border-radius: 4px; }
-                .details { text-align: left; width: 80%; margin: 0 auto; }
-                .detail-row { margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-                .detail-label { font-weight: bold; color: #1976d2; font-size: 12px; }
-                .detail-value { font-size: 16px; color: #333; }
-            </style>
-        </head>
+        <html><head><title>Car Card - ${data.carId}</title>
+        <style>
+            body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+            .print-logo { width: 80px; margin-bottom: 20px; }
+            .print-header { border-bottom: 2px solid #1976d2; margin-bottom: 20px; padding-bottom: 10px; }
+            .plate-container { display: inline-flex; align-items: center; gap: 15px; border: 2px solid #000; border-radius: 8px; padding: 10px 20px; margin: 20px 0; }
+            .plate-top-bar { width: 100%; height: 5px; margin-bottom: 5px; border-radius: 2px; background: ${topBarColor}; }
+            .plate-emirate { font-size: 12px; font-weight: bold; text-transform: uppercase; }
+            .plate-number { font-size: 32px; font-weight: bold; letter-spacing: 2px; font-variant-numeric: tabular-nums; }
+            .plate-code { font-size: 24px; font-weight: bold; color: #fff; background: #000; padding: 0 8px; border-radius: 4px; }
+            .details { text-align: left; width: 80%; margin: 0 auto; }
+            .detail-row { margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+            .detail-label { font-weight: bold; color: #1976d2; font-size: 12px; }
+            .detail-value { font-size: 16px; color: #333; }
+        </style></head>
         <body>
-            <div class="print-header">
-                <img src="icon.png" class="print-logo" alt="Logo">
-                <h2>Car Management System</h2>
-            </div>
+            <div class="print-header"><img src="icon.png" class="print-logo" alt="Logo"><h2>Car Management System</h2></div>
             <h3>Car ID: ${data.carId}</h3>
             <div class="plate-container">
-                <div style="display:flex; flex-direction:column; align-items:center;">
-                    <div class="plate-top-bar"></div>
-                    <span class="plate-emirate">${data.emirate}</span>
-                </div>
-                <span class="plate-number">${data.plateNumber}</span>
-                <span class="plate-code">${data.plateCode}</span>
+                <div style="display:flex; flex-direction:column; align-items:center;"><div class="plate-top-bar"></div><span class="plate-emirate">${data.emirate}</span></div>
+                <span class="plate-number">${data.plateNumber}</span><span class="plate-code">${data.plateCode}</span>
             </div>
             <div class="details">
                 <div class="detail-row"><span class="detail-label">Owner Name:</span> <span class="detail-value">${data.ownerName}</span></div>
@@ -354,11 +330,8 @@ function handlePrintCard(data, topBarColor) {
                 <div class="detail-row"><span class="detail-label">Current Assignee:</span> <span class="detail-value">${data.currentUserName || 'Unassigned'}</span></div>
                 <div class="detail-row"><span class="detail-label">Notes:</span> <span class="detail-value">${data.notes || 'N/A'}</span></div>
             </div>
-            <script>
-                window.onload = function() { window.print(); }
-            </script>
-        </body>
-        </html>
+            <script>window.onload = function() { window.print(); }</script>
+        </body></html>
     `);
     printWindow.document.close();
 }
@@ -374,7 +347,6 @@ async function renderCarHistory(carId) {
     try {
         const logsQuery = query(collection(db, 'logs'), where('targetId', '==', carId), limit(20));
         const logsSnap = await getDocs(logsQuery);
-        
         if (logsSnap.empty) {
             html += '<p class="history-item">No activity recorded yet.</p>';
         } else {
@@ -385,7 +357,6 @@ async function renderCarHistory(carId) {
                 const timeB = b.timestamp ? b.timestamp.toDate().getTime() : 0;
                 return timeB - timeA;
             });
-            
             logs.slice(0, 5).forEach(log => {
                 const date = log.timestamp ? new Date(log.timestamp.toDate()).toLocaleString('en-GB', { timeZone: 'Asia/Dubai', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'N/A';
                 html += `<div class="history-item"><span class="action-type">${log.actionType}</span> by ${log.actorName} - ${log.details}<br><span class="timestamp-meta">${date}</span></div>`;
@@ -440,12 +411,10 @@ async function renderAssignUserUI(carId) {
                 const userName = userDoc.data().username;
 
                 await updateDoc(doc(db, 'cars', carId), { currentUserId: userId, currentUserName: userName });
-                
-                await addDoc(collection(db, 'cars', carId, 'assignments'), {
-                    userId, userName, startTime: serverTimestamp(), endTime: null
-                });
+                await addDoc(collection(db, 'cars', carId, 'assignments'), { userId, userName, startTime: serverTimestamp(), endTime: null });
 
-                await logAction(currentUserData, 'CAR_ASSIGN', { targetId: carId, targetName: userName, text: `Assigned car ${carId} to ${userName}` });
+                // Added assigneeId for User Timeline Query
+                await logAction(currentUserData, 'CAR_ASSIGN', { targetId: carId, targetName: userName, assigneeId: userId, text: `Assigned car ${carId} to ${userName}` });
                 showMessage('User assigned successfully.', 'success', 'dashboard');
                 fetchCars(false);
             } catch (err) { showMessage(`Error: ${err.message}`, 'error', 'dashboard'); }
@@ -464,7 +433,8 @@ async function handleUnassignUser(carId, data) {
             await updateDoc(doc(db, 'cars', carId, 'assignments', snap.docs[0].id), { endTime: serverTimestamp() });
         }
 
-        await logAction(currentUserData, 'CAR_UNASSIGN', { targetId: carId, targetName: data.currentUserName, text: `Unassigned car ${carId} from ${data.currentUserName}` });
+        // Added assigneeId for User Timeline Query
+        await logAction(currentUserData, 'CAR_UNASSIGN', { targetId: carId, targetName: data.currentUserName, assigneeId: data.currentUserId, text: `Unassigned car ${carId} from ${data.currentUserName}` });
         showMessage('User unassigned successfully.', 'success', 'dashboard');
         fetchCars(false);
     } catch (err) { showMessage(`Error: ${err.message}`, 'error', 'dashboard'); }
