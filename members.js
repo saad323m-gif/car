@@ -1,14 +1,14 @@
-import { auth, db, firebaseConfig, app } from "./firebase.js";
+import { auth, db, firebaseConfig } from "./firebase.js";
 import { 
-    getAuth, createUserWithEmailAndPassword, reauthenticateWithCredential, EmailAuthProvider,
-    signOut
+    getAuth, createUserWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { 
-    collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, 
-    query, where, onSnapshot, limit 
+    collection, doc, setDoc, getDoc, getDocs, updateDoc, 
+    query, where, limit, startAfter 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 let currentUserData = null;
+let lastVisibleUser = null; // For pagination
 
 export const setCurrentUser = (data) => currentUserData = data;
 export const getCurrentUser = () => currentUserData;
@@ -19,9 +19,11 @@ export function renderDashboard() {
     
     if (currentUserData.role === 'admin') {
         container.innerHTML = `
-            <h2>Admin Dashboard</h2>
-            <p>Welcome, <strong>${currentUserData.username}</strong></p>
-            <button class="btn btn-sm btn-warning" id="edit-profile-btn">Edit My Profile</button>
+            <div class="dashboard-header">
+                <h2>Admin Dashboard</h2>
+                <p>Welcome, <strong>${currentUserData.username}</strong></p>
+                <button class="btn btn-sm btn-warning" id="edit-profile-btn" style="margin-top: 10px;">Edit My Profile</button>
+            </div>
             
             <div class="divider"></div>
             
@@ -46,20 +48,16 @@ export function renderDashboard() {
             <div class="divider"></div>
 
             <h3>Members Management</h3>
-            <div class="table-container">
-                <table id="users-table">
-                    <thead>
-                        <tr>
-                            <th>Username</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="users-tbody"></tbody>
-                </table>
+            <div id="users-card-list" class="card-list">
+                <p class="loading-text">Loading members...</p>
             </div>
+            <div id="load-more-container" class="load-more-container"></div>
         `;
         document.getElementById('add-user-form').addEventListener('submit', handleAddUser);
         document.getElementById('edit-profile-btn').addEventListener('click', renderEditProfileForm);
-        fetchUsersForAdmin();
+        
+        lastVisibleUser = null;
+        fetchUsersForAdmin(false);
     } else {
         container.innerHTML = `
             <h2>User Dashboard</h2>
@@ -99,63 +97,115 @@ async function handleAddUser(e) {
         await secondaryAuth.signOut();
         showMessage('Success: Member added successfully.', 'success', 'dashboard');
         document.getElementById('add-user-form').reset();
+        lastVisibleUser = null; // Reset pagination
+        fetchUsersForAdmin(false);
     } catch (error) {
         handleFirebaseError(error, 'dashboard');
     }
 }
 
-// Fetch & Render Members in Table with Dropdown Actions
-function fetchUsersForAdmin() {
-    const tbody = document.getElementById('users-tbody');
-    const q = collection(db, 'users');
+// Fetch & Render Members in Cards (10 results per page)
+async function fetchUsersForAdmin(loadMore = false) {
+    const listContainer = document.getElementById('users-card-list');
+    const loadMoreContainer = document.getElementById('load-more-container');
     
-    onSnapshot(q, (snapshot) => {
-        tbody.innerHTML = '';
+    if (!loadMore) {
+        listContainer.innerHTML = '<p class="loading-text">Loading members...</p>';
+    }
+
+    try {
+        let q;
+        if (loadMore && lastVisibleUser) {
+            q = query(collection(db, 'users'), startAfter(lastVisibleUser), limit(10));
+        } else {
+            q = query(collection(db, 'users'), limit(10));
+        }
+
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) {
+            if (!loadMore) listContainer.innerHTML = '<p style="text-align:center; color:#666;">No members found.</p>';
+            loadMoreContainer.innerHTML = '';
+            return;
+        }
+
+        lastVisibleUser = snapshot.docs[snapshot.docs.length - 1];
+        
+        if (!loadMore) listContainer.innerHTML = ''; // Clear loading text
+
         snapshot.forEach((d) => {
             const data = d.data();
             const uid = d.id;
-            const tr = document.createElement('tr');
-            
-            let actionsHtml = '';
-            if (!data.isProtected) {
-                let options = `<option value="">Select Action</option>`;
-                if (data.role === 'user') {
-                    options += `<option value="promote">Promote to Admin</option>`;
-                } else {
-                    options += `<option value="demote">Demote to User</option>`;
-                }
-                if (data.status === 'active') {
-                    options += `<option value="suspend">Suspend Account</option>`;
-                } else {
-                    options += `<option value="activate">Activate Account</option>`;
-                }
-                options += `<option value="delete">Delete Member</option>`;
-                
-                actionsHtml = `<select class="action-select" id="action-${uid}">${options}</select>`;
-            } else {
-                actionsHtml = `<span class="protected-badge">Protected</span>`;
-            }
-
-            tr.innerHTML = `
-                <td>${data.username}</td>
-                <td>${data.email}</td>
-                <td>${data.phone}</td>
-                <td class="role-${data.role}">${data.role}</td>
-                <td class="status-${data.status}">${data.status}</td>
-                <td>${actionsHtml}</td>
-            `;
-            tbody.appendChild(tr);
-
-            if (!data.isProtected) {
-                document.getElementById(`action-${uid}`).addEventListener('change', (e) => {
-                    handleMemberAction(uid, e.target.value, data.username);
-                });
-            }
+            renderUserCard(uid, data);
         });
-    });
+
+        // Load More Button Logic
+        if (snapshot.size === 10) {
+            loadMoreContainer.innerHTML = '<button class="load-more-btn" id="load-more-btn">Load More</button>';
+            document.getElementById('load-more-btn').addEventListener('click', () => fetchUsersForAdmin(true));
+        } else {
+            loadMoreContainer.innerHTML = '';
+        }
+    } catch (error) {
+        handleFirebaseError(error, 'dashboard');
+    }
 }
 
-// Handle Dropdown Actions
+// Render Single User Card
+function renderUserCard(uid, data) {
+    const listContainer = document.getElementById('users-card-list');
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = `card-${uid}`;
+    
+    let actionsHtml = '';
+    if (!data.isProtected) {
+        actionsHtml = `
+            <select class="action-select" id="action-${uid}">
+                <option value="">Select Action</option>
+                <option value="edit">Edit Member</option>
+                ${data.role === 'user' ? '<option value="promote">Promote</option>' : '<option value="demote">Demote</option>'}
+                ${data.status === 'active' ? '<option value="suspend">Suspend</option>' : '<option value="activate">Activate</option>'}
+            </select>
+        `;
+    } else {
+        actionsHtml = `<span class="protected-badge">Protected</span>`;
+    }
+
+    card.innerHTML = `
+        <div class="card-header" id="header-${uid}">
+            <span class="card-title">${data.username}</span>
+            <div class="card-meta">
+                <span class="role-${data.role}">${data.role}</span>
+                <span class="status-${data.status}">${data.status}</span>
+            </div>
+        </div>
+        <div class="card-body" id="body-${uid}">
+            <div id="view-info-${uid}">
+                <p><strong>Email:</strong> ${data.email}</p>
+                <p><strong>Phone:</strong> ${data.phone}</p>
+                ${currentUserData.role === 'admin' ? `<p><strong>Notes:</strong> ${data.notes || 'N/A'}</p>` : ''}
+                <div style="margin-top: 15px;">${actionsHtml}</div>
+            </div>
+            <div id="edit-form-${uid}" style="display:none;"></div>
+        </div>
+    `;
+    listContainer.appendChild(card);
+
+    // Toggle Card
+    document.getElementById(`header-${uid}`).addEventListener('click', () => {
+        card.classList.toggle('open');
+    });
+
+    // Action Listener
+    if (!data.isProtected) {
+        document.getElementById(`action-${uid}`).addEventListener('change', (e) => {
+            handleMemberAction(uid, e.target.value, data.username);
+            e.target.value = ""; // Reset dropdown
+        });
+    }
+}
+
+// Handle Dropdown Actions (No Delete - Only Edit, Promote, Suspend)
 async function handleMemberAction(uid, action, username) {
     if (!action) return;
     
@@ -164,14 +214,64 @@ async function handleMemberAction(uid, action, username) {
         else if (action === 'demote') await updateDoc(doc(db, 'users', uid), { role: 'user' });
         else if (action === 'suspend') await updateDoc(doc(db, 'users', uid), { status: 'suspended' });
         else if (action === 'activate') await updateDoc(doc(db, 'users', uid), { status: 'active' });
-        else if (action === 'delete') {
-            if (!confirm(`Are you sure you want to delete ${username}?`)) return;
-            await deleteDoc(doc(db, 'users', uid));
+        else if (action === 'edit') {
+            renderInlineEditForm(uid);
+            return; // Don't refresh list immediately
         }
-        showMessage('Action completed successfully.', 'success', 'dashboard');
+        
+        showMessage(`Action completed successfully for ${username}.`, 'success', 'dashboard');
+        lastVisibleUser = null;
+        fetchUsersForAdmin(false); // Refresh list
     } catch (error) {
         handleFirebaseError(error, 'dashboard');
     }
+}
+
+// Inline Edit Form for Members
+async function renderInlineEditForm(uid) {
+    const userDoc = await getDoc(doc(db, 'users', uid));
+    if (!userDoc.exists()) return;
+    const data = userDoc.data();
+
+    document.getElementById(`view-info-${uid}`).style.display = 'none';
+    const editArea = document.getElementById(`edit-form-${uid}`);
+    editArea.style.display = 'block';
+    editArea.innerHTML = `
+        <form id="form-edit-${uid}">
+            <div class="form-group"><label>Username</label><input type="text" id="edit-un-${uid}" value="${data.username}" required></div>
+            <div class="form-group"><label>Email</label><input type="email" id="edit-em-${uid}" value="${data.email}" required></div>
+            <div class="form-group"><label>Phone</label><input type="text" id="edit-ph-${uid}" value="${data.phone}" required pattern="0\\d{9}"></div>
+            <div class="form-group"><label>Notes (Admin only)</label><input type="text" id="edit-nt-${uid}" value="${data.notes || ''}"></div>
+            <button type="submit" class="btn btn-sm">Save Changes</button>
+            <button type="button" class="btn btn-sm btn-secondary" id="cancel-edit-${uid}" style="margin-left: 10px;">Cancel</button>
+        </form>
+    `;
+
+    document.getElementById(`form-edit-${uid}`).addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const newUsername = document.getElementById(`edit-un-${uid}`).value.trim();
+        const newEmail = document.getElementById(`edit-em-${uid}`).value.trim();
+        const newPhone = document.getElementById(`edit-ph-${uid}`).value.trim();
+        const newNotes = document.getElementById(`edit-nt-${uid}`).value.trim();
+
+        if (!/^0\d{9}$/.test(newPhone)) return showMessage('Error: Phone must be 10 digits starting with 0.', 'error', 'dashboard');
+
+        try {
+            await updateDoc(doc(db, 'users', uid), {
+                username: newUsername, email: newEmail, phone: newPhone, notes: newNotes
+            });
+            showMessage('Member updated successfully.', 'success', 'dashboard');
+            lastVisibleUser = null;
+            fetchUsersForAdmin(false);
+        } catch (err) {
+            handleFirebaseError(err, 'dashboard');
+        }
+    });
+
+    document.getElementById(`cancel-edit-${uid}`).addEventListener('click', () => {
+        editArea.style.display = 'none';
+        document.getElementById(`view-info-${uid}`).style.display = 'block';
+    });
 }
 
 // Super Admin Profile Protection
@@ -209,6 +309,7 @@ async function handleEditProtectedProfile(e) {
     if (!/^0\d{9}$/.test(newPhone)) return showMessage('Error: Phone must start with 0 and be 10 digits.', 'error', 'dashboard');
 
     try {
+        const { reauthenticateWithCredential, EmailAuthProvider } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js");
         const credential = EmailAuthProvider.credential(currentUserData.email, password);
         await reauthenticateWithCredential(auth.currentUser, credential);
 
@@ -235,8 +336,8 @@ function handleFirebaseError(error, target = 'auth') {
         case 'auth/wrong-password': message = 'Error: Incorrect password. Please try again.'; break;
         case 'auth/email-already-in-use': message = 'Error: The email is already in use.'; break;
         case 'auth/weak-password': message = 'Error: Password should be at least 6 characters.'; break;
-        case 'auth/too-many-requests': message = 'Warning: Too many failed login attempts. Try again later.'; break;
-        case 'auth/requires-recent-login': message = 'Error: Please logout and login again before updating profile.'; break;
+        case 'auth/too-many-requests': message = 'Warning: Too many failed login attempts.'; break;
+        case 'auth/requires-recent-login': message = 'Error: Please logout and login again.'; break;
         default: message = `System Error: ${error.message}`;
     }
     showMessage(message, 'error', target);
