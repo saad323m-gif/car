@@ -6,7 +6,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { 
     getFirestore, collection, doc, setDoc, getDoc, getDocs, 
-    updateDoc, deleteDoc, query, where, onSnapshot 
+    updateDoc, deleteDoc, query, where, onSnapshot, limit 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // Firebase Configuration
@@ -363,7 +363,6 @@ window.toggleSuspend = async (uid, status) => {
 }
 
 window.deleteUser = async (uid) => {
-    // Note: Auth user deletion requires Admin SDK (Cloud Functions). We will delete Firestore record to prevent access.
     if (!confirm("Are you sure you want to delete this user? (Note: Auth account needs to be deleted from Firebase Console manually for strict security)")) return;
     try {
         await deleteDoc(doc(db, 'users', uid));
