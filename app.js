@@ -7,8 +7,8 @@ import {
     collection, doc, setDoc, getDoc, getDocs, updateDoc, query, where, limit 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { renderDashboard, setCurrentUser } from "./members.js";
+import { renderLogsView, logAction } from "./logs.js";
 
-// Real-time UAE Date and Time
 function updateDateTime() {
     const now = new Date();
     const options = {
@@ -19,11 +19,23 @@ function updateDateTime() {
     document.getElementById('datetime').textContent = now.toLocaleString('en-GB', options).replace(',', ' -');
 }
 
-// Initial App Load
 window.addEventListener('DOMContentLoaded', () => {
     updateDateTime();
     setInterval(updateDateTime, 1000);
     document.getElementById('logout-btn').addEventListener('click', handleLogout);
+
+    // Tab Navigation Logic
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.disabled) return;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            const tab = btn.dataset.tab;
+            if (tab === 'members') renderDashboard();
+            else if (tab === 'logs') renderLogsView();
+        });
+    });
 
     onAuthStateChanged(auth, async (user) => {
         if (user) {
@@ -59,10 +71,13 @@ function showDashboard() {
     document.getElementById('logout-btn').style.display = 'block';
     document.getElementById('header-logo').style.display = 'block';
     document.getElementById('main-logo').style.display = 'none';
+    
+    // Reset to Members tab on load
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.tab-btn[data-tab="members"]').classList.add('active');
     renderDashboard();
 }
 
-// Check System State for Initial Setup
 async function checkSystemState() {
     const formContainer = document.getElementById('form-container');
     try {
@@ -78,7 +93,6 @@ async function checkSystemState() {
     }
 }
 
-// Setup Super Admin Form
 function renderSetupForm() {
     document.getElementById('form-container').innerHTML = `
         <h2>System Setup</h2>
@@ -119,13 +133,14 @@ async function handleSetup(e) {
             role: 'admin', status: 'active', notes: '',
             isProtected: true, securityPin, rememberSession: false
         });
+        
+        await logAction({uid, username}, 'SYSTEM_SETUP', { text: 'System initialized with Super Admin' });
         showMessage('Success: Super Admin created successfully.', 'success');
     } catch (error) {
         handleFirebaseError(error);
     }
 }
 
-// Login Form
 function renderLoginForm() {
     document.getElementById('form-container').innerHTML = `
         <h2>Login</h2>
@@ -161,18 +176,28 @@ async function handleLogin(e) {
         const userData = userDoc.data();
         if (userData.status === 'suspended') {
             await signOut(auth);
+            await logAction({username: email}, 'LOGIN_FAILED', { text: `Suspended account attempt: ${email}` });
             showMessage('Access Denied: Your account is suspended.', 'error');
             return;
         }
 
         await updateDoc(doc(db, 'users', uid), { rememberSession: rememberMe });
+        await logAction(userData, 'LOGIN', { text: `User logged in` });
     } catch (error) {
+        await logAction({username: email}, 'LOGIN_FAILED', { text: `Failed login attempt for ${email}` });
         handleFirebaseError(error);
     }
 }
 
 async function handleLogout() {
     try {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+            const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+            if (userDoc.exists()) {
+                await logAction(userDoc.data(), 'LOGOUT', { text: 'User logged out' });
+            }
+        }
         await signOut(auth);
         showAuthView();
         await checkSystemState();
@@ -181,7 +206,6 @@ async function handleLogout() {
     }
 }
 
-// Global Error Handler & UI Messages
 function handleFirebaseError(error) {
     let message = '';
     switch (error.code) {
