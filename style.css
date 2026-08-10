@@ -137,11 +137,14 @@ h4 { color: #1565c0; margin-bottom: 10px; font-size: 0.95rem; }
 .card-body { padding: 20px; display: none; border-top: 1px solid #bbdefb; background-color: #ffffff; }
 .card.open .card-body { display: block; }
 
-/* Card Detail Items */
-.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.detail-item { border: 1px solid #e3f2fd; padding: 10px; border-radius: 6px; background: #fafafa; }
-.detail-label { display: block; font-size: 0.8rem; color: #1976d2; font-weight: bold; margin-bottom: 4px; }
-.detail-value { display: block; font-size: 0.95rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Card Detail Items - Stacked vertically, full width */
+.detail-list { display: flex; flex-direction: column; gap: 10px; }
+.detail-item { 
+    border: 1px solid #e3f2fd; padding: 12px 15px; border-radius: 6px; 
+    background: #fafafa; display: flex; flex-direction: column; gap: 4px; 
+}
+.detail-label { font-size: 0.8rem; color: #1976d2; font-weight: bold; }
+.detail-value { font-size: 1rem; color: #333; word-wrap: break-word; white-space: normal; }
 
 .status-active { color: #388e3c; font-weight: bold; }
 .status-suspended { color: #d32f2f; font-weight: bold; }
@@ -194,5 +197,4 @@ h4 { color: #1565c0; margin-bottom: 10px; font-size: 0.95rem; }
     .tab-btn { padding: 8px 15px; font-size: 0.9rem; }
     .plate-number { font-size: 1.4rem; }
     .plate-code { font-size: 1.2rem; }
-    .detail-grid { grid-template-columns: 1fr; }
 }
