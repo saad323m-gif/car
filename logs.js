@@ -40,9 +40,7 @@ async function fetchLogs(loadMore = false) {
     const listContainer = document.getElementById('logs-card-list');
     const loadMoreContainer = document.getElementById('load-more-container');
     
-    if (!loadMore) {
-        listContainer.innerHTML = '<p class="loading-text">Loading logs...</p>';
-    }
+    if (!loadMore) listContainer.innerHTML = '<p class="loading-text">Loading logs...</p>';
 
     try {
         let q;
@@ -86,31 +84,26 @@ function renderLogCard(id, data) {
     let dateStr = 'Just now';
     if (data.timestamp) {
         dateStr = new Date(data.timestamp.toDate()).toLocaleString('en-GB', {
-            timeZone: 'Asia/Dubai',
-            year: 'numeric', month: 'short', day: '2-digit',
+            timeZone: 'Asia/Dubai', year: 'numeric', month: 'short', day: '2-digit',
             hour: '2-digit', minute: '2-digit', hour12: true
         });
     }
 
-    // Title now includes Action Type and Actor Name
     card.innerHTML = `
         <div class="card-header" id="header-${id}">
             <span class="card-title">${data.actionType} - ${data.actorName}</span>
-            <div class="card-meta">
-                <span class="timestamp-meta">${dateStr}</span>
-            </div>
+            <div class="card-meta"><span class="timestamp-meta">${dateStr}</span></div>
         </div>
         <div class="card-body" id="body-${id}">
-            <p><strong>Time:</strong> ${dateStr}</p>
-            <p><strong>Action:</strong> <span class="action-type">${data.actionType}</span></p>
-            <p><strong>Performed By:</strong> ${data.actorName} (${data.actorId === 'system' ? 'System' : data.actorId})</p>
-            ${data.targetName ? `<p><strong>Target:</strong> ${data.targetName}</p>` : ''}
-            ${data.details ? `<p><strong>Details:</strong> ${data.details}</p>` : ''}
+            <div class="detail-grid">
+                <div class="detail-item"><span class="detail-label">Time</span><span class="detail-value">${dateStr}</span></div>
+                <div class="detail-item"><span class="detail-label">Action</span><span class="detail-value action-type">${data.actionType}</span></div>
+                <div class="detail-item"><span class="detail-label">Performed By</span><span class="detail-value">${data.actorName}</span></div>
+                ${data.targetName ? `<div class="detail-item"><span class="detail-label">Target</span><span class="detail-value">${data.targetName}</span></div>` : ''}
+                ${data.details ? `<div class="detail-item" style="grid-column: 1 / -1;"><span class="detail-label">Details</span><span class="detail-value">${data.details}</span></div>` : ''}
+            </div>
         </div>
     `;
     listContainer.appendChild(card);
-
-    document.getElementById(`header-${id}`).addEventListener('click', () => {
-        card.classList.toggle('open');
-    });
+    document.getElementById(`header-${id}`).addEventListener('click', () => card.classList.toggle('open'));
 }
