@@ -19,7 +19,7 @@
     </header>
 
     <main>
-        <!-- Auth View (Login / Setup) -->
+        <!-- Auth View -->
         <div id="auth-view" class="view-container">
             <img src="icon.png" alt="Logo" class="logo-main" id="main-logo">
             <div id="form-container" class="form-box">
@@ -30,6 +30,15 @@
 
         <!-- Dashboard View -->
         <div id="dashboard-view" class="view-container" style="display: none;">
+            <!-- Top Tabs Navigation -->
+            <div class="tabs-nav">
+                <button class="tab-btn active" data-tab="members">Members</button>
+                <button class="tab-btn" data-tab="cars" disabled>Cars</button>
+                <button class="tab-btn" data-tab="logs" disabled>Logs</button>
+                <button class="tab-btn" data-tab="search" disabled>Search</button>
+                <button class="tab-btn" data-tab="stats" disabled>Stats</button>
+            </div>
+
             <div id="dashboard-container" class="dashboard-box">
                 <p class="loading-text">Loading dashboard...</p>
             </div>
@@ -37,7 +46,6 @@
         </div>
     </main>
 
-    <!-- Main Entry Point -->
     <script type="module" src="app.js"></script>
 </body>
 </html>
