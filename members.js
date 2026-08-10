@@ -1,11 +1,6 @@
 import { auth, db, firebaseConfig } from "./firebase.js";
-import { 
-    getAuth, createUserWithEmailAndPassword
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { 
-    collection, doc, setDoc, getDoc, getDocs, updateDoc, 
-    query, where, limit, startAfter 
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { collection, doc, setDoc, getDoc, getDocs, updateDoc, query, where, limit, startAfter } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { logAction } from "./logs.js";
 
 let currentUserData = null;
@@ -24,45 +19,36 @@ export function renderDashboard() {
                 <p>Welcome, <strong>${currentUserData.username}</strong></p>
                 <button class="btn btn-sm btn-warning" id="edit-profile-btn" style="margin-top: 10px;">Edit My Profile</button>
             </div>
-            
             <div class="divider"></div>
-            
-            <h3>Add New Member</h3>
-            <form id="add-user-form" style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px;">
-                <div class="form-group"><label>Username</label><input type="text" id="new-username" required></div>
-                <div class="form-group"><label>Email</label><input type="email" id="new-email" required></div>
-                <div class="form-group"><label>Password</label><input type="password" id="new-password" required minlength="6"></div>
-                <div class="form-group"><label>Phone</label><input type="text" id="new-phone" required pattern="0\\d{9}"></div>
-                <div class="form-group" style="grid-column: 1 / -1;">
-                    <label>Role</label>
-                    <select id="new-role">
-                        <option value="user">User</option>
-                        <option value="admin">Admin</option>
-                    </select>
-                </div>
-                <div class="form-group" style="Grid-column: 1 / -1;">
-                    <button type="submit" class="btn">Add Member</button>
-                </div>
-            </form>
-
-            <div class="divider"></div>
-
-            <h3>Members Management</h3>
-            <div id="users-card-list" class="card-list">
-                <p class="loading-text">Loading members...</p>
+            <button class="btn-add-toggle" id="toggle-add-member">+ Add New Member</button>
+            <div id="add-member-form-wrapper" class="hidden-form" style="margin-bottom: 30px;">
+                <form id="add-user-form" style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="form-group"><label>Username</label><input type="text" id="new-username" required></div>
+                    <div class="form-group"><label>Email</label><input type="email" id="new-email" required></div>
+                    <div class="form-group"><label>Password</label><input type="password" id="new-password" required minlength="6"></div>
+                    <div class="form-group"><label>Phone</label><input type="text" id="new-phone" required pattern="0\\d{9}"></div>
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>Role</label>
+                        <select id="new-role"><option value="user">User</option><option value="admin">Admin</option></select>
+                    </div>
+                    <div class="form-group" style="Grid-column: 1 / -1;"><button type="submit" class="btn">Add Member</button></div>
+                </form>
             </div>
+            <h3>Members Management</h3>
+            <div id="users-card-list" class="card-list"><p class="loading-text">Loading members...</p></div>
             <div id="load-more-container" class="load-more-container"></div>
         `;
+        
+        document.getElementById('toggle-add-member').addEventListener('click', () => {
+            document.getElementById('add-member-form-wrapper').classList.toggle('hidden-form');
+        });
         document.getElementById('add-user-form').addEventListener('submit', handleAddUser);
         document.getElementById('edit-profile-btn').addEventListener('click', renderEditProfileForm);
         
         lastVisibleUser = null;
         fetchUsersForAdmin(false);
     } else {
-        container.innerHTML = `
-            <h2>User Dashboard</h2>
-            <p>Welcome, <strong>${currentUserData.username}</strong></p>
-        `;
+        container.innerHTML = `<h2>User Dashboard</h2><p>Welcome, <strong>${currentUserData.username}</strong></p>`;
     }
 }
 
@@ -87,17 +73,15 @@ async function handleAddUser(e) {
         const uid = userCredential.user.uid;
 
         await setDoc(doc(db, 'users', uid), {
-            username, email, phone, role,
-            status: 'active', notes: '',
-            isProtected: false, securityPin: null, rememberSession: false
+            username, email, phone, role, status: 'active', notes: '', isProtected: false, securityPin: null, rememberSession: false
         });
 
         await secondaryAuth.signOut();
-        
         await logAction(currentUserData, 'CREATE_USER', { targetId: uid, targetName: username, text: `Created new ${role}: ${username}` });
         
         showMessage('Success: Member added successfully.', 'success', 'dashboard');
         document.getElementById('add-user-form').reset();
+        document.getElementById('add-member-form-wrapper').classList.add('hidden-form');
         lastVisibleUser = null;
         fetchUsersForAdmin(false);
     } catch (error) {
@@ -109,18 +93,10 @@ async function fetchUsersForAdmin(loadMore = false) {
     const listContainer = document.getElementById('users-card-list');
     const loadMoreContainer = document.getElementById('load-more-container');
     
-    if (!loadMore) {
-        listContainer.innerHTML = '<p class="loading-text">Loading members...</p>';
-    }
+    if (!loadMore) listContainer.innerHTML = '<p class="loading-text">Loading members...</p>';
 
     try {
-        let q;
-        if (loadMore && lastVisibleUser) {
-            q = query(collection(db, 'users'), startAfter(lastVisibleUser), limit(10));
-        } else {
-            q = query(collection(db, 'users'), limit(10));
-        }
-
+        let q = (loadMore && lastVisibleUser) ? query(collection(db, 'users'), startAfter(lastVisibleUser), limit(10)) : query(collection(db, 'users'), limit(10));
         const snapshot = await getDocs(q);
         if (snapshot.empty) {
             if (!loadMore) listContainer.innerHTML = '<p style="text-align:center; color:#666;">No members found.</p>';
@@ -131,21 +107,13 @@ async function fetchUsersForAdmin(loadMore = false) {
         lastVisibleUser = snapshot.docs[snapshot.docs.length - 1];
         if (!loadMore) listContainer.innerHTML = '';
 
-        snapshot.forEach((d) => {
-            const data = d.data();
-            const uid = d.id;
-            renderUserCard(uid, data);
-        });
+        snapshot.forEach((d) => renderUserCard(d.id, d.data()));
 
         if (snapshot.size === 10) {
             loadMoreContainer.innerHTML = '<button class="load-more-btn" id="load-more-btn">Load More</button>';
             document.getElementById('load-more-btn').addEventListener('click', () => fetchUsersForAdmin(true));
-        } else {
-            loadMoreContainer.innerHTML = '';
-        }
-    } catch (error) {
-        handleFirebaseError(error, 'dashboard');
-    }
+        } else { loadMoreContainer.innerHTML = ''; }
+    } catch (error) { handleFirebaseError(error, 'dashboard'); }
 }
 
 function renderUserCard(uid, data) {
@@ -164,9 +132,7 @@ function renderUserCard(uid, data) {
                 ${data.status === 'active' ? '<option value="suspend">Suspend</option>' : '<option value="activate">Activate</option>'}
             </select>
         `;
-    } else {
-        actionsHtml = `<span class="protected-badge">Protected</span>`;
-    }
+    } else { actionsHtml = `<span class="protected-badge">Protected</span>`; }
 
     card.innerHTML = `
         <div class="card-header" id="header-${uid}">
@@ -178,9 +144,11 @@ function renderUserCard(uid, data) {
         </div>
         <div class="card-body" id="body-${uid}">
             <div id="view-info-${uid}">
-                <p><strong>Email:</strong> ${data.email}</p>
-                <p><strong>Phone:</strong> ${data.phone}</p>
-                ${currentUserData.role === 'admin' ? `<p><strong>Notes:</strong> ${data.notes || 'N/A'}</p>` : ''}
+                <div class="detail-grid">
+                    <div class="detail-item"><span class="detail-label">Email</span><span class="detail-value">${data.email}</span></div>
+                    <div class="detail-item"><span class="detail-label">Phone</span><span class="detail-value">${data.phone}</span></div>
+                    ${currentUserData.role === 'admin' ? `<div class="detail-item" style="grid-column: 1 / -1;"><span class="detail-label">Notes</span><span class="detail-value">${data.notes || 'N/A'}</span></div>` : ''}
+                </div>
                 <div style="margin-top: 15px;">${actionsHtml}</div>
             </div>
             <div id="edit-form-${uid}" style="display:none;"></div>
@@ -188,9 +156,7 @@ function renderUserCard(uid, data) {
     `;
     listContainer.appendChild(card);
 
-    document.getElementById(`header-${uid}`).addEventListener('click', () => {
-        card.classList.toggle('open');
-    });
+    document.getElementById(`header-${uid}`).addEventListener('click', () => card.classList.toggle('open'));
 
     if (!data.isProtected) {
         document.getElementById(`action-${uid}`).addEventListener('change', (e) => {
@@ -202,35 +168,16 @@ function renderUserCard(uid, data) {
 
 async function handleMemberAction(uid, action, username) {
     if (!action) return;
-    
     try {
-        if (action === 'promote') {
-            await updateDoc(doc(db, 'users', uid), { role: 'admin' });
-            await logAction(currentUserData, 'PROMOTE_USER', { targetId: uid, targetName: username, text: `Promoted ${username} to Admin` });
-        }
-        else if (action === 'demote') {
-            await updateDoc(doc(db, 'users', uid), { role: 'user' });
-            await logAction(currentUserData, 'DEMOTE_USER', { targetId: uid, targetName: username, text: `Demoted ${username} to User` });
-        }
-        else if (action === 'suspend') {
-            await updateDoc(doc(db, 'users', uid), { status: 'suspended' });
-            await logAction(currentUserData, 'SUSPEND_USER', { targetId: uid, targetName: username, text: `Suspended ${username}` });
-        }
-        else if (action === 'activate') {
-            await updateDoc(doc(db, 'users', uid), { status: 'active' });
-            await logAction(currentUserData, 'ACTIVATE_USER', { targetId: uid, targetName: username, text: `Activated ${username}` });
-        }
-        else if (action === 'edit') {
-            renderInlineEditForm(uid);
-            return;
-        }
+        if (action === 'promote') { await updateDoc(doc(db, 'users', uid), { role: 'admin' }); await logAction(currentUserData, 'PROMOTE_USER', { targetId: uid, targetName: username, text: `Promoted ${username}` }); }
+        else if (action === 'demote') { await updateDoc(doc(db, 'users', uid), { role: 'user' }); await logAction(currentUserData, 'DEMOTE_USER', { targetId: uid, targetName: username, text: `Demoted ${username}` }); }
+        else if (action === 'suspend') { await updateDoc(doc(db, 'users', uid), { status: 'suspended' }); await logAction(currentUserData, 'SUSPEND_USER', { targetId: uid, targetName: username, text: `Suspended ${username}` }); }
+        else if (action === 'activate') { await updateDoc(doc(db, 'users', uid), { status: 'active' }); await logAction(currentUserData, 'ACTIVATE_USER', { targetId: uid, targetName: username, text: `Activated ${username}` }); }
+        else if (action === 'edit') { renderInlineEditForm(uid); return; }
         
-        showMessage(`Action completed successfully for ${username}.`, 'success', 'dashboard');
-        lastVisibleUser = null;
-        fetchUsersForAdmin(false);
-    } catch (error) {
-        handleFirebaseError(error, 'dashboard');
-    }
+        showMessage(`Action completed for ${username}.`, 'success', 'dashboard');
+        lastVisibleUser = null; fetchUsersForAdmin(false);
+    } catch (error) { handleFirebaseError(error, 'dashboard'); }
 }
 
 async function renderInlineEditForm(uid) {
@@ -262,16 +209,11 @@ async function renderInlineEditForm(uid) {
         if (!/^0\d{9}$/.test(newPhone)) return showMessage('Error: Phone must be 10 digits starting with 0.', 'error', 'dashboard');
 
         try {
-            await updateDoc(doc(db, 'users', uid), {
-                username: newUsername, email: newEmail, phone: newPhone, notes: newNotes
-            });
+            await updateDoc(doc(db, 'users', uid), { username: newUsername, email: newEmail, phone: newPhone, notes: newNotes });
             await logAction(currentUserData, 'EDIT_USER', { targetId: uid, targetName: newUsername, text: `Edited details for ${newUsername}` });
             showMessage('Member updated successfully.', 'success', 'dashboard');
-            lastVisibleUser = null;
-            fetchUsersForAdmin(false);
-        } catch (err) {
-            handleFirebaseError(err, 'dashboard');
-        }
+            lastVisibleUser = null; fetchUsersForAdmin(false);
+        } catch (err) { handleFirebaseError(err, 'dashboard'); }
     });
 
     document.getElementById(`cancel-edit-${uid}`).addEventListener('click', () => {
@@ -281,11 +223,7 @@ async function renderInlineEditForm(uid) {
 }
 
 function renderEditProfileForm() {
-    if (!currentUserData.isProtected) {
-        showMessage("Only Super Admin can use this secure edit feature.", "warning", 'dashboard');
-        return;
-    }
-
+    if (!currentUserData.isProtected) { showMessage("Only Super Admin can use this secure edit feature.", "warning", 'dashboard'); return; }
     document.getElementById('dashboard-container').innerHTML = `
         <h2>Edit Protected Profile</h2>
         <p style="color: #666; margin-bottom: 20px; text-align:center;">Two-step verification required.</p>
@@ -326,12 +264,9 @@ async function handleEditProtectedProfile(e) {
 
         await updateDoc(doc(db, 'users', currentUserData.uid), { username: newUsername, phone: newPhone });
         await logAction(currentUserData, 'EDIT_SELF_PROFILE', { targetId: currentUserData.uid, targetName: newUsername, text: 'Super Admin updated own profile' });
-        
-        showMessage('Profile updated successfully. Reloading...', 'success', 'dashboard');
+        showMessage('Profile updated. Reloading...', 'success', 'dashboard');
         setTimeout(() => window.location.reload(), 2000);
-    } catch (error) {
-        handleFirebaseError(error, 'dashboard');
-    }
+    } catch (error) { handleFirebaseError(error, 'dashboard'); }
 }
 
 function handleFirebaseError(error, target = 'auth') {
@@ -352,8 +287,5 @@ function handleFirebaseError(error, target = 'auth') {
 function showMessage(text, type, target = 'auth') {
     const boxId = target === 'dashboard' ? 'dashboard-message-box' : 'message-box';
     const box = document.getElementById(boxId);
-    if (box) {
-        box.textContent = text;
-        box.className = `message-box ${type}`;
-    }
+    if (box) { box.textContent = text; box.className = `message-box ${type}`; }
 }
