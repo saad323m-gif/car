@@ -8,6 +8,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { renderDashboard, setCurrentUser } from "./members.js";
 import { renderLogsView, logAction } from "./logs.js";
+import { renderCarsView, setCarsCurrentUser } from "./cars.js";
 
 function updateDateTime() {
     const now = new Date();
@@ -24,7 +25,6 @@ window.addEventListener('DOMContentLoaded', () => {
     setInterval(updateDateTime, 1000);
     document.getElementById('logout-btn').addEventListener('click', handleLogout);
 
-    // Tab Navigation Logic
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             if (btn.disabled) return;
@@ -34,6 +34,7 @@ window.addEventListener('DOMContentLoaded', () => {
             const tab = btn.dataset.tab;
             if (tab === 'members') renderDashboard();
             else if (tab === 'logs') renderLogsView();
+            else if (tab === 'cars') renderCarsView();
         });
     });
 
@@ -44,6 +45,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 let userData = userDoc.data();
                 userData.uid = user.uid;
                 setCurrentUser(userData);
+                setCarsCurrentUser(userData); // Sync user data to cars module
                 showDashboard();
             } else {
                 await signOut(auth);
@@ -72,7 +74,6 @@ function showDashboard() {
     document.getElementById('header-logo').style.display = 'block';
     document.getElementById('main-logo').style.display = 'none';
     
-    // Reset to Members tab on load
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelector('.tab-btn[data-tab="members"]').classList.add('active');
     renderDashboard();
