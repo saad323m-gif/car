@@ -11,50 +11,53 @@ export const setCurrentUser = (data) => currentUserData = data;
 export const getCurrentUser = () => currentUserData;
 
 export function renderDashboard() {
-    const container = document.getElementById('dashboard-container');
-    
-    if (currentUserData.role === 'admin') {
-        container.innerHTML = `
-            <div class="dashboard-header">
-                <h2>Admin Dashboard</h2>
-                <p>Welcome, <strong>${currentUserData.username}</strong></p>
-                <button class="btn btn-sm btn-warning" id="edit-profile-btn" style="margin-top: 10px;">Edit My Profile</button>
-            </div>
-            <div class="divider"></div>
-            <button class="btn-add-toggle" id="toggle-add-member">+ Add New Member</button>
-            <div id="add-member-form-wrapper" class="hidden-form" style="margin-bottom: 30px;">
-                <form id="add-user-form" style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div class="form-group"><label>Username</label><input type="text" id="new-username" required></div>
-                    <div class="form-group"><label>Email</label><input type="email" id="new-email" required></div>
-                    <div class="form-group"><label>Password</label><input type="password" id="new-password" required minlength="6"></div>
-                    <div class="form-group"><label>Phone</label><input type="text" id="new-phone" required pattern="0\\d{9}"></div>
-                    <div class="form-group" style="grid-column: 1 / -1;">
-                        <label>Role</label>
-                        <select id="new-role"><option value="user">User</option><option value="admin">Admin</option></select>
-                    </div>
-                    <div class="form-group" style="Grid-column: 1 / -1;"><button type="submit" class="btn">Add Member</button></div>
-                </form>
-            </div>
-            <h3>Members Management</h3>
-            <div id="users-card-list" class="card-list"><p class="loading-text">Loading members...</p></div>
-            <div id="load-more-container" class="load-more-container"></div>
-        `;
-        
-        document.getElementById('toggle-add-member').addEventListener('click', () => {
-            document.getElementById('add-member-form-wrapper').classList.toggle('hidden-form');
-        });
-        document.getElementById('add-user-form').addEventListener('submit', handleAddUser);
-        document.getElementById('edit-profile-btn').addEventListener('click', renderEditProfileForm);
-        
-        lastVisibleUser = null;
-        fetchUsersForAdmin(false);
-    } else {
-        container.innerHTML = `<h2>User Dashboard</h2><p>Welcome, <strong>${currentUserData.username}</strong></p>`;
+    // Security Guard
+    if (!currentUserData || currentUserData.role !== 'admin') {
+        document.getElementById('dashboard-container').innerHTML = '<h2>Access Denied</h2><p>You do not have permission to view this page.</p>';
+        return;
     }
+
+    const container = document.getElementById('dashboard-container');
+    container.innerHTML = `
+        <div class="dashboard-header">
+            <h2>Admin Dashboard</h2>
+            <p>Welcome, <strong>${currentUserData.username}</strong></p>
+            <button class="btn btn-sm btn-warning" id="edit-profile-btn" style="margin-top: 10px;">Edit My Profile</button>
+        </div>
+        <div class="divider"></div>
+        <button class="btn-add-toggle" id="toggle-add-member">+ Add New Member</button>
+        <div id="add-member-form-wrapper" class="hidden-form" style="margin-bottom: 30px;">
+            <form id="add-user-form" style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="form-group"><label>Username</label><input type="text" id="new-username" required></div>
+                <div class="form-group"><label>Email</label><input type="email" id="new-email" required></div>
+                <div class="form-group"><label>Password</label><input type="password" id="new-password" required minlength="6"></div>
+                <div class="form-group"><label>Phone</label><input type="text" id="new-phone" required pattern="0\\d{9}"></div>
+                <div class="form-group" style="grid-column: 1 / -1;">
+                    <label>Role</label>
+                    <select id="new-role"><option value="user">User</option><option value="admin">Admin</option></select>
+                </div>
+                <div class="form-group" style="Grid-column: 1 / -1;"><button type="submit" class="btn">Add Member</button></div>
+            </form>
+        </div>
+        <h3>Members Management</h3>
+        <div id="users-card-list" class="card-list"><p class="loading-text">Loading members...</p></div>
+        <div id="load-more-container" class="load-more-container"></div>
+    `;
+    
+    document.getElementById('toggle-add-member').addEventListener('click', () => {
+        document.getElementById('add-member-form-wrapper').classList.toggle('hidden-form');
+    });
+    document.getElementById('add-user-form').addEventListener('submit', handleAddUser);
+    document.getElementById('edit-profile-btn').addEventListener('click', renderEditProfileForm);
+    
+    lastVisibleUser = null;
+    fetchUsersForAdmin(false);
 }
 
 async function handleAddUser(e) {
     e.preventDefault();
+    if (currentUserData.role !== 'admin') return;
+    
     const username = document.getElementById('new-username').value.trim();
     const email = document.getElementById('new-email').value.trim();
     const password = document.getElementById('new-password').value;
@@ -91,6 +94,8 @@ async function handleAddUser(e) {
 }
 
 async function fetchUsersForAdmin(loadMore = false) {
+    if (currentUserData.role !== 'admin') return;
+    
     const listContainer = document.getElementById('users-card-list');
     const loadMoreContainer = document.getElementById('load-more-container');
     
@@ -168,7 +173,9 @@ function renderUserCard(uid, data) {
 }
 
 async function handleMemberAction(uid, action, username) {
+    if (currentUserData.role !== 'admin') return;
     if (!action) return;
+    
     try {
         if (action === 'promote') { await updateDoc(doc(db, 'users', uid), { role: 'admin' }); await logAction(currentUserData, 'PROMOTE_USER', { targetId: uid, targetName: username, text: `Promoted ${username}` }); }
         else if (action === 'demote') { await updateDoc(doc(db, 'users', uid), { role: 'user' }); await logAction(currentUserData, 'DEMOTE_USER', { targetId: uid, targetName: username, text: `Demoted ${username}` }); }
@@ -182,6 +189,8 @@ async function handleMemberAction(uid, action, username) {
 }
 
 async function renderInlineEditForm(uid) {
+    if (currentUserData.role !== 'admin') return;
+    
     const userDoc = await getDoc(doc(db, 'users', uid));
     if (!userDoc.exists()) return;
     const data = userDoc.data();
@@ -224,7 +233,7 @@ async function renderInlineEditForm(uid) {
 }
 
 function renderEditProfileForm() {
-    if (!currentUserData.isProtected) { showMessage("Only Super Admin can use this secure edit feature.", "warning", 'dashboard'); return; }
+    if (!currentUserData || !currentUserData.isProtected) { showMessage("Only Super Admin can use this secure edit feature.", "warning", 'dashboard'); return; }
     document.getElementById('dashboard-container').innerHTML = `
         <h2>Edit Protected Profile</h2>
         <p style="color: #666; margin-bottom: 20px; text-align:center;">Two-step verification required.</p>
@@ -244,6 +253,8 @@ function renderEditProfileForm() {
 
 async function handleEditProtectedProfile(e) {
     e.preventDefault();
+    if (!currentUserData.isProtected) return;
+    
     const password = document.getElementById('verify-password').value;
     const pin = document.getElementById('verify-pin').value;
     const newUsername = document.getElementById('edit-username').value.trim();
@@ -280,6 +291,7 @@ function handleFirebaseError(error, target = 'auth') {
         case 'auth/weak-password': message = 'Error: Password should be at least 6 characters.'; break;
         case 'auth/too-many-requests': message = 'Warning: Too many failed login attempts.'; break;
         case 'auth/requires-recent-login': message = 'Error: Please logout and login again.'; break;
+        case 'permission-denied': message = 'Security Error: You do not have permission to perform this action.'; break;
         default: message = `System Error: ${error.message}`;
     }
     showMessage(message, 'error', target);
