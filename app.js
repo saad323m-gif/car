@@ -45,7 +45,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 let userData = userDoc.data();
                 userData.uid = user.uid;
                 setCurrentUser(userData);
-                setCarsCurrentUser(userData); // Sync user data to cars module
+                setCarsCurrentUser(userData);
                 showDashboard();
             } else {
                 await signOut(auth);
@@ -74,9 +74,10 @@ function showDashboard() {
     document.getElementById('header-logo').style.display = 'block';
     document.getElementById('main-logo').style.display = 'none';
     
+    // Make Cars the default landing tab
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector('.tab-btn[data-tab="members"]').classList.add('active');
-    renderDashboard();
+    document.querySelector('.tab-btn[data-tab="cars"]').classList.add('active');
+    renderCarsView();
 }
 
 async function checkSystemState() {
@@ -84,14 +85,8 @@ async function checkSystemState() {
     try {
         const q = query(collection(db, 'users'), limit(1));
         const snapshot = await getDocs(q);
-        if (snapshot.empty) {
-            renderSetupForm();
-        } else {
-            renderLoginForm();
-        }
-    } catch (error) {
-        showMessage(`System Error: ${error.message}`, 'error');
-    }
+        if (snapshot.empty) { renderSetupForm(); } else { renderLoginForm(); }
+    } catch (error) { showMessage(`System Error: ${error.message}`, 'error'); }
 }
 
 function renderSetupForm() {
@@ -130,16 +125,13 @@ async function handleSetup(e) {
         const uid = userCredential.user.uid;
 
         await setDoc(doc(db, 'users', uid), {
-            username, email, phone,
-            role: 'admin', status: 'active', notes: '',
+            username, email, phone, role: 'admin', status: 'active', notes: '',
             isProtected: true, securityPin, rememberSession: false
         });
         
         await logAction({uid, username}, 'SYSTEM_SETUP', { text: 'System initialized with Super Admin' });
         showMessage('Success: Super Admin created successfully.', 'success');
-    } catch (error) {
-        handleFirebaseError(error);
-    }
+    } catch (error) { handleFirebaseError(error); }
 }
 
 function renderLoginForm() {
@@ -169,10 +161,7 @@ async function handleLogin(e) {
         const uid = userCredential.user.uid;
 
         const userDoc = await getDoc(doc(db, 'users', uid));
-        if (!userDoc.exists()) {
-            showMessage('Error: User data not found.', 'error');
-            return;
-        }
+        if (!userDoc.exists()) { showMessage('Error: User data not found.', 'error'); return; }
 
         const userData = userDoc.data();
         if (userData.status === 'suspended') {
@@ -195,16 +184,12 @@ async function handleLogout() {
         const currentUser = auth.currentUser;
         if (currentUser) {
             const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-            if (userDoc.exists()) {
-                await logAction(userDoc.data(), 'LOGOUT', { text: 'User logged out' });
-            }
+            if (userDoc.exists()) { await logAction(userDoc.data(), 'LOGOUT', { text: 'User logged out' }); }
         }
         await signOut(auth);
         showAuthView();
         await checkSystemState();
-    } catch (error) {
-        handleFirebaseError(error);
-    }
+    } catch (error) { handleFirebaseError(error); }
 }
 
 function handleFirebaseError(error) {
@@ -225,8 +210,5 @@ function handleFirebaseError(error) {
 
 function showMessage(text, type) {
     const box = document.getElementById('message-box');
-    if (box) {
-        box.textContent = text;
-        box.className = `message-box ${type}`;
-    }
+    if (box) { box.textContent = text; box.className = `message-box ${type}`; }
 }
