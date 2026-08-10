@@ -10,6 +10,8 @@ import { renderDashboard, setCurrentUser } from "./members.js";
 import { renderLogsView, logAction } from "./logs.js";
 import { renderCarsView, setCarsCurrentUser } from "./cars.js";
 import { renderRequestsView, setRequestsCurrentUser } from "./requests.js";
+import { renderSearchView } from "./search.js";
+import { renderStatsView } from "./stats.js";
 
 function updateDateTime() {
     const now = new Date();
@@ -37,6 +39,8 @@ window.addEventListener('DOMContentLoaded', () => {
             else if (tab === 'logs') renderLogsView();
             else if (tab === 'cars') renderCarsView();
             else if (tab === 'requests') renderRequestsView();
+            else if (tab === 'search') renderSearchView();
+            else if (tab === 'stats') renderStatsView();
         });
     });
 
@@ -50,7 +54,6 @@ window.addEventListener('DOMContentLoaded', () => {
                 setCarsCurrentUser(userData);
                 setRequestsCurrentUser(userData);
                 
-                // Control tab visibility based on role
                 const reqTab = document.querySelector('.tab-btn[data-tab="requests"]');
                 if (userData.role === 'admin') {
                     reqTab.style.display = 'block';
