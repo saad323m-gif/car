@@ -59,8 +59,13 @@ main {
     border-radius: 8px; background-color: #ffffff;
     box-shadow: 0 4px 6px rgba(25, 118, 210, 0.05);
 }
+.alerts-box {
+    width: 100%; padding: 15px; margin-bottom: 20px;
+    background-color: #fff3e0; border: 1px solid #ffe0b2;
+    border-radius: 8px; color: #e65100; font-weight: bold;
+}
 
-/* Tabs Navigation */
+/* Tabs */
 .tabs-nav {
     display: flex; gap: 10px; margin-bottom: 20px;
     border-bottom: 2px solid #e3f2fd; padding-bottom: 10px;
@@ -111,14 +116,16 @@ h3 { color: #1565c0; margin-bottom: 15px; }
 .card-list { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; width: 100%; }
 .card {
     border: 1px solid #bbdefb; border-radius: 8px; overflow: hidden;
-    transition: box-shadow 0.3s;
+    transition: box-shadow 0.3s; border-left: 5px solid #388e3c; /* Default Green */
 }
+.card.border-yellow { border-left-color: #f57c00; }
+.card.border-red { border-left-color: #d32f2f; }
 .card.open { box-shadow: 0 4px 12px rgba(25, 118, 210, 0.15); }
 .card-header {
     padding: 15px 20px; display: flex; justify-content: space-between;
     align-items: center; cursor: pointer; background: #f5f5f5;
 }
-.card-title { font-weight: bold; color: #1565c0; font-size: 1.1rem; }
+.card-title { font-weight: bold; color: #1565c0; font-size: 1.1rem; display: flex; align-items: center; gap: 15px; }
 .card-meta { font-size: 0.9rem; color: #666; display: flex; gap: 15px; align-items: center; }
 .card-body {
     padding: 20px; display: none; border-top: 1px solid #bbdefb;
@@ -134,7 +141,49 @@ h3 { color: #1565c0; margin-bottom: 15px; }
 .timestamp-meta { font-size: 0.85rem; color: #888; }
 .protected-badge { color: #1976d2; font-weight: bold; font-size: 0.9rem; background: #e3f2fd; padding: 4px 8px; border-radius: 4px; }
 
-/* Pagination / Load More */
+/* UAE Plate Simulation */
+.plate-container {
+    background: #fff;
+    border: 2px solid #000;
+    border-radius: 8px;
+    padding: 8px 15px;
+    display: inline-flex;
+    align-items: center;
+    gap: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+.plate-top-bar {
+    width: 100%;
+    height: 5px;
+    margin-bottom: 5px;
+    border-radius: 2px;
+}
+.plate-emirate {
+    font-size: 0.8rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #000;
+    text-align: center;
+    max-width: 80px;
+}
+.plate-number {
+    font-size: 1.8rem;
+    font-weight: bold;
+    letter-spacing: 2px;
+    color: #000;
+    font-variant-numeric: tabular-nums; /* Ensures uniform number width */
+}
+.plate-code {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #000;
+    background: #000;
+    color: #fff;
+    padding: 0 8px;
+    border-radius: 4px;
+}
+
+/* Pagination */
 .load-more-container { text-align: center; margin-top: 30px; padding-bottom: 20px; }
 .load-more-btn {
     padding: 10px 30px; background: #ffffff; color: #1976d2;
@@ -150,4 +199,6 @@ h3 { color: #1565c0; margin-bottom: 15px; }
     .header-left, .header-center, .header-right { flex: none; width: 100%; text-align: center; }
     .header-right { justify-content: center; }
     .tab-btn { padding: 8px 15px; font-size: 0.9rem; }
+    .plate-number { font-size: 1.4rem; }
+    .plate-code { font-size: 1.2rem; }
 }
