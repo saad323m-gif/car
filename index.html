@@ -9,15 +9,19 @@
 <body>
 
     <header>
-        <div id="datetime"></div>
-        <button id="logout-btn" class="btn-logout" style="display: none;">Logout</button>
+        <div class="header-left">
+            <img src="icon.png" alt="Logo" class="header-logo" id="header-logo" style="display: none;">
+        </div>
+        <div id="datetime" class="header-center"></div>
+        <div class="header-right">
+            <button id="logout-btn" class="btn-logout" style="display: none;">Logout</button>
+        </div>
     </header>
 
     <main>
-        <img src="icon.png" alt="Logo" class="logo">
-
         <!-- Auth View (Login / Setup) -->
         <div id="auth-view" class="view-container">
+            <img src="icon.png" alt="Logo" class="logo-main" id="main-logo">
             <div id="form-container" class="form-box">
                 <p class="loading-text">Loading system...</p>
             </div>
@@ -33,6 +37,7 @@
         </div>
     </main>
 
+    <!-- Main Entry Point -->
     <script type="module" src="app.js"></script>
 </body>
 </html>
