@@ -6,14 +6,14 @@ import {
     collection, doc, setDoc, getDoc, getDocs, updateDoc, 
     query, where, limit, startAfter 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { logAction } from "./logs.js";
 
 let currentUserData = null;
-let lastVisibleUser = null; // For pagination
+let lastVisibleUser = null;
 
 export const setCurrentUser = (data) => currentUserData = data;
 export const getCurrentUser = () => currentUserData;
 
-// Render Dashboard UI
 export function renderDashboard() {
     const container = document.getElementById('dashboard-container');
     
@@ -62,12 +62,10 @@ export function renderDashboard() {
         container.innerHTML = `
             <h2>User Dashboard</h2>
             <p>Welcome, <strong>${currentUserData.username}</strong></p>
-            <p>Your account is active. User features will be available here in future phases.</p>
         `;
     }
 }
 
-// Add User Logic
 async function handleAddUser(e) {
     e.preventDefault();
     const username = document.getElementById('new-username').value.trim();
@@ -95,16 +93,18 @@ async function handleAddUser(e) {
         });
 
         await secondaryAuth.signOut();
+        
+        await logAction(currentUserData, 'CREATE_USER', { targetId: uid, targetName: username, text: `Created new ${role}: ${username}` });
+        
         showMessage('Success: Member added successfully.', 'success', 'dashboard');
         document.getElementById('add-user-form').reset();
-        lastVisibleUser = null; // Reset pagination
+        lastVisibleUser = null;
         fetchUsersForAdmin(false);
     } catch (error) {
         handleFirebaseError(error, 'dashboard');
     }
 }
 
-// Fetch & Render Members in Cards (10 results per page)
 async function fetchUsersForAdmin(loadMore = false) {
     const listContainer = document.getElementById('users-card-list');
     const loadMoreContainer = document.getElementById('load-more-container');
@@ -129,8 +129,7 @@ async function fetchUsersForAdmin(loadMore = false) {
         }
 
         lastVisibleUser = snapshot.docs[snapshot.docs.length - 1];
-        
-        if (!loadMore) listContainer.innerHTML = ''; // Clear loading text
+        if (!loadMore) listContainer.innerHTML = '';
 
         snapshot.forEach((d) => {
             const data = d.data();
@@ -138,7 +137,6 @@ async function fetchUsersForAdmin(loadMore = false) {
             renderUserCard(uid, data);
         });
 
-        // Load More Button Logic
         if (snapshot.size === 10) {
             loadMoreContainer.innerHTML = '<button class="load-more-btn" id="load-more-btn">Load More</button>';
             document.getElementById('load-more-btn').addEventListener('click', () => fetchUsersForAdmin(true));
@@ -150,7 +148,6 @@ async function fetchUsersForAdmin(loadMore = false) {
     }
 }
 
-// Render Single User Card
 function renderUserCard(uid, data) {
     const listContainer = document.getElementById('users-card-list');
     const card = document.createElement('div');
@@ -191,43 +188,51 @@ function renderUserCard(uid, data) {
     `;
     listContainer.appendChild(card);
 
-    // Toggle Card
     document.getElementById(`header-${uid}`).addEventListener('click', () => {
         card.classList.toggle('open');
     });
 
-    // Action Listener
     if (!data.isProtected) {
         document.getElementById(`action-${uid}`).addEventListener('change', (e) => {
             handleMemberAction(uid, e.target.value, data.username);
-            e.target.value = ""; // Reset dropdown
+            e.target.value = "";
         });
     }
 }
 
-// Handle Dropdown Actions (No Delete - Only Edit, Promote, Suspend)
 async function handleMemberAction(uid, action, username) {
     if (!action) return;
     
     try {
-        if (action === 'promote') await updateDoc(doc(db, 'users', uid), { role: 'admin' });
-        else if (action === 'demote') await updateDoc(doc(db, 'users', uid), { role: 'user' });
-        else if (action === 'suspend') await updateDoc(doc(db, 'users', uid), { status: 'suspended' });
-        else if (action === 'activate') await updateDoc(doc(db, 'users', uid), { status: 'active' });
+        if (action === 'promote') {
+            await updateDoc(doc(db, 'users', uid), { role: 'admin' });
+            await logAction(currentUserData, 'PROMOTE_USER', { targetId: uid, targetName: username, text: `Promoted ${username} to Admin` });
+        }
+        else if (action === 'demote') {
+            await updateDoc(doc(db, 'users', uid), { role: 'user' });
+            await logAction(currentUserData, 'DEMOTE_USER', { targetId: uid, targetName: username, text: `Demoted ${username} to User` });
+        }
+        else if (action === 'suspend') {
+            await updateDoc(doc(db, 'users', uid), { status: 'suspended' });
+            await logAction(currentUserData, 'SUSPEND_USER', { targetId: uid, targetName: username, text: `Suspended ${username}` });
+        }
+        else if (action === 'activate') {
+            await updateDoc(doc(db, 'users', uid), { status: 'active' });
+            await logAction(currentUserData, 'ACTIVATE_USER', { targetId: uid, targetName: username, text: `Activated ${username}` });
+        }
         else if (action === 'edit') {
             renderInlineEditForm(uid);
-            return; // Don't refresh list immediately
+            return;
         }
         
         showMessage(`Action completed successfully for ${username}.`, 'success', 'dashboard');
         lastVisibleUser = null;
-        fetchUsersForAdmin(false); // Refresh list
+        fetchUsersForAdmin(false);
     } catch (error) {
         handleFirebaseError(error, 'dashboard');
     }
 }
 
-// Inline Edit Form for Members
 async function renderInlineEditForm(uid) {
     const userDoc = await getDoc(doc(db, 'users', uid));
     if (!userDoc.exists()) return;
@@ -260,6 +265,7 @@ async function renderInlineEditForm(uid) {
             await updateDoc(doc(db, 'users', uid), {
                 username: newUsername, email: newEmail, phone: newPhone, notes: newNotes
             });
+            await logAction(currentUserData, 'EDIT_USER', { targetId: uid, targetName: newUsername, text: `Edited details for ${newUsername}` });
             showMessage('Member updated successfully.', 'success', 'dashboard');
             lastVisibleUser = null;
             fetchUsersForAdmin(false);
@@ -274,7 +280,6 @@ async function renderInlineEditForm(uid) {
     });
 }
 
-// Super Admin Profile Protection
 function renderEditProfileForm() {
     if (!currentUserData.isProtected) {
         showMessage("Only Super Admin can use this secure edit feature.", "warning", 'dashboard');
@@ -320,6 +325,8 @@ async function handleEditProtectedProfile(e) {
         }
 
         await updateDoc(doc(db, 'users', currentUserData.uid), { username: newUsername, phone: newPhone });
+        await logAction(currentUserData, 'EDIT_SELF_PROFILE', { targetId: currentUserData.uid, targetName: newUsername, text: 'Super Admin updated own profile' });
+        
         showMessage('Profile updated successfully. Reloading...', 'success', 'dashboard');
         setTimeout(() => window.location.reload(), 2000);
     } catch (error) {
@@ -327,7 +334,6 @@ async function handleEditProtectedProfile(e) {
     }
 }
 
-// Error Handler
 function handleFirebaseError(error, target = 'auth') {
     let message = '';
     switch (error.code) {
