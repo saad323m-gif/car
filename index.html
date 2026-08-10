@@ -3,51 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Login</title>
+    <title>System Management</title>
     <link rel="stylesheet" href="style.css">
-    <script type="module" src="app.js"></script>
 </head>
 <body>
 
     <header>
         <div id="datetime"></div>
+        <button id="logout-btn" class="btn-logout" style="display: none;">Logout</button>
     </header>
 
     <main>
-        <!-- Permanent Visual Identity -->
         <img src="icon.png" alt="Logo" class="logo">
 
-        <!-- Container for dynamic forms (Setup or Login) -->
-        <div id="form-container" class="form-box">
-            <p class="loading-text">Loading system...</p>
+        <!-- Auth View (Login / Setup) -->
+        <div id="auth-view" class="view-container">
+            <div id="form-container" class="form-box">
+                <p class="loading-text">Loading system...</p>
+            </div>
+            <div id="message-box" class="message-box"></div>
         </div>
 
-        <!-- Dedicated area for detailed system messages -->
-        <div id="message-box" class="message-box"></div>
+        <!-- Dashboard View -->
+        <div id="dashboard-view" class="view-container" style="display: none;">
+            <div id="dashboard-container" class="dashboard-box">
+                <p class="loading-text">Loading dashboard...</p>
+            </div>
+            <div id="dashboard-message-box" class="message-box"></div>
+        </div>
     </main>
 
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        
-        const firebaseConfig = {
-            apiKey: "AIzaSyDBHHGY_gVpm3NlXThqsC6ojTL9Je4xQ9w",
-            authDomain: "car-moving-8b59e.firebaseapp.com",
-            databaseURL: "https://car-moving-8b59e-default-rtdb.firebaseio.com",
-            projectId: "car-moving-8b59e",
-            storageBucket: "car-moving-8b59e.firebasestorage.app",
-            messagingSenderId: "332747318494",
-            appId: "1:332747318494:web:d5d61cd53f322a182f0e4f"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        window.firebaseServices = { auth, db };
-        window.dispatchEvent(new Event('firebaseReady'));
-    </script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>
