@@ -5,7 +5,6 @@ import {
 
 let lastVisibleLog = null;
 
-// Core function to log actions anywhere in the system
 export async function logAction(actor, actionType, details = {}) {
     try {
         await addDoc(collection(db, 'logs'), {
@@ -22,7 +21,6 @@ export async function logAction(actor, actionType, details = {}) {
     }
 }
 
-// Render Logs View
 export function renderLogsView() {
     const container = document.getElementById('dashboard-container');
     container.innerHTML = `
@@ -38,7 +36,6 @@ export function renderLogsView() {
     fetchLogs(false);
 }
 
-// Fetch 10 logs per request
 async function fetchLogs(loadMore = false) {
     const listContainer = document.getElementById('logs-card-list');
     const loadMoreContainer = document.getElementById('load-more-container');
@@ -63,7 +60,6 @@ async function fetchLogs(loadMore = false) {
         }
 
         lastVisibleLog = snapshot.docs[snapshot.docs.length - 1];
-        
         if (!loadMore) listContainer.innerHTML = '';
 
         snapshot.forEach((d) => {
@@ -82,7 +78,6 @@ async function fetchLogs(loadMore = false) {
     }
 }
 
-// Render Log Card
 function renderLogCard(id, data) {
     const listContainer = document.getElementById('logs-card-list');
     const card = document.createElement('div');
@@ -97,9 +92,10 @@ function renderLogCard(id, data) {
         });
     }
 
+    // Title now includes Action Type and Actor Name
     card.innerHTML = `
         <div class="card-header" id="header-${id}">
-            <span class="card-title">${data.actionType}</span>
+            <span class="card-title">${data.actionType} - ${data.actorName}</span>
             <div class="card-meta">
                 <span class="timestamp-meta">${dateStr}</span>
             </div>
