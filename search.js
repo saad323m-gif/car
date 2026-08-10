@@ -4,8 +4,17 @@ import { collection, query, where, limit, getDocs, startAfter, orderBy } from "h
 let lastVisibleSearch = null;
 let currentSearchCategory = 'users';
 let currentSearchTerm = '';
+let currentUserData = null;
+
+export const setSearchCurrentUser = (data) => currentUserData = data;
 
 export function renderSearchView() {
+    // Security Guard
+    if (!currentUserData || currentUserData.role !== 'admin') {
+        document.getElementById('dashboard-container').innerHTML = '<h2>Access Denied</h2><p>You do not have permission to view this page.</p>';
+        return;
+    }
+
     const container = document.getElementById('dashboard-container');
     container.innerHTML = `
         <h2>System Search</h2>
@@ -29,6 +38,8 @@ export function renderSearchView() {
 }
 
 async function handleSearch(loadMore = false) {
+    if (currentUserData.role !== 'admin') return;
+    
     const input = document.getElementById('search-input').value.trim();
     const category = document.getElementById('search-category').value;
     const resultsContainer = document.getElementById('search-results');
