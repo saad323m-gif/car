@@ -185,14 +185,21 @@ function renderCarCard(id, data, isUserView = false) {
                 <option value="history">View History</option>
             </select>
             <div id="assign-area-${id}" style="margin-top: 10px; display:none;"></div>
+            <div id="history-area-${id}" style="margin-top: 10px; display:none;"></div>
         `;
+    } else {
+         actionsHtml = `<div id="history-area-${id}" style="margin-top: 10px; display:none;"></div>`;
     }
 
     card.innerHTML = `
         <div class="card-header" id="header-${id}">
             <div class="card-title">
                 <div class="plate-wrapper">
-                    <span class="plate-id">${data.carId}</span>
+                    <div class="plate-meta-top">
+                        <span class="plate-id">${data.carId}</span>
+                        <span class="meta-separator"></span>
+                        <span class="plate-owner">Owner: ${data.ownerName}</span>
+                    </div>
                     <div class="plate-container">
                         <div style="display:flex; flex-direction:column; align-items:center;">
                             <div class="plate-top-bar" style="background:${topBarColor}; width:100%;"></div>
@@ -210,8 +217,7 @@ function renderCarCard(id, data, isUserView = false) {
         <div class="card-body" id="body-${id}">
             <div class="detail-grid">
                 <div class="detail-item"><span class="detail-label">Type</span><span class="detail-value">${data.type}</span></div>
-                <div class="detail-item"><span class="detail-label">Owner</span><span class="detail-value">${data.ownerName}</span></div>
-                <div class="detail-item" style="grid-column: 1 / -1;"><span class="detail-label">VIN</span><span class="detail-value">${data.vin}</span></div>
+                <div class="detail-item"><span class="detail-label">VIN</span><span class="detail-value">${data.vin}</span></div>
                 <div class="detail-item"><span class="detail-label">License Expiry</span><span class="detail-value ${licClass}">${data.licenseExpiry.toDate().toLocaleDateString('en-GB')} (${licDiff}d)</span></div>
                 <div class="detail-item"><span class="detail-label">Insurance Expiry</span><span class="detail-value ${insClass}">${data.insuranceExpiry.toDate().toLocaleDateString('en-GB')} (${insDiff}d)</span></div>
                 <div class="detail-item" style="grid-column: 1 / -1;"><span class="detail-label">Notes</span><span class="detail-value">${data.notes || 'N/A'}</span></div>
@@ -221,10 +227,15 @@ function renderCarCard(id, data, isUserView = false) {
     `;
     listContainer.appendChild(card);
 
-    document.getElementById(`header-${id}`).addEventListener('click', () => card.classList.toggle('open'));
+    document.getElementById(`header-${id}`).addEventListener('click', (e) => {
+        if(e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
+            card.classList.toggle('open');
+        }
+    });
 
-    if (!isUserView) {
-        document.getElementById(`car-action-${id}`).addEventListener('change', (e) => {
+    const actionSelect = document.getElementById(`car-action-${id}`);
+    if (actionSelect) {
+        actionSelect.addEventListener('change', (e) => {
             handleCarAction(id, e.target.value, data);
             e.target.value = "";
         });
@@ -233,17 +244,68 @@ function renderCarCard(id, data, isUserView = false) {
 
 async function handleCarAction(id, action, data) {
     if (!action) return;
+    
+    // Hide other dynamic areas
+    const assignArea = document.getElementById(`assign-area-${id}`);
+    const historyArea = document.getElementById(`history-area-${id}`);
+    if(assignArea) assignArea.style.display = 'none';
+    if(historyArea) historyArea.style.display = 'none';
+
     if (action === 'edit') { showMessage('Edit Car form will be implemented soon.', 'warning', 'dashboard'); }
     else if (action === 'print') { showMessage('Generating PDF...', 'success', 'dashboard'); }
-    else if (action === 'history') { showMessage('Car history log will be implemented soon.', 'warning', 'dashboard'); }
+    else if (action === 'history') { await renderCarHistory(id); }
     else if (action === 'assign') { await renderAssignUserUI(id); }
     else if (action === 'unassign') { await handleUnassignUser(id, data); }
+}
+
+async function renderCarHistory(carId) {
+    const historyArea = document.getElementById(`history-area-${carId}`);
+    if (!historyArea) return;
+    historyArea.style.display = 'block';
+    historyArea.innerHTML = '<p class="loading-text" style="font-size: 0.85rem;">Loading history...</p>';
+
+    let html = '<div class="history-list"><h4>Recent Activities</h4>';
+
+    try {
+        // Fetch recent logs for this car
+        const logsQuery = query(collection(db, 'logs'), where('targetId', '==', carId), orderBy('timestamp', 'desc'), limit(5));
+        const logsSnap = await getDocs(logsQuery);
+        
+        if (logsSnap.empty) {
+            html += '<p class="history-item">No activity recorded yet.</p>';
+        } else {
+            logsSnap.forEach(doc => {
+                const log = doc.data();
+                const date = log.timestamp ? new Date(log.timestamp.toDate()).toLocaleString('en-GB', { timeZone: 'Asia/Dubai', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'N/A';
+                html += `<div class="history-item"><span class="action-type">${log.actionType}</span> by ${log.actorName} - ${log.details}<br><span class="timestamp-meta">${date}</span></div>`;
+            });
+        }
+
+        // Fetch assignment periods
+        const assignQuery = query(collection(db, 'cars', carId, 'assignments'), orderBy('startTime', 'desc'), limit(3));
+        const assignSnap = await getDocs(assignQuery);
+        if (!assignSnap.empty) {
+            html += '<h4 style="margin-top: 15px;">Assignment Periods</h4>';
+            assignSnap.forEach(doc => {
+                const a = doc.data();
+                const start = a.startTime ? new Date(a.startTime.toDate()).toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai' }) : 'N/A';
+                const end = a.endTime ? new Date(a.endTime.toDate()).toLocaleDateString('en-GB', { timeZone: 'Asia/Dubai' }) : 'Present';
+                html += `<div class="history-item"><strong>${a.userName}</strong>: ${start} to ${end}</div>`;
+            });
+        }
+
+        html += '</div>';
+        historyArea.innerHTML = html;
+
+    } catch (error) {
+        historyArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error loading history: ${error.message}</p>`;
+    }
 }
 
 async function renderAssignUserUI(carId) {
     const assignArea = document.getElementById(`assign-area-${carId}`);
     assignArea.style.display = 'block';
-    assignArea.innerHTML = '<p class="loading-text">Loading users...</p>';
+    assignArea.innerHTML = '<p class="loading-text" style="font-size: 0.85rem;">Loading active users...</p>';
 
     try {
         const q = query(collection(db, 'users'), where('status', '==', 'active'));
@@ -269,7 +331,6 @@ async function renderAssignUserUI(carId) {
 
                 await updateDoc(doc(db, 'cars', carId), { currentUserId: userId, currentUserName: userName });
                 
-                // Create assignment sub-collection record
                 await addDoc(collection(db, 'cars', carId, 'assignments'), {
                     userId, userName, startTime: serverTimestamp(), endTime: null
                 });
@@ -279,7 +340,7 @@ async function renderAssignUserUI(carId) {
                 fetchCars(false);
             } catch (err) { showMessage(`Error: ${err.message}`, 'error', 'dashboard'); }
         });
-    } catch (err) { assignArea.innerHTML = `<p class="error">Error: ${err.message}</p>`; }
+    } catch (err) { assignArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error: ${err.message}</p>`; }
 }
 
 async function handleUnassignUser(carId, data) {
@@ -287,7 +348,6 @@ async function handleUnassignUser(carId, data) {
     try {
         await updateDoc(doc(db, 'cars', carId), { currentUserId: null, currentUserName: null });
         
-        // Close the latest assignment record
         const q = query(collection(db, 'cars', carId, 'assignments'), where('userId', '==', data.currentUserId), where('endTime', '==', null), limit(1));
         const snap = await getDocs(q);
         if (!snap.empty) {
