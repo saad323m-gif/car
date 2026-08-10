@@ -80,31 +80,39 @@ async function generateCarId() {
 
 async function handleAddCar(e) {
     e.preventDefault();
+    // Strict trimming and lowercasing for uniqueness checks
     const plateNum = document.getElementById('car-plate-num').value.trim();
-    const plateCode = document.getElementById('car-plate-code').value.trim();
-    const emirate = document.getElementById('car-emirate').value.trim();
+    const plateCode = document.getElementById('car-plate-code').value.trim().toLowerCase();
+    const emirate = document.getElementById('car-emirate').value.trim().toLowerCase();
     const type = document.getElementById('car-type').value.trim();
     const owner = document.getElementById('car-owner').value.trim();
-    const vin = document.getElementById('car-vin').value.trim();
+    const vin = document.getElementById('car-vin').value.trim().toLowerCase();
     const licenseExp = document.getElementById('car-license-exp').value;
     const insuranceExp = document.getElementById('car-insurance-exp').value;
     const notes = document.getElementById('car-notes').value.trim();
 
-    const plateIdentifier = `${plateNum}-${plateCode}-${emirate}`.toLowerCase();
+    const plateIdentifier = `${plateNum}-${plateCode}-${emirate}`;
 
     try {
+        // Check Unique Plate Combination
         const plateQ = query(collection(db, 'cars'), where('plateIdentifier', '==', plateIdentifier));
         const plateSnap = await getDocs(plateQ);
         if (!plateSnap.empty) return showMessage('Error: This Plate combination already exists.', 'error', 'dashboard');
 
-        const vinQ = query(collection(db, 'cars'), where('vin', '==', vin.toLowerCase()));
+        // Check Unique VIN
+        const vinQ = query(collection(db, 'cars'), where('vin', '==', vin));
         const vinSnap = await getDocs(vinQ);
         if (!vinSnap.empty) return showMessage('Error: This VIN already exists.', 'error', 'dashboard');
 
         const carId = await generateCarId();
 
         await setDoc(doc(db, 'cars', carId), {
-            carId, plateNumber: plateNum, plateCode: plateCode, emirate, plateIdentifier, type, ownerName: owner, vin,
+            carId, 
+            plateNumber: plateNum, 
+            plateCode: plateCode.toUpperCase(), // Store display value uppercase if preferred
+            emirate: document.getElementById('car-emirate').value, // Store original case for display
+            plateIdentifier, // Store lowercased identifier for strict querying
+            type, ownerName: owner, vin, // Store lowercased vin
             licenseExpiry: new Date(licenseExp), insuranceExpiry: new Date(insuranceExp),
             notes, currentUserId: null, currentUserName: null, status: 'active'
         });
@@ -320,7 +328,6 @@ async function renderCarHistory(carId) {
     let html = '<div class="history-list"><h4>Recent Activities</h4>';
 
     try {
-        // Query without orderBy to avoid Firebase index requirements
         const logsQuery = query(collection(db, 'logs'), where('targetId', '==', carId), limit(20));
         const logsSnap = await getDocs(logsQuery);
         
@@ -329,7 +336,6 @@ async function renderCarHistory(carId) {
         } else {
             let logs = [];
             logsSnap.forEach(doc => logs.push(doc.data()));
-            // Sort in memory instead
             logs.sort((a, b) => {
                 const timeA = a.timestamp ? a.timestamp.toDate().getTime() : 0;
                 const timeB = b.timestamp ? b.timestamp.toDate().getTime() : 0;
@@ -342,7 +348,6 @@ async function renderCarHistory(carId) {
             });
         }
 
-        // Fetch assignment periods
         const assignQuery = query(collection(db, 'cars', carId, 'assignments'), orderBy('startTime', 'desc'), limit(3));
         const assignSnap = await getDocs(assignQuery);
         if (!assignSnap.empty) {
