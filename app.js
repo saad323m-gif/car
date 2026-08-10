@@ -9,6 +9,7 @@ import {
 import { renderDashboard, setCurrentUser } from "./members.js";
 import { renderLogsView, logAction } from "./logs.js";
 import { renderCarsView, setCarsCurrentUser } from "./cars.js";
+import { renderRequestsView, setRequestsCurrentUser } from "./requests.js";
 
 function updateDateTime() {
     const now = new Date();
@@ -35,6 +36,7 @@ window.addEventListener('DOMContentLoaded', () => {
             if (tab === 'members') renderDashboard();
             else if (tab === 'logs') renderLogsView();
             else if (tab === 'cars') renderCarsView();
+            else if (tab === 'requests') renderRequestsView();
         });
     });
 
@@ -46,6 +48,16 @@ window.addEventListener('DOMContentLoaded', () => {
                 userData.uid = user.uid;
                 setCurrentUser(userData);
                 setCarsCurrentUser(userData);
+                setRequestsCurrentUser(userData);
+                
+                // Control tab visibility based on role
+                const reqTab = document.querySelector('.tab-btn[data-tab="requests"]');
+                if (userData.role === 'admin') {
+                    reqTab.style.display = 'block';
+                } else {
+                    reqTab.style.display = 'none';
+                }
+                
                 showDashboard();
             } else {
                 await signOut(auth);
@@ -74,7 +86,6 @@ function showDashboard() {
     document.getElementById('header-logo').style.display = 'block';
     document.getElementById('main-logo').style.display = 'none';
     
-    // Make Cars the default landing tab
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelector('.tab-btn[data-tab="cars"]').classList.add('active');
     renderCarsView();
