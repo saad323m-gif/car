@@ -198,7 +198,7 @@ function renderCarCard(id, data, isUserView = false) {
                     <div class="plate-meta-top">
                         <span class="plate-id">${data.carId}</span>
                         <span class="meta-separator"></span>
-                        <span class="plate-owner">Owner: ${data.ownerName}</span>
+                        <span class="plate-owner">Assignee: ${data.currentUserName || 'Unassigned'}</span>
                     </div>
                     <div class="plate-container">
                         <div style="display:flex; flex-direction:column; align-items:center;">
@@ -211,16 +211,17 @@ function renderCarCard(id, data, isUserView = false) {
                 </div>
             </div>
             <div class="card-meta">
-                <span>${data.currentUserName ? 'Assigned: ' + data.currentUserName : 'Unassigned'}</span>
+                <span>${data.currentUserName ? 'Assigned' : 'Unassigned'}</span>
             </div>
         </div>
         <div class="card-body" id="body-${id}">
-            <div class="detail-grid">
+            <div class="detail-list">
                 <div class="detail-item"><span class="detail-label">Type</span><span class="detail-value">${data.type}</span></div>
+                <div class="detail-item"><span class="detail-label">Owner Name</span><span class="detail-value">${data.ownerName}</span></div>
                 <div class="detail-item"><span class="detail-label">VIN</span><span class="detail-value">${data.vin}</span></div>
-                <div class="detail-item"><span class="detail-label">License Expiry</span><span class="detail-value ${licClass}">${data.licenseExpiry.toDate().toLocaleDateString('en-GB')} (${licDiff}d)</span></div>
-                <div class="detail-item"><span class="detail-label">Insurance Expiry</span><span class="detail-value ${insClass}">${data.insuranceExpiry.toDate().toLocaleDateString('en-GB')} (${insDiff}d)</span></div>
-                <div class="detail-item" style="grid-column: 1 / -1;"><span class="detail-label">Notes</span><span class="detail-value">${data.notes || 'N/A'}</span></div>
+                <div class="detail-item"><span class="detail-label">License Expiry</span><span class="detail-value ${licClass}">${data.licenseExpiry.toDate().toLocaleDateString('en-GB')} (${licDiff} days left)</span></div>
+                <div class="detail-item"><span class="detail-label">Insurance Expiry</span><span class="detail-value ${insClass}">${data.insuranceExpiry.toDate().toLocaleDateString('en-GB')} (${insDiff} days left)</span></div>
+                <div class="detail-item"><span class="detail-label">Notes</span><span class="detail-value">${data.notes || 'N/A'}</span></div>
             </div>
             <div style="margin-top: 15px;">${actionsHtml}</div>
         </div>
@@ -236,26 +237,78 @@ function renderCarCard(id, data, isUserView = false) {
     const actionSelect = document.getElementById(`car-action-${id}`);
     if (actionSelect) {
         actionSelect.addEventListener('change', (e) => {
-            handleCarAction(id, e.target.value, data);
+            handleCarAction(id, e.target.value, data, topBarColor);
             e.target.value = "";
         });
     }
 }
 
-async function handleCarAction(id, action, data) {
+async function handleCarAction(id, action, data, topBarColor) {
     if (!action) return;
     
-    // Hide other dynamic areas
     const assignArea = document.getElementById(`assign-area-${id}`);
     const historyArea = document.getElementById(`history-area-${id}`);
     if(assignArea) assignArea.style.display = 'none';
     if(historyArea) historyArea.style.display = 'none';
 
     if (action === 'edit') { showMessage('Edit Car form will be implemented soon.', 'warning', 'dashboard'); }
-    else if (action === 'print') { showMessage('Generating PDF...', 'success', 'dashboard'); }
+    else if (action === 'print') { handlePrintCard(data, topBarColor); }
     else if (action === 'history') { await renderCarHistory(id); }
     else if (action === 'assign') { await renderAssignUserUI(id); }
     else if (action === 'unassign') { await handleUnassignUser(id, data); }
+}
+
+function handlePrintCard(data, topBarColor) {
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>Car Card - ${data.carId}</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+                .print-logo { width: 80px; margin-bottom: 20px; }
+                .print-header { border-bottom: 2px solid #1976d2; margin-bottom: 20px; padding-bottom: 10px; }
+                .plate-container { display: inline-flex; align-items: center; gap: 15px; border: 2px solid #000; border-radius: 8px; padding: 10px 20px; margin: 20px 0; }
+                .plate-top-bar { width: 100%; height: 5px; margin-bottom: 5px; border-radius: 2px; background: ${topBarColor}; }
+                .plate-emirate { font-size: 12px; font-weight: bold; text-transform: uppercase; }
+                .plate-number { font-size: 32px; font-weight: bold; letter-spacing: 2px; font-variant-numeric: tabular-nums; }
+                .plate-code { font-size: 24px; font-weight: bold; color: #fff; background: #000; padding: 0 8px; border-radius: 4px; }
+                .details { text-align: left; width: 80%; margin: 0 auto; }
+                .detail-row { margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+                .detail-label { font-weight: bold; color: #1976d2; font-size: 12px; }
+                .detail-value { font-size: 16px; color: #333; }
+            </style>
+        </head>
+        <body>
+            <div class="print-header">
+                <img src="icon.png" class="print-logo" alt="Logo">
+                <h2>Car Management System</h2>
+            </div>
+            <h3>Car ID: ${data.carId}</h3>
+            <div class="plate-container">
+                <div style="display:flex; flex-direction:column; align-items:center;">
+                    <div class="plate-top-bar"></div>
+                    <span class="plate-emirate">${data.emirate}</span>
+                </div>
+                <span class="plate-number">${data.plateNumber}</span>
+                <span class="plate-code">${data.plateCode}</span>
+            </div>
+            <div class="details">
+                <div class="detail-row"><span class="detail-label">Owner Name:</span> <span class="detail-value">${data.ownerName}</span></div>
+                <div class="detail-row"><span class="detail-label">Type:</span> <span class="detail-value">${data.type}</span></div>
+                <div class="detail-row"><span class="detail-label">VIN:</span> <span class="detail-value">${data.vin}</span></div>
+                <div class="detail-row"><span class="detail-label">License Expiry:</span> <span class="detail-value">${data.licenseExpiry.toDate().toLocaleDateString('en-GB')}</span></div>
+                <div class="detail-row"><span class="detail-label">Insurance Expiry:</span> <span class="detail-value">${data.insuranceExpiry.toDate().toLocaleDateString('en-GB')}</span></div>
+                <div class="detail-row"><span class="detail-label">Current Assignee:</span> <span class="detail-value">${data.currentUserName || 'Unassigned'}</span></div>
+                <div class="detail-row"><span class="detail-label">Notes:</span> <span class="detail-value">${data.notes || 'N/A'}</span></div>
+            </div>
+            <script>
+                window.onload = function() { window.print(); }
+            </script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
 }
 
 async function renderCarHistory(carId) {
@@ -267,15 +320,23 @@ async function renderCarHistory(carId) {
     let html = '<div class="history-list"><h4>Recent Activities</h4>';
 
     try {
-        // Fetch recent logs for this car
-        const logsQuery = query(collection(db, 'logs'), where('targetId', '==', carId), orderBy('timestamp', 'desc'), limit(5));
+        // Query without orderBy to avoid Firebase index requirements
+        const logsQuery = query(collection(db, 'logs'), where('targetId', '==', carId), limit(20));
         const logsSnap = await getDocs(logsQuery);
         
         if (logsSnap.empty) {
             html += '<p class="history-item">No activity recorded yet.</p>';
         } else {
-            logsSnap.forEach(doc => {
-                const log = doc.data();
+            let logs = [];
+            logsSnap.forEach(doc => logs.push(doc.data()));
+            // Sort in memory instead
+            logs.sort((a, b) => {
+                const timeA = a.timestamp ? a.timestamp.toDate().getTime() : 0;
+                const timeB = b.timestamp ? b.timestamp.toDate().getTime() : 0;
+                return timeB - timeA;
+            });
+            
+            logs.slice(0, 5).forEach(log => {
                 const date = log.timestamp ? new Date(log.timestamp.toDate()).toLocaleString('en-GB', { timeZone: 'Asia/Dubai', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'N/A';
                 html += `<div class="history-item"><span class="action-type">${log.actionType}</span> by ${log.actorName} - ${log.details}<br><span class="timestamp-meta">${date}</span></div>`;
             });
