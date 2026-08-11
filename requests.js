@@ -1,15 +1,33 @@
-import { db, firebaseConfig } from "./firebase.js";
-import { 
+/**
+ * Requests Module - Car Management System
+ * English only | Latin digits only | Production-ready
+ *
+ * New logic for regular users:
+ * - If plate matches an existing car → auto-link immediately
+ * - If no match → create PENDING request for admin
+ */
+
+import { db } from "./firebase.js";
+import {
     collection, doc, getDoc, getDocs, addDoc, updateDoc, setDoc,
-    query, where, limit, serverTimestamp, runTransaction 
+    query, where, limit, serverTimestamp, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { logAction } from "./logs.js";
+import {
+    showMessage, isAdmin, isActiveUser, renderAccessDenied,
+    formatDateTime, formatCarLabel
+} from "./utils.js";
 
 let currentUserData = null;
-export const setRequestsCurrentUser = (data) => currentUserData = data;
+export const setRequestsCurrentUser = (data) => { currentUserData = data; };
 
-// Render Admin Requests View
+/* ===================== ADMIN VIEW ===================== */
 export function renderRequestsView() {
+    if (!isAdmin(currentUserData)) {
+        renderAccessDenied();
+        return;
+    }
+
     const container = document.getElementById('dashboard-container');
     container.innerHTML = `
         <h2>Pending User Requests</h2>
@@ -22,13 +40,17 @@ export function renderRequestsView() {
 }
 
 async function fetchRequests() {
+    if (!isAdmin(currentUserData)) return;
+
     const listContainer = document.getElementById('requests-card-list');
+    if (!listContainer) return;
+
     listContainer.innerHTML = '<p class="loading-text">Loading requests...</p>';
 
     try {
         const q = query(collection(db, 'requests'), where('status', '==', 'PENDING'));
         const snapshot = await getDocs(q);
-        
+
         if (snapshot.empty) {
             listContainer.innerHTML = '<p style="text-align:center; color:#666;">No pending requests.</p>';
             return;
@@ -36,7 +58,6 @@ async function fetchRequests() {
 
         listContainer.innerHTML = '';
         snapshot.forEach(d => renderRequestCard(d.id, d.data()));
-
     } catch (error) {
         listContainer.innerHTML = `<p class="error">Error: ${error.message}</p>`;
     }
@@ -44,21 +65,36 @@ async function fetchRequests() {
 
 function renderRequestCard(id, data) {
     const listContainer = document.getElementById('requests-card-list');
+    if (!listContainer) return;
+
     const card = document.createElement('div');
     card.className = 'card border-blue';
     card.id = `req-${id}`;
 
-    let dateStr = 'N/A';
-    if (data.timestamp) {
-        dateStr = new Date(data.timestamp.toDate()).toLocaleString('en-GB', { timeZone: 'Asia/Dubai' });
-    }
+    const dateStr = data.timestamp ? formatDateTime(data.timestamp) : 'N/A';
 
     let bodyHtml = '';
     if (data.type === 'LINK') {
+        const plateLabel = `${data.plateNumber} ${data.plateCode} (${data.emirate})`;
         bodyHtml = `
-            <p><strong>Type:</strong> Link Car Request</p>
-            <p><strong>Requested By:</strong> ${data.userName}</p>
-            <p><strong>Plate Details:</strong> ${data.plateNumber} ${data.plateCode} (${data.emirate})</p>
+            <div class="detail-list">
+                <div class="detail-item">
+                    <span class="detail-label">Type</span>
+                    <span class="detail-value">Link Car Request</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Requested By</span>
+                    <span class="detail-value">${data.userName}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Plate Details</span>
+                    <span class="detail-value">${plateLabel}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Submitted</span>
+                    <span class="detail-value">${dateStr}</span>
+                </div>
+            </div>
             <div style="margin-top: 15px; display: flex; gap: 10px;">
                 <button class="btn btn-sm btn-success" id="approve-req-${id}">Approve</button>
                 <button class="btn btn-sm btn-danger" id="reject-req-${id}">Reject</button>
@@ -66,10 +102,34 @@ function renderRequestCard(id, data) {
             <div id="approve-area-${id}" style="margin-top: 15px; display: none;"></div>
         `;
     } else if (data.type === 'UNLINK') {
+        const carLabel = data.carId
+            ? (data.plateNumber ? formatCarLabel({
+                carId: data.carId,
+                plateNumber: data.plateNumber,
+                plateCode: data.plateCode,
+                emirate: data.emirate
+            }) : data.carId)
+            : 'N/A';
+
         bodyHtml = `
-            <p><strong>Type:</strong> Unlink Car Request</p>
-            <p><strong>Requested By:</strong> ${data.userName}</p>
-            <p><strong>Car ID:</strong> ${data.carId}</p>
+            <div class="detail-list">
+                <div class="detail-item">
+                    <span class="detail-label">Type</span>
+                    <span class="detail-value">Unlink Car Request</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Requested By</span>
+                    <span class="detail-value">${data.userName}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Car</span>
+                    <span class="detail-value">${carLabel}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Submitted</span>
+                    <span class="detail-value">${dateStr}</span>
+                </div>
+            </div>
             <div style="margin-top: 15px; display: flex; gap: 10px;">
                 <button class="btn btn-sm btn-success" id="approve-req-${id}">Approve Unlink</button>
                 <button class="btn btn-sm btn-danger" id="reject-req-${id}">Reject</button>
@@ -93,42 +153,86 @@ function renderRequestCard(id, data) {
 }
 
 async function handleApprove(reqId, reqData) {
+    if (!isAdmin(currentUserData)) return;
+
     try {
         if (reqData.type === 'UNLINK') {
             // Approve Unlink
-            await updateDoc(doc(db, 'cars', reqData.carId), { currentUserId: null, currentUserName: null });
-            
-            const assignQ = query(collection(db, 'cars', reqData.carId, 'assignments'), where('userId', '==', reqData.userId), where('endTime', '==', null), limit(1));
+            const carRef = doc(db, 'cars', reqData.carId);
+            const carSnap = await getDoc(carRef);
+            const carData = carSnap.exists() ? carSnap.data() : null;
+            const label = carData ? formatCarLabel(carData) : reqData.carId;
+
+            await updateDoc(carRef, {
+                currentUserId: null,
+                currentUserName: null
+            });
+
+            const assignQ = query(
+                collection(db, 'cars', reqData.carId, 'assignments'),
+                where('userId', '==', reqData.userId),
+                where('endTime', '==', null),
+                limit(1)
+            );
             const snap = await getDocs(assignQ);
             if (!snap.empty) {
-                await updateDoc(doc(db, 'cars', reqData.carId, 'assignments', snap.docs[0].id), { endTime: serverTimestamp() });
+                await updateDoc(doc(db, 'cars', reqData.carId, 'assignments', snap.docs[0].id), {
+                    endTime: serverTimestamp()
+                });
             }
 
             await updateDoc(doc(db, 'requests', reqId), { status: 'APPROVED' });
-            await logAction(currentUserData, 'APPROVE_UNLINK', { targetId: reqData.carId, targetName: reqData.userName, text: `Approved unlink for ${reqData.userName}` });
+
+            await logAction(currentUserData, 'APPROVE_UNLINK', {
+                targetId: reqData.carId,
+                targetName: label,
+                assigneeId: reqData.userId,
+                text: `Approved unlink of ${label} for ${reqData.userName}`
+            });
+
             showMessage('Unlink approved successfully.', 'success', 'dashboard');
             fetchRequests();
+
         } else if (reqData.type === 'LINK') {
-            // Approve Link: Check if car exists
-            const plateId = `${reqData.plateNumber}-${reqData.plateCode}-${reqData.emirate}`.toLowerCase();
+            // Check if car already exists
+            const plateId = `${reqData.plateNumber}-${reqData.plateCode.toLowerCase()}-${reqData.emirate.toLowerCase()}`;
             const carQ = query(collection(db, 'cars'), where('plateIdentifier', '==', plateId));
             const carSnap = await getDocs(carQ);
 
             if (!carSnap.empty) {
-                // Car exists, assign directly
+                // Car exists → assign directly
                 const carDoc = carSnap.docs[0];
-                await updateDoc(doc(db, 'cars', carDoc.id), { currentUserId: reqData.userId, currentUserName: reqData.userName });
-                
-                await addDoc(collection(db, 'cars', carDoc.id, 'assignments'), {
-                    userId: reqData.userId, userName: reqData.userName, startTime: reqData.timestamp, endTime: null
+                const carData = carDoc.data();
+                const label = formatCarLabel(carData);
+
+                await updateDoc(doc(db, 'cars', carDoc.id), {
+                    currentUserId: reqData.userId,
+                    currentUserName: reqData.userName
                 });
 
-                await updateDoc(doc(db, 'requests', reqId), { status: 'APPROVED', carId: carDoc.id });
-                await logAction(currentUserData, 'APPROVE_LINK', { targetId: carDoc.id, targetName: reqData.userName, text: `Approved link for ${reqData.userName}` });
+                await addDoc(collection(db, 'cars', carDoc.id, 'assignments'), {
+                    userId: reqData.userId,
+                    userName: reqData.userName,
+                    startTime: reqData.timestamp || serverTimestamp(),
+                    endTime: null
+                });
+
+                await updateDoc(doc(db, 'requests', reqId), {
+                    status: 'APPROVED',
+                    carId: carDoc.id
+                });
+
+                await logAction(currentUserData, 'APPROVE_LINK', {
+                    targetId: carDoc.id,
+                    targetName: label,
+                    assigneeId: reqData.userId,
+                    text: `Approved link of ${label} for ${reqData.userName}`
+                });
+
                 showMessage('Link approved successfully.', 'success', 'dashboard');
                 fetchRequests();
             } else {
-                // Car does not exist, show form to Admin to complete details
+                // Car does not exist → show form to complete details
                 renderCompleteCarForm(reqId, reqData);
             }
         }
@@ -139,17 +243,39 @@ async function handleApprove(reqId, reqData) {
 
 function renderCompleteCarForm(reqId, reqData) {
     const area = document.getElementById(`approve-area-${reqId}`);
+    if (!area) return;
+
     area.style.display = 'block';
     area.innerHTML = `
         <h4>Complete Car Details</h4>
-        <form id="complete-car-${reqId}">
-            <div class="form-group"><label>Type (Make)</label><input type="text" id="cc-type-${reqId}" required></div>
-            <div class="form-group"><label>Owner Name</label><input type="text" id="cc-owner-${reqId}" required></div>
-            <div class="form-group"><label>VIN (Unique)</label><input type="text" id="cc-vin-${reqId}" required></div>
-            <div class="form-group"><label>License Expiry</label><input type="date" id="cc-lic-${reqId}" required></div>
-            <div class="form-group"><label>Insurance Expiry</label><input type="date" id="cc-ins-${reqId}" required></div>
-            <div class="form-group"><label>Notes</label><input type="text" id="cc-notes-${reqId}"></div>
-            <button type="submit" class="btn btn-sm btn-success">Save & Assign</button>
+        <form id="complete-car-${reqId}" class="edit-car-form">
+            <div class="form-group">
+                <label>Type (Make)</label>
+                <input type="text" id="cc-type-${reqId}" required>
+            </div>
+            <div class="form-group">
+                <label>Owner Name</label>
+                <input type="text" id="cc-owner-${reqId}" required>
+            </div>
+            <div class="form-group">
+                <label>VIN (Unique)</label>
+                <input type="text" id="cc-vin-${reqId}" required maxlength="17">
+            </div>
+            <div class="form-group">
+                <label>License Expiry</label>
+                <input type="date" id="cc-lic-${reqId}" required>
+            </div>
+            <div class="form-group">
+                <label>Insurance Expiry</label>
+                <input type="date" id="cc-ins-${reqId}" required>
+            </div>
+            <div class="form-group full-width">
+                <label>Notes</label>
+                <input type="text" id="cc-notes-${reqId}">
+            </div>
+            <div class="form-group full-width">
+                <button type="submit" class="btn btn-sm btn-success">Save & Assign</button>
+            </div>
         </form>
     `;
 
@@ -160,47 +286,91 @@ function renderCompleteCarForm(reqId, reqData) {
 }
 
 async function handleCompleteAndAssign(reqId, reqData) {
+    if (!isAdmin(currentUserData)) return;
+
     const type = document.getElementById(`cc-type-${reqId}`).value.trim();
     const owner = document.getElementById(`cc-owner-${reqId}`).value.trim();
-    const vin = document.getElementById(`cc-vin-${reqId}`).value.trim().toLowerCase();
+    const vin = document.getElementById(`cc-vin-${reqId}`).value.trim().toUpperCase();
     const licExp = document.getElementById(`cc-lic-${reqId}`).value;
     const insExp = document.getElementById(`cc-ins-${reqId}`).value;
     const notes = document.getElementById(`cc-notes-${reqId}`).value.trim();
 
     try {
-        // Check VIN uniqueness
+        // VIN uniqueness
         const vinQ = query(collection(db, 'cars'), where('vin', '==', vin));
         const vinSnap = await getDocs(vinQ);
-        if (!vinSnap.empty) return showMessage('Error: This VIN already exists.', 'error', 'dashboard');
+        if (!vinSnap.empty) {
+            showMessage('Error: This VIN already exists.', 'error', 'dashboard');
+            return;
+        }
 
         // Generate Car ID
         const counterRef = doc(db, 'counters', 'carId');
         const newCount = await runTransaction(db, async (transaction) => {
             const counterDoc = await transaction.get(counterRef);
-            if (!counterDoc.exists()) { transaction.set(counterRef, { count: 1 }); return 1; }
+            if (!counterDoc.exists()) {
+                transaction.set(counterRef, { count: 1 });
+                return 1;
+            }
             const nc = counterDoc.data().count + 1;
             transaction.update(counterRef, { count: nc });
             return nc;
         });
         const carId = `UAE-${newCount.toString().padStart(3, '0')}`;
 
-        const plateId = `${reqData.plateNumber}-${reqData.plateCode}-${reqData.emirate}`.toLowerCase();
+        const plateCode = reqData.plateCode.toUpperCase();
+        const plateId = `${reqData.plateNumber}-${plateCode.toLowerCase()}-${reqData.emirate.toLowerCase()}`;
 
         await setDoc(doc(db, 'cars', carId), {
-            carId, plateNumber: reqData.plateNumber, plateCode: reqData.plateCode.toUpperCase(), emirate: reqData.emirate,
-            plateIdentifier: plateId, type, ownerName: owner, vin,
-            licenseExpiry: new Date(licExp), insuranceExpiry: new Date(insExp), notes,
-            currentUserId: reqData.userId, currentUserName: reqData.userName, status: 'active'
+            carId,
+            plateNumber: reqData.plateNumber,
+            plateCode,
+            emirate: reqData.emirate,
+            plateIdentifier: plateId,
+            type,
+            ownerName: owner,
+            vin,
+            licenseExpiry: new Date(licExp),
+            insuranceExpiry: new Date(insExp),
+            notes,
+            currentUserId: reqData.userId,
+            currentUserName: reqData.userName,
+            status: 'active',
+            createdAt: serverTimestamp()
         });
 
         await addDoc(collection(db, 'cars', carId, 'assignments'), {
-            userId: reqData.userId, userName: reqData.userName, startTime: reqData.timestamp, endTime: null
+            userId: reqData.userId,
+            userName: reqData.userName,
+            startTime: reqData.timestamp || serverTimestamp(),
+            endTime: null
         });
 
-        await updateDoc(doc(db, 'requests', reqId), { status: 'APPROVED', carId: carId });
-        await logAction(currentUserData, 'CREATE_CAR', { targetId: carId, targetName: reqData.plateNumber, text: `Created car ${carId} via request` });
-        await logAction(currentUserData, 'APPROVE_LINK', { targetId: carId, targetName: reqData.userName, text: `Approved link for ${reqData.userName}` });
-        
+        await updateDoc(doc(db, 'requests', reqId), {
+            status: 'APPROVED',
+            carId
+        });
+
+        const label = formatCarLabel({
+            carId,
+            plateNumber: reqData.plateNumber,
+            plateCode,
+            emirate: reqData.emirate
+        });
+
+        await logAction(currentUserData, 'CREATE_CAR', {
+            targetId: carId,
+            targetName: label,
+            text: `Created car ${label} via request`
+        });
+
+        await logAction(currentUserData, 'APPROVE_LINK', {
+            targetId: carId,
+            targetName: label,
+            assigneeId: reqData.userId,
+            text: `Approved link of ${label} for ${reqData.userName}`
+        });
+
         showMessage('Car created and assigned successfully.', 'success', 'dashboard');
         fetchRequests();
     } catch (error) {
@@ -209,9 +379,17 @@ async function handleCompleteAndAssign(reqId, reqData) {
 }
 
 async function handleReject(reqId, reqData) {
+    if (!isAdmin(currentUserData)) return;
+
     try {
         await updateDoc(doc(db, 'requests', reqId), { status: 'REJECTED' });
-        await logAction(currentUserData, 'REJECT_REQUEST', { targetId: reqId, targetName: reqData.userName, text: `Rejected ${reqData.type} request` });
+
+        await logAction(currentUserData, 'REJECT_REQUEST', {
+            targetId: reqId,
+            targetName: reqData.userName,
+            text: `Rejected ${reqData.type} request from ${reqData.userName}`
+        });
+
         showMessage('Request rejected.', 'warning', 'dashboard');
         fetchRequests();
     } catch (error) {
@@ -219,41 +397,157 @@ async function handleReject(reqId, reqData) {
     }
 }
 
-// User Actions
+/* ===================== USER ACTIONS ===================== */
+
+/**
+ * New logic:
+ * 1. Build plateIdentifier
+ * 2. Search for existing car
+ * 3. If found → auto-assign immediately
+ * 4. If not found → create PENDING request
+ */
 export async function createLinkRequest(e) {
     e.preventDefault();
+    if (!isActiveUser(currentUserData)) return;
+
     const btn = document.getElementById('btn-submit-req');
+    if (!btn) return;
+
     btn.disabled = true;
-    btn.textContent = "Sending...";
+    btn.textContent = 'Processing...';
 
     const plateNum = document.getElementById('req-plate-num').value.trim();
-    const plateCode = document.getElementById('req-plate-code').value.trim();
+    const plateCodeRaw = document.getElementById('req-plate-code').value.trim();
+    const plateCode = plateCodeRaw.toUpperCase();
     const emirate = document.getElementById('req-emirate').value.trim();
 
+    const plateIdentifier = `${plateNum}-${plateCode.toLowerCase()}-${emirate.toLowerCase()}`;
+
     try {
-        await addDoc(collection(db, 'requests'), {
-            type: 'LINK', userId: currentUserData.uid, userName: currentUserData.username,
-            plateNumber: plateNum, plateCode: plateCode, emirate: emirate,
-            status: 'PENDING', timestamp: serverTimestamp()
-        });
-        showMessage('Request sent to admin successfully.', 'success', 'dashboard');
-        document.getElementById('request-car-form').reset();
-        document.getElementById('request-car-form-wrapper').classList.add('hidden-form');
+        // Check if car already exists
+        const carQ = query(collection(db, 'cars'), where('plateIdentifier', '==', plateIdentifier));
+        const carSnap = await getDocs(carQ);
+
+        if (!carSnap.empty) {
+            // ===== AUTO LINK (force re-assign even if already assigned) =====
+            const carDoc = carSnap.docs[0];
+            const carData = carDoc.data();
+            const label = formatCarLabel(carData);
+
+            // Already assigned to this same user?
+            if (carData.currentUserId === currentUserData.uid) {
+                showMessage('This car is already assigned to you.', 'warning', 'dashboard');
+                return;
+            }
+
+            // If currently assigned to someone else → unassign them first
+            if (carData.currentUserId) {
+                const prevAssignQ = query(
+                    collection(db, 'cars', carDoc.id, 'assignments'),
+                    where('userId', '==', carData.currentUserId),
+                    where('endTime', '==', null),
+                    limit(1)
+                );
+                const prevSnap = await getDocs(prevAssignQ);
+                if (!prevSnap.empty) {
+                    await updateDoc(doc(db, 'cars', carDoc.id, 'assignments', prevSnap.docs[0].id), {
+                        endTime: serverTimestamp()
+                    });
+                }
+
+                await logAction(currentUserData, 'FORCE_UNASSIGN', {
+                    targetId: carDoc.id,
+                    targetName: label,
+                    assigneeId: carData.currentUserId,
+                    text: `Force unassigned ${label} from ${carData.currentUserName} (requested by ${currentUserData.username})`
+                });
+            }
+
+            // Assign to the requesting user
+            await updateDoc(doc(db, 'cars', carDoc.id), {
+                currentUserId: currentUserData.uid,
+                currentUserName: currentUserData.username
+            });
+
+            await addDoc(collection(db, 'cars', carDoc.id, 'assignments'), {
+                userId: currentUserData.uid,
+                userName: currentUserData.username,
+                startTime: serverTimestamp(),
+                endTime: null
+            });
+
+            await logAction(currentUserData, 'AUTO_LINK', {
+                targetId: carDoc.id,
+                targetName: label,
+                assigneeId: currentUserData.uid,
+                text: `Auto-linked ${label} to ${currentUserData.username}`
+            });
+
+            showMessage(`Success: Car ${label} has been linked to you automatically.`, 'success', 'dashboard');
+
+            document.getElementById('request-car-form').reset();
+            document.getElementById('request-car-form-wrapper').classList.add('hidden-form');
+
+            // Refresh user cars list
+            const { renderCarsView } = await import('./cars.js');
+            renderCarsView();
+
+        } else {
+            // ===== CREATE PENDING REQUEST =====
+            await addDoc(collection(db, 'requests'), {
+                type: 'LINK',
+                userId: currentUserData.uid,
+                userName: currentUserData.username,
+                plateNumber: plateNum,
+                plateCode: plateCode,
+                emirate: emirate,
+                status: 'PENDING',
+                timestamp: serverTimestamp()
+            });
+
+            await logAction(currentUserData, 'REQUEST_LINK', {
+                targetName: `${plateNum} ${plateCode} (${emirate})`,
+                text: `Requested link for plate ${plateNum} ${plateCode} (${emirate})`
+            });
+
+            showMessage('Request sent to admin successfully. The car was not found in the system.', 'success', 'dashboard');
+
+            document.getElementById('request-car-form').reset();
+            document.getElementById('request-car-form-wrapper').classList.add('hidden-form');
+        }
     } catch (error) {
         showMessage(`Error: ${error.message}`, 'error', 'dashboard');
     } finally {
         btn.disabled = false;
-        btn.textContent = "Send Request";
+        btn.textContent = 'Send Request';
     }
 }
 
 export async function createUnlinkRequest(carId, carData) {
-    if (!confirm("Send request to admin to unlink this car?")) return;
+    if (!isActiveUser(currentUserData)) return;
+    if (!confirm('Send request to admin to unlink this car?')) return;
+
     try {
+        const label = formatCarLabel(carData);
+
         await addDoc(collection(db, 'requests'), {
-            type: 'UNLINK', userId: currentUserData.uid, userName: currentUserData.username,
-            carId: carId, status: 'PENDING', timestamp: serverTimestamp()
+            type: 'UNLINK',
+            userId: currentUserData.uid,
+            userName: currentUserData.username,
+            carId: carId,
+            plateNumber: carData.plateNumber,
+            plateCode: carData.plateCode,
+            emirate: carData.emirate,
+            status: 'PENDING',
+            timestamp: serverTimestamp()
         });
+
+        await logAction(currentUserData, 'REQUEST_UNLINK', {
+            targetId: carId,
+            targetName: label,
+            text: `Requested unlink of ${label}`
+        });
+
         showMessage('Unlink request sent to admin.', 'success', 'dashboard');
     } catch (error) {
         showMessage(`Error: ${error.message}`, 'error', 'dashboard');
