@@ -1,82 +1,49 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fleet & Member Management System</title>
-<link rel="stylesheet" href="styles.css">
-<script src="[https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js](https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js)"></script>
-<script src="[https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js](https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js)"></script>
-<script src="[https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js](https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js)"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Management</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="top-navbar">
-<div class="nav-container">
-<h1 class="app-title">Fleet System</h1>
-<div id="user-session" class="session-info">
-<span id="user-role-badge" class="role-badge">Guest</span>
-<button id="auth-btn" class="btn btn-outline">Login</button>
-</div>
-</div>
-</header>
-<main class="main-content">
-<section class="section-card">
-<div class="section-header">
-<h2>Vehicle Fleet</h2>
-<button id="add-car-btn" class="btn btn-primary" style="display: none;">Add Vehicle</button>
-</div>
-<div id="cars-grid" class="cards-grid">
-<div class="car-card">
-<div class="plate-container">
-<div class="plate-code-box">
-<span class="plate-region">ABU DHABI</span>
-<span class="plate-code">11</span>
-</div>
-<div class="plate-number-box">
-<span class="plate-number">50921</span>
-</div>
-</div>
-<div class="car-details">
-<p><strong>Status:</strong> Assigned</p>
-<p><strong>Current User:</strong> John Doe</p>
-</div>
-</div>
-</div>
-</section>
-<section class="section-card">
-<div class="section-header">
-<h2>Assignment Timeline</h2>
-</div>
-<div id="timeline-container" class="timeline">
-<div class="timeline-card is-active">
-<div class="timeline-header">
-<span class="timeline-period">From: 2026-08-01 09:00 - To: Present</span>
-<span class="status-badge active">Active</span>
-</div>
-<div class="timeline-body">
-<p>User: <strong>John Doe</strong></p>
-</div>
-</div>
-</div>
-</section>
-<section class="section-card">
-<div class="section-header">
-<h2>System Members</h2>
-<button id="add-member-btn" class="btn btn-primary" style="display: none;">Add Member</button>
-</div>
-<div id="members-list" class="table-container">
-</div>
-</section>
-<section id="logs-section" class="section-card" style="display: none;">
-<div class="section-header">
-<h2>System Audit Logs</h2>
-</div>
-<div id="logs-list" class="logs-container">
-</div>
-</section>
-</main>
-<footer id="app-footer"></footer>
-<script src="firebase-config.js"></script>
-<script src="appLogic.js"></script>
+
+    <header>
+        <div class="header-left">
+            <img src="icon.png" alt="Logo" class="header-logo" id="header-logo" style="display: none;">
+        </div>
+        <div id="datetime" class="header-center"></div>
+        <div class="header-right">
+            <button id="logout-btn" class="btn-logout" style="display: none;">Logout</button>
+        </div>
+    </header>
+
+    <main>
+        <div id="auth-view" class="view-container">
+            <img src="icon.png" alt="Logo" class="logo-main" id="main-logo">
+            <div id="form-container" class="form-box">
+                <p class="loading-text">Loading system...</p>
+            </div>
+            <div id="message-box" class="message-box"></div>
+        </div>
+
+        <div id="dashboard-view" class="view-container" style="display: none;">
+            <div class="tabs-nav">
+                <button class="tab-btn active" data-tab="cars">Cars</button>
+                <button class="tab-btn" data-tab="members">Members</button>
+                <button class="tab-btn" data-tab="requests">Requests</button>
+                <button class="tab-btn" data-tab="logs">Logs</button>
+                <button class="tab-btn" data-tab="search">Search</button>
+                <button class="tab-btn" data-tab="stats">Stats</button>
+            </div>
+
+            <div id="dashboard-container" class="dashboard-box">
+                <p class="loading-text">Loading dashboard...</p>
+            </div>
+            <div id="dashboard-message-box" class="message-box"></div>
+        </div>
+    </main>
+
+    <script type="module" src="app.js"></script>
 </body>
 </html>
