@@ -3,7 +3,7 @@
  * English only | Latin digits only | Production-ready
  */
 
-// ===== دالة مساعدة لعرض الحالة على الشاشة =====
+// ===== دوال عرض الحالة =====
 function setStatus(main, detail = '') {
     const mainEl = document.getElementById('status-message');
     const detailEl = document.getElementById('progress-details');
@@ -19,20 +19,28 @@ function showErrorOnScreen(text) {
         mainEl.textContent = '❌ ' + text;
     }
     const detailEl = document.getElementById('progress-details');
-    if (detailEl) detailEl.textContent = 'Please refresh.';
+    if (detailEl) detailEl.textContent = 'Check file names and paths.';
     console.error(text);
 }
 
-setStatus('Initializing system...', 'Loading configuration...');
+setStatus('Starting app...', '');
 
-// استيراد Firebase
-setStatus('Loading Firebase...', 'Connecting to database...');
-import { auth, db } from "./firebase.js";
+// ===== تحميل Firebase مع رسائل =====
+setStatus('Loading Firebase...', '');
+try {
+    const firebaseModule = await import('./firebase.js');
+    const { auth, db } = firebaseModule;
+    if (!auth) throw new Error('auth is undefined');
+    if (!db) throw new Error('db is undefined');
+    setStatus('Firebase loaded.', 'Auth and Firestore ready.');
+    window.auth = auth;
+    window.db = db;
+} catch (error) {
+    showErrorOnScreen(`Firebase load error: ${error.message}`);
+    throw error;
+}
 
-if (!auth) showErrorOnScreen('Firebase Auth failed to initialize.');
-if (!db) showErrorOnScreen('Firebase Firestore failed to initialize.');
-
-// استيراد الوحدات المطلوبة من Firebase
+// استيراد دوال Firebase الضرورية (هذه لا تحتاج لملفات محلية)
 import {
     createUserWithEmailAndPassword, signInWithEmailAndPassword,
     signOut, onAuthStateChanged, browserLocalPersistence, browserSessionPersistence,
@@ -43,9 +51,9 @@ import {
     serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-setStatus('Firebase loaded.', 'Loading modules...');
+setStatus('Firebase SDK functions imported.', '');
 
-// ===== تحميل الوحدات المحلية =====
+// ===== تحميل الوحدات المحلية ديناميكياً =====
 let renderDashboard, setCurrentUser, getCurrentUser;
 let renderLogsView, logAction, setLogsCurrentUser;
 let renderCarsView, setCarsCurrentUser;
@@ -56,10 +64,10 @@ let showDashboardMessage, showAuthMessage;
 let handleFirebaseError;
 
 async function loadModule(moduleName, filePath) {
-    setStatus(`Loading ${moduleName}...`, `Importing from ${filePath}...`);
+    setStatus(`Loading ${moduleName}...`, `Path: ${filePath}`);
     try {
         const module = await import(filePath);
-        setStatus(`${moduleName} loaded successfully.`, '');
+        setStatus(`${moduleName} loaded.`, '');
         return module;
     } catch (error) {
         showErrorOnScreen(`Failed to load ${moduleName}: ${error.message}`);
@@ -70,7 +78,7 @@ async function loadModule(moduleName, filePath) {
 try {
     const utils = await loadModule('utils', './utils.js');
     handleFirebaseError = utils.handleFirebaseError;
-    
+
     const msg = await loadModule('messageManager', './messageManager.js');
     showDashboardMessage = msg.showDashboardMessage;
     showAuthMessage = msg.showAuthMessage;
@@ -101,13 +109,13 @@ try {
     renderStatsView = stats.renderStatsView;
     setStatsCurrentUser = stats.setStatsCurrentUser;
 
-    setStatus('All modules loaded.', 'Starting auth...');
+    setStatus('All modules loaded.', '');
 } catch (error) {
-    console.error('Loading error:', error);
+    // سيتم عرضه بالفعل في showErrorOnScreen داخل loadModule
+    console.error('Module loading error:', error);
 }
 
-// ===== بقية الكود =====
-
+// ===== المتغيرات العامة =====
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000;
 let currentActiveTab = 'cars';
@@ -189,8 +197,9 @@ function updateDateTime() {
     if (el) el.textContent = now.toLocaleString('en-GB', options).replace(',', ' -');
 }
 
+// ===== أحداث DOM =====
 window.addEventListener('DOMContentLoaded', () => {
-    setStatus('DOM ready.', 'Starting app...');
+    setStatus('DOM ready.', '');
     updateDateTime();
     setInterval(updateDateTime, 1000);
 
@@ -225,23 +234,26 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // ===== [الحل الجذري] مستمع Auth مع تجاوز قسري =====
-    setStatus('Waiting for auth listener...', 'If stuck, system will force continue in 5s.');
+    // ===== الجزء الحاسم: مستمع Auth مع تجاوز قسري =====
+    setStatus('Setting auth listener...', 'Waiting for Firebase Auth...');
 
     let authTriggered = false;
-    let forceTimeout = setTimeout(() => {
+
+    // مهلة 5 ثوانٍ لتجاوز المستمع
+    const forceTimeout = setTimeout(() => {
         if (!authTriggered) {
-            setStatus('Auth listener timeout.', 'Continuing without auth callback...');
-            console.warn('onAuthStateChanged did not trigger. Forcing fallback.');
+            setStatus('Auth timeout. Forcing fallback.', 'Continuing without auth...');
+            console.warn('onAuthStateChanged did not trigger. Falling back.');
             // تنفيذ المنطق الافتراضي (المستخدم غير مسجل)
             if (setCurrentUser) setCurrentUser(null);
             showAuthView();
             checkSystemState().catch(err => {
-                showErrorOnScreen(`Force fallback error: ${err.message}`);
+                showErrorOnScreen(`Fallback error: ${err.message}`);
             });
         }
-    }, 5000); // 5 ثوانٍ فقط
+    }, 5000);
 
+    // محاولة تعيين المستمع
     try {
         onAuthStateChanged(auth, async (user) => {
             clearTimeout(forceTimeout);
@@ -250,7 +262,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
             try {
                 if (user) {
-                    setStatus('Checking user document...', `UID: ${user.uid}`);
+                    setStatus('Checking user doc...', `UID: ${user.uid}`);
                     const userDoc = await getDoc(doc(db, 'users', user.uid));
                     if (userDoc.exists()) {
                         const userData = userDoc.data();
@@ -280,13 +292,13 @@ window.addEventListener('DOMContentLoaded', () => {
                         setStatus('User authenticated.', 'Loading dashboard...');
                         showDashboard();
                     } else {
-                        setStatus('User document missing.', 'Signing out...');
+                        setStatus('User doc missing.', 'Signing out...');
                         await signOut(auth);
                         showAuthView();
                         await checkSystemState();
                     }
                 } else {
-                    setStatus('No user logged in.', 'Checking system state...');
+                    setStatus('No user.', 'Checking system state...');
                     if (setCurrentUser) setCurrentUser(null);
                     showAuthView();
                     await checkSystemState();
@@ -300,9 +312,19 @@ window.addEventListener('DOMContentLoaded', () => {
         clearTimeout(forceTimeout);
         showErrorOnScreen(`onAuthStateChanged error: ${error.message}`);
         console.error(error);
+        // حتى لو فشل تعيين المستمع، ننفذ الفل باك
+        if (!authTriggered) {
+            setStatus('Auth listener setup failed.', 'Forcing fallback...');
+            if (setCurrentUser) setCurrentUser(null);
+            showAuthView();
+            checkSystemState().catch(err => {
+                showErrorOnScreen(`Fallback error: ${err.message}`);
+            });
+        }
     }
 });
 
+// ===== وظائف الواجهة =====
 function showAuthView() {
     const authView = document.getElementById('auth-view');
     const dashView = document.getElementById('dashboard-view');
@@ -340,20 +362,19 @@ function showDashboard() {
 }
 
 async function checkSystemState() {
-    setStatus('Checking system state...', 'Querying database...');
+    setStatus('Checking system state...', '');
     try {
         const q = query(collection(db, 'users'), limit(1));
         const snapshot = await getDocs(q);
         if (snapshot.empty) {
-            setStatus('No users found.', 'Showing setup form...');
+            setStatus('No users.', 'Showing setup...');
             renderSetupForm();
         } else {
-            setStatus('Users found.', 'Showing login form...');
+            setStatus('Users found.', 'Showing login...');
             renderLoginForm();
         }
     } catch (error) {
         showErrorOnScreen(`System check error: ${error.message}`);
-        console.error('checkSystemState error:', error);
     }
 }
 
@@ -621,5 +642,5 @@ async function handleChangePassword(e) {
     }
 }
 
-console.log('app.js execution completed.');
 setStatus('App initialization complete.', 'Waiting for auth...');
+console.log('app.js execution completed.');
