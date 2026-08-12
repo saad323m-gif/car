@@ -19,15 +19,23 @@ function showErrorOnScreen(text) {
         mainEl.textContent = '❌ ' + text;
     }
     const detailEl = document.getElementById('progress-details');
-    if (detailEl) detailEl.textContent = 'Please check console or contact support.';
+    if (detailEl) detailEl.textContent = 'Please refresh or contact support.';
+    console.error(text);
 }
 
-// ===== بدء التحميل =====
 setStatus('Initializing system...', 'Loading configuration...');
 
 // استيراد Firebase
 setStatus('Loading Firebase...', 'Connecting to database...');
 import { auth, db } from "./firebase.js";
+
+// التحقق من أن auth و db تم تحميلهما
+if (!auth) {
+    showErrorOnScreen('Firebase Auth failed to initialize. Check firebase.js');
+}
+if (!db) {
+    showErrorOnScreen('Firebase Firestore failed to initialize. Check firebase.js');
+}
 
 // استيراد الوحدات المطلوبة من Firebase
 import {
@@ -42,7 +50,7 @@ import {
 
 setStatus('Firebase loaded.', 'Loading modules...');
 
-// ===== تحميل الوحدات المحلية مع رسائل مرئية =====
+// ===== تحميل الوحدات المحلية =====
 let renderDashboard, setCurrentUser, getCurrentUser;
 let renderLogsView, logAction, setLogsCurrentUser;
 let renderCarsView, setCarsCurrentUser;
@@ -52,7 +60,6 @@ let renderStatsView, setStatsCurrentUser;
 let showDashboardMessage, showAuthMessage;
 let handleFirebaseError;
 
-// دالة مساعدة لتحميل وحدة وعرض رسالة
 async function loadModule(moduleName, filePath) {
     setStatus(`Loading ${moduleName}...`, `Importing from ${filePath}...`);
     try {
@@ -66,57 +73,46 @@ async function loadModule(moduleName, filePath) {
     }
 }
 
-// تحميل جميع الوحدات بشكل متسلسل (لضمان ظهور أي خطأ)
 try {
-    // 1. utils
     const utils = await loadModule('utils', './utils.js');
     handleFirebaseError = utils.handleFirebaseError;
     
-    // 2. messageManager
     const msg = await loadModule('messageManager', './messageManager.js');
     showDashboardMessage = msg.showDashboardMessage;
     showAuthMessage = msg.showAuthMessage;
 
-    // 3. members
     const members = await loadModule('members', './members.js');
     renderDashboard = members.renderDashboard;
     setCurrentUser = members.setCurrentUser;
     getCurrentUser = members.getCurrentUser;
 
-    // 4. logs
     const logs = await loadModule('logs', './logs.js');
     renderLogsView = logs.renderLogsView;
     logAction = logs.logAction;
     setLogsCurrentUser = logs.setLogsCurrentUser;
 
-    // 5. cars
     const cars = await loadModule('cars', './cars.js');
     renderCarsView = cars.renderCarsView;
     setCarsCurrentUser = cars.setCarsCurrentUser;
 
-    // 6. requests
     const requests = await loadModule('requests', './requests.js');
     renderRequestsView = requests.renderRequestsView;
     setRequestsCurrentUser = requests.setRequestsCurrentUser;
 
-    // 7. search
     const search = await loadModule('search', './search.js');
     renderSearchView = search.renderSearchView;
     setSearchCurrentUser = search.setSearchCurrentUser;
 
-    // 8. stats
     const stats = await loadModule('stats', './stats.js');
     renderStatsView = stats.renderStatsView;
     setStatsCurrentUser = stats.setStatsCurrentUser;
 
     setStatus('All modules loaded successfully.', 'System ready.');
 } catch (error) {
-    // الخطأ سيظهر بالفعل في showErrorOnScreen داخل loadModule
-    // ولكن نضمن عدم توقف التطبيق
     console.error('Critical loading error:', error);
 }
 
-// ===== بقية الكود (نفس الكود السابق ولكن مع استخدام setStatus) =====
+// ===== بقية الكود =====
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000;
@@ -235,52 +231,74 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    setStatus('Setting up auth listener...', '');
-    onAuthStateChanged(auth, async (user) => {
-        setStatus('Auth state changed.', user ? 'User logged in' : 'No user');
-        try {
-            if (user) {
-                const userDoc = await getDoc(doc(db, 'users', user.uid));
-                if (userDoc.exists()) {
-                    const userData = userDoc.data();
-                    userData.uid = user.uid;
-                    if (setCurrentUser) setCurrentUser(userData);
-                    if (setCarsCurrentUser) setCarsCurrentUser(userData);
-                    if (setRequestsCurrentUser) setRequestsCurrentUser(userData);
-                    if (setLogsCurrentUser) setLogsCurrentUser(userData);
-                    if (setSearchCurrentUser) setSearchCurrentUser(userData);
-                    if (setStatsCurrentUser) setStatsCurrentUser(userData);
+    // ===== [الجزء المعدل] مراقبة Auth مع رسائل مرئية =====
+    setStatus('Setting up auth listener...', 'Waiting for Firebase Auth...');
 
-                    document.querySelectorAll('.tab-btn').forEach(tab => {
-                        if (userData.role === 'admin' && userData.status === 'active') {
-                            tab.style.display = 'block';
-                            tab.disabled = false;
-                        } else {
-                            if (tab.dataset.tab === 'cars') {
+    // مهلة: إذا لم يستجب Firebase خلال 10 ثوانٍ، اعرض رسالة خطأ
+    let authTimeout = setTimeout(() => {
+        const currentStatus = document.getElementById('status-message')?.textContent || '';
+        if (currentStatus.includes('Waiting for auth')) {
+            showErrorOnScreen('Firebase Auth timed out. Check internet connection and Firebase config.');
+        }
+    }, 10000);
+
+    try {
+        onAuthStateChanged(auth, async (user) => {
+            clearTimeout(authTimeout); // إلغاء المهلة عند الاستجابة
+            setStatus('Auth listener triggered.', user ? 'User logged in' : 'No user found');
+            try {
+                if (user) {
+                    setStatus('Checking user document...', `UID: ${user.uid}`);
+                    const userDoc = await getDoc(doc(db, 'users', user.uid));
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        userData.uid = user.uid;
+                        if (setCurrentUser) setCurrentUser(userData);
+                        if (setCarsCurrentUser) setCarsCurrentUser(userData);
+                        if (setRequestsCurrentUser) setRequestsCurrentUser(userData);
+                        if (setLogsCurrentUser) setLogsCurrentUser(userData);
+                        if (setSearchCurrentUser) setSearchCurrentUser(userData);
+                        if (setStatsCurrentUser) setStatsCurrentUser(userData);
+
+                        document.querySelectorAll('.tab-btn').forEach(tab => {
+                            if (userData.role === 'admin' && userData.status === 'active') {
                                 tab.style.display = 'block';
                                 tab.disabled = false;
                             } else {
-                                tab.style.display = 'none';
-                                tab.disabled = true;
+                                if (tab.dataset.tab === 'cars') {
+                                    tab.style.display = 'block';
+                                    tab.disabled = false;
+                                } else {
+                                    tab.style.display = 'none';
+                                    tab.disabled = true;
+                                }
                             }
-                        }
-                    });
+                        });
 
-                    showDashboard();
+                        setStatus('User authenticated.', 'Loading dashboard...');
+                        showDashboard();
+                    } else {
+                        setStatus('User document missing.', 'Signing out...');
+                        await signOut(auth);
+                        showAuthView();
+                        await checkSystemState();
+                    }
                 } else {
-                    await signOut(auth);
+                    setStatus('No user logged in.', 'Checking system state...');
+                    if (setCurrentUser) setCurrentUser(null);
                     showAuthView();
+                    await checkSystemState();
                 }
-            } else {
-                if (setCurrentUser) setCurrentUser(null);
-                showAuthView();
-                await checkSystemState();
+            } catch (error) {
+                showErrorOnScreen(`Auth handler error: ${error.message}`);
+                console.error('Auth handler error:', error);
             }
-        } catch (error) {
-            showErrorOnScreen(`Auth error: ${error.message}`);
-            console.error('Auth handler error:', error);
-        }
-    });
+        });
+    } catch (error) {
+        clearTimeout(authTimeout);
+        showErrorOnScreen(`Failed to set auth listener: ${error.message}`);
+        console.error('onAuthStateChanged error:', error);
+    }
 });
 
 function showAuthView() {
@@ -601,6 +619,5 @@ async function handleChangePassword(e) {
     }
 }
 
-// نهاية الملف
 console.log('app.js execution completed.');
 setStatus('App initialization complete.', 'Waiting for auth...');
