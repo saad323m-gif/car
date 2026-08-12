@@ -429,60 +429,71 @@ h4 {
     background: #fff;
     border: 2px solid #000;
     border-radius: 8px;
-    padding: 8px 12px;
+    padding: 8px 14px;
     display: inline-flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    min-width: 260px;
-}
-
-.plate-top-bar {
-    width: 100%;
-    height: 5px;
-    margin-bottom: 5px;
-    border-radius: 2px;
+    width: 300px !important;
+    min-width: 300px !important;
+    max-width: 300px !important;
+    box-sizing: border-box;
+    flex-shrink: 0 !important;
 }
 
 .plate-emirate {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: bold;
     text-transform: uppercase;
     color: #000;
     text-align: center;
-    max-width: 90px;
-    line-height: 1.2;
+    width: 72px !important;
+    min-width: 72px !important;
+    max-width: 72px !important;
+    line-height: 1.15;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex-shrink: 0 !important;
 }
 
-/* Fixed-width monospace for plate number & code so size never changes */
 .plate-number {
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 1.7rem;
+    font-family: 'Courier New', Courier, monospace !important;
+    font-size: 1.65rem !important;
     font-weight: bold;
-    letter-spacing: 3px;
+    letter-spacing: 2px;
     color: #000;
     font-variant-numeric: tabular-nums;
-    min-width: 5.5ch;
+    width: 110px !important;
+    min-width: 110px !important;
+    max-width: 110px !important;
     text-align: center;
-    display: inline-block;
+    display: inline-block !important;
+    overflow: hidden;
+    white-space: nowrap;
+    flex-shrink: 0 !important;
 }
 
 .plate-code {
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 1.4rem;
+    font-family: 'Courier New', Courier, monospace !important;
+    font-size: 1.35rem !important;
     font-weight: bold;
     color: #fff;
     background: #000;
-    padding: 2px 10px;
+    padding: 3px 0;
     border-radius: 4px;
-    letter-spacing: 2px;
+    letter-spacing: 1px;
     font-variant-numeric: tabular-nums;
-    min-width: 3.2ch;
+    width: 48px !important;
+    min-width: 48px !important;
+    max-width: 48px !important;
     text-align: center;
-    display: inline-block;
+    display: inline-block !important;
+    overflow: hidden;
+    white-space: nowrap;
+    flex-shrink: 0 !important;
+    box-sizing: border-box;
+}
 }
 
 /* ========== Timeline ========== */
