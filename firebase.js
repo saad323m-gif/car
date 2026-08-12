@@ -12,8 +12,20 @@ const firebaseConfig = {
     appId: "1:332747318494:web:d5d61cd53f322a182f0e4f"
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+let app, auth, db;
+
+try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+    console.log('Firebase initialized successfully.');
+} catch (error) {
+    console.error('Firebase initialization failed:', error);
+    // عرض رسالة للمستخدم في واجهة HTML
+    const formContainer = document.getElementById('form-container');
+    if (formContainer) {
+        formContainer.innerHTML = `<p style="color:red;text-align:center;">Firebase initialization error: ${error.message}</p>`;
+    }
+}
 
 export { app, auth, db, firebaseConfig };
