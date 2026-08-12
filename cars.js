@@ -583,64 +583,53 @@ async function handleSaveEditCar(carId, originalData) {
 /* ===================== PRINT ===================== */
 function handlePrintCard(data, topBarColor) {
     const label = formatCarLabel(data);
-    const licDate = formatDateOnly(data.licenseExpiry);
-    const insDate = formatDateOnly(data.insuranceExpiry);
-
-    const html = `
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Car Card - ${data.carId}</title>
-    <style>
-        body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
-        .print-header { border-bottom: 2px solid #1976d2; margin-bottom: 20px; padding-bottom: 10px; }
-        .plate-container { display: inline-flex; align-items: center; gap: 15px; border: 2px solid #000; border-radius: 8px; padding: 10px 20px; margin: 20px 0; width: 300px; box-sizing: border-box; }
-        .plate-top-bar { width: 100%; height: 5px; margin-bottom: 5px; border-radius: 2px; background: ${topBarColor}; }
-        .plate-emirate { font-size: 12px; font-weight: bold; text-transform: uppercase; width: 70px; }
-        .plate-number { font-family: 'Courier New', monospace; font-size: 28px; font-weight: bold; letter-spacing: 2px; width: 110px; text-align: center; display: inline-block; }
-        .plate-code { font-family: 'Courier New', monospace; font-size: 22px; font-weight: bold; color: #fff; background: #000; padding: 2px 0; border-radius: 4px; width: 48px; text-align: center; display: inline-block; }
-        .details { text-align: left; width: 80%; margin: 0 auto; }
-        .detail-row { margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-        .detail-label { font-weight: bold; color: #1976d2; font-size: 12px; }
-        .detail-value { font-size: 16px; color: #333; }
-        @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-    </style>
-</head>
-<body>
-    <div class="print-header">
-        <h2>Car Management System</h2>
-    </div>
-    <h3>${label}</h3>
-    <div class="plate-container">
-        <div style="display:flex; flex-direction:column; align-items:center;">
-            <div class="plate-top-bar"></div>
-            <span class="plate-emirate">${data.emirate}</span>
-        </div>
-        <span class="plate-number">${data.plateNumber}</span>
-        <span class="plate-code">${data.plateCode}</span>
-    </div>
-    <div class="details">
-        <div class="detail-row"><span class="detail-label">Owner Name:</span> <span class="detail-value">${data.ownerName}</span></div>
-        <div class="detail-row"><span class="detail-label">Type:</span> <span class="detail-value">${data.type}</span></div>
-        <div class="detail-row"><span class="detail-label">VIN:</span> <span class="detail-value">${data.vin}</span></div>
-        <div class="detail-row"><span class="detail-label">License Expiry:</span> <span class="detail-value">${licDate}</span></div>
-        <div class="detail-row"><span class="detail-label">Insurance Expiry:</span> <span class="detail-value">${insDate}</span></div>
-        <div class="detail-row"><span class="detail-label">Current Assignee:</span> <span class="detail-value">${data.currentUserName || 'Unassigned'}</span></div>
-        <div class="detail-row"><span class="detail-label">Notes:</span> <span class="detail-value">${data.notes || 'N/A'}</span></div>
-    </div>
-    <script>
-        window.onload = function() { setTimeout(function(){ window.print(); }, 300); };
-    <\/script>
-</body>
-</html>`;
-
-    const printWindow = window.open('', '_blank', 'width=800,height=600');
-    if (!printWindow) {
-        showMessage('Please allow pop-ups to print the card.', 'warning', 'dashboard');
-        return;
-    }
-    printWindow.document.open();
-    printWindow.document.write(html);
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>Car Card - ${data.carId}</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+                .print-logo { width: 80px; margin-bottom: 20px; }
+                .print-header { border-bottom: 2px solid #1976d2; margin-bottom: 20px; padding-bottom: 10px; }
+                .plate-container { display: inline-flex; align-items: center; gap: 15px; border: 2px solid #000; border-radius: 8px; padding: 10px 20px; margin: 20px 0; }
+                .plate-top-bar { width: 100%; height: 5px; margin-bottom: 5px; border-radius: 2px; background: ${topBarColor}; }
+                .plate-emirate { font-size: 12px; font-weight: bold; text-transform: uppercase; }
+                .plate-number { font-family: 'Courier New', monospace; font-size: 32px; font-weight: bold; letter-spacing: 3px; font-variant-numeric: tabular-nums; }
+                .plate-code { font-family: 'Courier New', monospace; font-size: 24px; font-weight: bold; color: #fff; background: #000; padding: 0 8px; border-radius: 4px; letter-spacing: 2px; }
+                .details { text-align: left; width: 80%; margin: 0 auto; }
+                .detail-row { margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+                .detail-label { font-weight: bold; color: #1976d2; font-size: 12px; }
+                .detail-value { font-size: 16px; color: #333; }
+            </style>
+        </head>
+        <body>
+            <div class="print-header">
+                <img src="icon.png" class="print-logo" alt="Logo">
+                <h2>Car Management System</h2>
+            </div>
+            <h3>${label}</h3>
+            <div class="plate-container">
+                <div style="display:flex; flex-direction:column; align-items:center;">
+                    <div class="plate-top-bar"></div>
+                    <span class="plate-emirate">${data.emirate}</span>
+                </div>
+                <span class="plate-number">${data.plateNumber}</span>
+                <span class="plate-code">${data.plateCode}</span>
+            </div>
+            <div class="details">
+                <div class="detail-row"><span class="detail-label">Owner Name:</span> <span class="detail-value">${data.ownerName}</span></div>
+                <div class="detail-row"><span class="detail-label">Type:</span> <span class="detail-value">${data.type}</span></div>
+                <div class="detail-row"><span class="detail-label">VIN:</span> <span class="detail-value">${data.vin}</span></div>
+                <div class="detail-row"><span class="detail-label">License Expiry:</span> <span class="detail-value">${formatDateOnly(data.licenseExpiry)}</span></div>
+                <div class="detail-row"><span class="detail-label">Insurance Expiry:</span> <span class="detail-value">${formatDateOnly(data.insuranceExpiry)}</span></div>
+                <div class="detail-row"><span class="detail-label">Current Assignee:</span> <span class="detail-value">${data.currentUserName || 'Unassigned'}</span></div>
+                <div class="detail-row"><span class="detail-label">Notes:</span> <span class="detail-value">${data.notes || 'N/A'}</span></div>
+            </div>
+            <script>window.onload = function() { window.print(); }</script>
+        </body>
+        </html>
+    `);
     printWindow.document.close();
 }
 
