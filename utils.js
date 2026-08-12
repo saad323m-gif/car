@@ -188,3 +188,19 @@ export function expiryClass(days) {
     if (days <= 15) return 'date-warning';
     return 'date-valid';
 }
+
+/**
+ * Safely convert Firestore Timestamp / Date to YYYY-MM-DD for <input type="date">
+ * @param {FirebaseFirestore.Timestamp|Date|null|undefined} ts
+ * @returns {string}
+ */
+export function toDateInputValue(ts) {
+    if (!ts) return '';
+    try {
+        const d = ts.toDate ? ts.toDate() : new Date(ts);
+        if (isNaN(d.getTime())) return '';
+        return d.toISOString().split('T')[0];
+    } catch {
+        return '';
+    }
+}

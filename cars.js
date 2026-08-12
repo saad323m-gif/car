@@ -13,7 +13,7 @@ import { createLinkRequest, createUnlinkRequest } from "./requests.js";
 import {
     showMessage, handleFirebaseError, formatDateTime, formatDateOnly,
     formatPeriod, formatCarLabel, isAdmin, isActiveUser, renderAccessDenied,
-    daysUntil, expiryClass
+    daysUntil, expiryClass, toDateInputValue
 } from "./utils.js";
 
 let currentUserData = null;
@@ -94,10 +94,17 @@ export function renderCarsView() {
             <div id="load-more-container" class="load-more-container"></div>
         `;
 
-        document.getElementById('toggle-add-car').addEventListener('click', () => {
-            document.getElementById('add-car-form-wrapper').classList.toggle('hidden-form');
-        });
-        document.getElementById('add-car-form').addEventListener('submit', handleAddCar);
+        const toggleAddCar = document.getElementById('toggle-add-car');
+        const addCarForm = document.getElementById('add-car-form');
+        if (toggleAddCar) {
+            toggleAddCar.addEventListener('click', () => {
+                const wrapper = document.getElementById('add-car-form-wrapper');
+                if (wrapper) wrapper.classList.toggle('hidden-form');
+            });
+        }
+        if (addCarForm) {
+            addCarForm.addEventListener('submit', handleAddCar);
+        }
         lastVisibleCar = null;
         fetchCars(false);
     } else {
@@ -137,10 +144,17 @@ export function renderCarsView() {
             <div id="cars-card-list" class="card-list"></div>
         `;
 
-        document.getElementById('toggle-request-car').addEventListener('click', () => {
-            document.getElementById('request-car-form-wrapper').classList.toggle('hidden-form');
-        });
-        document.getElementById('request-car-form').addEventListener('submit', createLinkRequest);
+        const toggleRequestCar = document.getElementById('toggle-request-car');
+        const requestCarForm = document.getElementById('request-car-form');
+        if (toggleRequestCar) {
+            toggleRequestCar.addEventListener('click', () => {
+                const wrapper = document.getElementById('request-car-form-wrapper');
+                if (wrapper) wrapper.classList.toggle('hidden-form');
+            });
+        }
+        if (requestCarForm) {
+            requestCarForm.addEventListener('submit', createLinkRequest);
+        }
         fetchUserCars();
     }
 }
@@ -165,19 +179,39 @@ async function handleAddCar(e) {
     if (!isAdmin(currentUserData)) return;
 
     const submitBtn = document.getElementById('btn-submit-car');
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Adding...';
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Adding...';
+    }
 
-    const plateNum = document.getElementById('car-plate-num').value.trim();
-    const plateCode = document.getElementById('car-plate-code').value.trim().toUpperCase();
+    const plateNumEl = document.getElementById('car-plate-num');
+    const plateCodeEl = document.getElementById('car-plate-code');
     const emirateSelect = document.getElementById('car-emirate');
+    const typeEl = document.getElementById('car-type');
+    const ownerEl = document.getElementById('car-owner');
+    const vinEl = document.getElementById('car-vin');
+    const licenseExpEl = document.getElementById('car-license-exp');
+    const insuranceExpEl = document.getElementById('car-insurance-exp');
+    const notesEl = document.getElementById('car-notes');
+
+    if (!plateNumEl || !plateCodeEl || !emirateSelect || !typeEl || !ownerEl || !vinEl || !licenseExpEl || !insuranceExpEl) {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Add Car';
+        }
+        showMessage('Error: Form elements not found.', 'error', 'dashboard');
+        return;
+    }
+
+    const plateNum = plateNumEl.value.trim();
+    const plateCode = plateCodeEl.value.trim().toUpperCase();
     const emirate = emirateSelect.value;
-    const type = document.getElementById('car-type').value.trim();
-    const owner = document.getElementById('car-owner').value.trim();
-    const vin = document.getElementById('car-vin').value.trim().toUpperCase();
-    const licenseExp = document.getElementById('car-license-exp').value;
-    const insuranceExp = document.getElementById('car-insurance-exp').value;
-    const notes = document.getElementById('car-notes').value.trim();
+    const type = typeEl.value.trim();
+    const owner = ownerEl.value.trim();
+    const vin = vinEl.value.trim().toUpperCase();
+    const licenseExp = licenseExpEl.value;
+    const insuranceExp = insuranceExpEl.value;
+    const notes = notesEl ? notesEl.value.trim() : '';
 
     const plateIdentifier = `${plateNum}-${plateCode.toLowerCase()}-${emirate.toLowerCase()}`;
 
@@ -218,15 +252,19 @@ async function handleAddCar(e) {
         });
 
         showMessage('Success: Car added successfully.', 'success', 'dashboard');
-        document.getElementById('add-car-form').reset();
-        document.getElementById('add-car-form-wrapper').classList.add('hidden-form');
+        const addForm = document.getElementById('add-car-form');
+        if (addForm) addForm.reset();
+        const addWrapper = document.getElementById('add-car-form-wrapper');
+        if (addWrapper) addWrapper.classList.add('hidden-form');
         lastVisibleCar = null;
         fetchCars(false);
     } catch (error) {
         showMessage(`Error: ${error.message}`, 'error', 'dashboard');
     } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Add Car';
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Add Car';
+        }
     }
 }
 
@@ -262,13 +300,18 @@ async function fetchCars(loadMore = false) {
         if (loadMoreContainer) {
             if (snapshot.size === 10) {
                 loadMoreContainer.innerHTML = '<button class="load-more-btn" id="load-more-btn">Load More</button>';
-                document.getElementById('load-more-btn').addEventListener('click', () => fetchCars(true));
+                const loadMoreBtn = document.getElementById('load-more-btn');
+                if (loadMoreBtn) {
+                    loadMoreBtn.addEventListener('click', () => fetchCars(true));
+                }
             } else {
                 loadMoreContainer.innerHTML = '';
             }
         }
     } catch (error) {
-        listContainer.innerHTML = `<p class="error">Error loading cars: ${error.message}</p>`;
+        if (listContainer) {
+            listContainer.innerHTML = `<p class="error">Error loading cars: ${error.message}</p>`;
+        }
     }
 }
 
@@ -329,47 +372,50 @@ function renderCarCard(id, data, isUserView = false) {
     let actionsHtml = '';
     if (!isUserView) {
         actionsHtml = `
-            <select class="action-select" id="car-action-${id}">
-                <option value="">Select Action</option>
-                <option value="edit">Edit Car</option>
+            <div class="action-buttons" id="car-actions-${id}">
+                <button type="button" class="action-btn action-btn-edit" data-action="edit">✎ Edit</button>
                 ${data.currentUserId
-                    ? '<option value="unassign">Unassign User</option>'
-                    : '<option value="assign">Assign User</option>'}
-                <option value="print">Print Card</option>
-                <option value="history">View History</option>
-            </select>
+                    ? '<button type="button" class="action-btn action-btn-unassign" data-action="unassign">👤 Unassign</button>'
+                    : '<button type="button" class="action-btn action-btn-assign" data-action="assign">👤 Assign</button>'}
+                <button type="button" class="action-btn action-btn-print" data-action="print">🖨 Print</button>
+                <button type="button" class="action-btn action-btn-history" data-action="history">📋 History</button>
+            </div>
             <div id="assign-area-${id}" style="margin-top: 10px; display:none;"></div>
             <div id="edit-area-${id}" style="margin-top: 10px; display:none;"></div>
             <div id="history-area-${id}" style="margin-top: 10px; display:none;"></div>
         `;
     } else {
         actionsHtml = `
-            <button class="btn btn-sm btn-warning" id="req-unlink-${id}">Request Unlink</button>
+            <div class="action-buttons">
+                <button type="button" class="action-btn action-btn-unlink" id="req-unlink-${id}">✎ Request Unlink</button>
+            </div>
             <div id="history-area-${id}" style="margin-top: 10px; display:none;"></div>
         `;
     }
 
     card.innerHTML = `
         <div class="card-header" id="header-${id}">
-            <div class="card-title">
-                <div class="plate-wrapper">
-                    <div class="plate-meta-top">
-                        <span class="plate-id">${data.carId}</span>
-                        <span class="meta-separator"></span>
-                        <span class="plate-owner">Assignee: ${data.currentUserName || 'Unassigned'}</span>
-                    </div>
-                    <div class="plate-container">
-                        <div style="display:flex; flex-direction:column; align-items:center;">
-                            <div class="plate-top-bar" style="background:${topBarColor};"></div>
-                            <span class="plate-emirate">${data.emirate}</span>
+            <div class="card-header-top">
+                <div class="card-title">
+                    <div class="plate-wrapper">
+                        <div class="plate-meta-top">
+                            <span class="plate-id">${data.carId}</span>
+                            <span class="meta-separator"></span>
+                            <span class="plate-owner">Assignee: ${data.currentUserName || 'Unassigned'}</span>
                         </div>
-                        <span class="plate-number">${data.plateNumber}</span>
-                        <span class="plate-code">${data.plateCode}</span>
+                        <div class="plate-container">
+                            <div style="display:flex; flex-direction:column; align-items:center;">
+                                <div class="plate-top-bar" style="background:${topBarColor};"></div>
+                                <span class="plate-emirate">${data.emirate}</span>
+                            </div>
+                            <span class="plate-number">${data.plateNumber}</span>
+                            <span class="plate-code">${data.plateCode}</span>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="card-meta">
-                <span>${data.currentUserName ? 'Assigned' : 'Unassigned'}</span>
+                <div class="card-meta">
+                    <span>${data.currentUserName ? 'Assigned' : 'Unassigned'}</span>
+                </div>
             </div>
         </div>
         <div class="card-body" id="body-${id}">
@@ -405,24 +451,32 @@ function renderCarCard(id, data, isUserView = false) {
 
     listContainer.appendChild(card);
 
-    // Toggle open/close
-    document.getElementById(`header-${id}`).addEventListener('click', (e) => {
-        if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
-            card.classList.toggle('open');
-        }
-    });
-
-    const actionSelect = document.getElementById(`car-action-${id}`);
-    if (actionSelect) {
-        actionSelect.addEventListener('change', (e) => {
-            handleCarAction(id, e.target.value, data, topBarColor);
-            e.target.value = '';
+    // Toggle open/close — bind via card reference (safe, no null)
+    const headerEl = card.querySelector(`#header-${id}`);
+    if (headerEl) {
+        headerEl.addEventListener('click', (e) => {
+            if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
+                card.classList.toggle('open');
+            }
         });
     }
 
-    const reqUnlinkBtn = document.getElementById(`req-unlink-${id}`);
+    const actionsWrap = card.querySelector(`#car-actions-${id}`);
+    if (actionsWrap) {
+        actionsWrap.querySelectorAll('[data-action]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleCarAction(id, btn.getAttribute('data-action'), data, topBarColor);
+            });
+        });
+    }
+
+    const reqUnlinkBtn = card.querySelector(`#req-unlink-${id}`);
     if (reqUnlinkBtn) {
-        reqUnlinkBtn.addEventListener('click', () => createUnlinkRequest(id, data));
+        reqUnlinkBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            createUnlinkRequest(id, data);
+        });
     }
 }
 
@@ -494,11 +548,11 @@ function renderEditCarForm(carId, data) {
             </div>
             <div class="form-group">
                 <label>License Expiry</label>
-                <input type="date" id="edit-lic-${carId}" value="${data.licenseExpiry.toDate().toISOString().split('T')[0]}" required>
+                <input type="date" id="edit-lic-${carId}" value="${toDateInputValue(data.licenseExpiry)}" required>
             </div>
             <div class="form-group">
                 <label>Insurance Expiry</label>
-                <input type="date" id="edit-ins-${carId}" value="${data.insuranceExpiry.toDate().toISOString().split('T')[0]}" required>
+                <input type="date" id="edit-ins-${carId}" value="${toDateInputValue(data.insuranceExpiry)}" required>
             </div>
             <div class="form-group full-width">
                 <label>Notes</label>
@@ -511,15 +565,21 @@ function renderEditCarForm(carId, data) {
         </form>
     `;
 
-    document.getElementById(`edit-car-form-${carId}`).addEventListener('submit', async (e) => {
-        e.preventDefault();
-        await handleSaveEditCar(carId, data);
-    });
+    const editForm = document.getElementById(`edit-car-form-${carId}`);
+    if (editForm) {
+        editForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await handleSaveEditCar(carId, data);
+        });
+    }
 
-    document.getElementById(`cancel-edit-${carId}`).addEventListener('click', () => {
-        editArea.style.display = 'none';
-        editArea.innerHTML = '';
-    });
+    const cancelEditBtn = document.getElementById(`cancel-edit-${carId}`);
+    if (cancelEditBtn) {
+        cancelEditBtn.addEventListener('click', () => {
+            editArea.style.display = 'none';
+            editArea.innerHTML = '';
+        });
+    }
 }
 
 async function handleSaveEditCar(carId, originalData) {
@@ -582,55 +642,96 @@ async function handleSaveEditCar(carId, originalData) {
 
 /* ===================== PRINT ===================== */
 function handlePrintCard(data, topBarColor) {
-    const label = formatCarLabel(data);
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-        <html>
-        <head>
-            <title>Car Card - ${data.carId}</title>
-            <style>
-                body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
-                .print-logo { width: 80px; margin-bottom: 20px; }
-                .print-header { border-bottom: 2px solid #1976d2; margin-bottom: 20px; padding-bottom: 10px; }
-                .plate-container { display: inline-flex; align-items: center; gap: 15px; border: 2px solid #000; border-radius: 8px; padding: 10px 20px; margin: 20px 0; }
-                .plate-top-bar { width: 100%; height: 5px; margin-bottom: 5px; border-radius: 2px; background: ${topBarColor}; }
-                .plate-emirate { font-size: 12px; font-weight: bold; text-transform: uppercase; }
-                .plate-number { font-family: 'Courier New', monospace; font-size: 32px; font-weight: bold; letter-spacing: 3px; font-variant-numeric: tabular-nums; }
-                .plate-code { font-family: 'Courier New', monospace; font-size: 24px; font-weight: bold; color: #fff; background: #000; padding: 0 8px; border-radius: 4px; letter-spacing: 2px; }
-                .details { text-align: left; width: 80%; margin: 0 auto; }
-                .detail-row { margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-                .detail-label { font-weight: bold; color: #1976d2; font-size: 12px; }
-                .detail-value { font-size: 16px; color: #333; }
-            </style>
-        </head>
-        <body>
-            <div class="print-header">
-                <img src="icon.png" class="print-logo" alt="Logo">
-                <h2>Car Management System</h2>
-            </div>
-            <h3>${label}</h3>
-            <div class="plate-container">
-                <div style="display:flex; flex-direction:column; align-items:center;">
-                    <div class="plate-top-bar"></div>
-                    <span class="plate-emirate">${data.emirate}</span>
-                </div>
-                <span class="plate-number">${data.plateNumber}</span>
-                <span class="plate-code">${data.plateCode}</span>
-            </div>
-            <div class="details">
-                <div class="detail-row"><span class="detail-label">Owner Name:</span> <span class="detail-value">${data.ownerName}</span></div>
-                <div class="detail-row"><span class="detail-label">Type:</span> <span class="detail-value">${data.type}</span></div>
-                <div class="detail-row"><span class="detail-label">VIN:</span> <span class="detail-value">${data.vin}</span></div>
-                <div class="detail-row"><span class="detail-label">License Expiry:</span> <span class="detail-value">${formatDateOnly(data.licenseExpiry)}</span></div>
-                <div class="detail-row"><span class="detail-label">Insurance Expiry:</span> <span class="detail-value">${formatDateOnly(data.insuranceExpiry)}</span></div>
-                <div class="detail-row"><span class="detail-label">Current Assignee:</span> <span class="detail-value">${data.currentUserName || 'Unassigned'}</span></div>
-                <div class="detail-row"><span class="detail-label">Notes:</span> <span class="detail-value">${data.notes || 'N/A'}</span></div>
-            </div>
-            <script>window.onload = function() { window.print(); }</script>
-        </body>
-        </html>
-    `);
-    printWindow.document.close();
+    try {
+        const label = formatCarLabel(data);
+        const licStr = formatDateOnly(data.licenseExpiry);
+        const insStr = formatDateOnly(data.insuranceExpiry);
+        const safe = (v) => String(v == null ? '' : v)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+
+        const html = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Car Card - ${safe(data.carId)}</title>
+    <style>
+        @page { margin: 12mm; }
+        body { font-family: Arial, sans-serif; padding: 16px; text-align: center; color: #222; }
+        .print-header { border-bottom: 2px solid #1976d2; margin-bottom: 16px; padding-bottom: 10px; }
+        .print-header h2 { margin: 0; color: #1565c0; font-size: 18px; }
+        h3 { margin: 12px 0; font-size: 15px; word-break: break-word; }
+        .plate-container { display: inline-flex; align-items: center; gap: 14px; border: 2px solid #000; border-radius: 8px; padding: 10px 18px; margin: 16px 0; }
+        .plate-top-bar { width: 100%; height: 5px; margin-bottom: 5px; border-radius: 2px; background: ${topBarColor || '#666'}; }
+        .plate-emirate { font-size: 12px; font-weight: bold; text-transform: uppercase; }
+        .plate-number { font-family: 'Courier New', monospace; font-size: 28px; font-weight: bold; letter-spacing: 3px; font-variant-numeric: tabular-nums; width: 6ch; text-align: center; display: inline-block; }
+        .plate-code { font-family: 'Courier New', monospace; font-size: 22px; font-weight: bold; color: #fff; background: #000; padding: 2px 8px; border-radius: 4px; letter-spacing: 2px; }
+        .details { text-align: left; max-width: 420px; margin: 0 auto; }
+        .detail-row { margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+        .detail-label { font-weight: bold; color: #1976d2; font-size: 12px; display: inline-block; min-width: 140px; }
+        .detail-value { font-size: 15px; color: #333; }
+    </style>
+</head>
+<body>
+    <div class="print-header">
+        <h2>Car Management System</h2>
+    </div>
+    <h3>${safe(label)}</h3>
+    <div class="plate-container">
+        <div style="display:flex; flex-direction:column; align-items:center;">
+            <div class="plate-top-bar"></div>
+            <span class="plate-emirate">${safe(data.emirate)}</span>
+        </div>
+        <span class="plate-number">${safe(data.plateNumber)}</span>
+        <span class="plate-code">${safe(data.plateCode)}</span>
+    </div>
+    <div class="details">
+        <div class="detail-row"><span class="detail-label">Owner Name:</span> <span class="detail-value">${safe(data.ownerName)}</span></div>
+        <div class="detail-row"><span class="detail-label">Type:</span> <span class="detail-value">${safe(data.type)}</span></div>
+        <div class="detail-row"><span class="detail-label">VIN:</span> <span class="detail-value">${safe(data.vin)}</span></div>
+        <div class="detail-row"><span class="detail-label">License Expiry:</span> <span class="detail-value">${safe(licStr)}</span></div>
+        <div class="detail-row"><span class="detail-label">Insurance Expiry:</span> <span class="detail-value">${safe(insStr)}</span></div>
+        <div class="detail-row"><span class="detail-label">Current Assignee:</span> <span class="detail-value">${safe(data.currentUserName || 'Unassigned')}</span></div>
+        <div class="detail-row"><span class="detail-label">Notes:</span> <span class="detail-value">${safe(data.notes || 'N/A')}</span></div>
+    </div>
+</body>
+</html>`;
+
+        // Use hidden iframe — more reliable than window.open on mobile (popup blockers)
+        const iframe = document.createElement('iframe');
+        iframe.setAttribute('aria-hidden', 'true');
+        iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+        document.body.appendChild(iframe);
+
+        const idoc = iframe.contentWindow.document;
+        idoc.open();
+        idoc.write(html);
+        idoc.close();
+
+        const triggerPrint = () => {
+            try {
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+            } catch (err) {
+                showMessage('Error: Unable to open print dialog.', 'error', 'dashboard');
+            }
+            setTimeout(() => {
+                if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+            }, 1500);
+        };
+
+        // Wait for content to be ready
+        if (iframe.contentWindow.document.readyState === 'complete') {
+            setTimeout(triggerPrint, 200);
+        } else {
+            iframe.onload = () => setTimeout(triggerPrint, 200);
+            setTimeout(triggerPrint, 500);
+        }
+    } catch (error) {
+        showMessage(`Print error: ${error.message}`, 'error', 'dashboard');
+    }
 }
 
 /* ===================== HISTORY ===================== */
@@ -724,8 +825,12 @@ async function renderAssignUserUI(carId) {
             <button class="btn btn-sm btn-success" id="confirm-assign-${carId}" style="margin-top: 10px;">Confirm Assign</button>
         `;
 
-        document.getElementById(`confirm-assign-${carId}`).addEventListener('click', async () => {
-            const userId = document.getElementById(`select-user-${carId}`).value;
+        const confirmAssignBtn = document.getElementById(`confirm-assign-${carId}`);
+        if (!confirmAssignBtn) return;
+
+        confirmAssignBtn.addEventListener('click', async () => {
+            const selectUser = document.getElementById(`select-user-${carId}`);
+            const userId = selectUser ? selectUser.value : '';
             if (!userId) {
                 showMessage('Please select a user first.', 'warning', 'dashboard');
                 return;

@@ -6,19 +6,98 @@
 import { auth, db } from "./firebase.js";
 import {
     createUserWithEmailAndPassword, signInWithEmailAndPassword,
-    signOut, onAuthStateChanged, browserLocalPersistence, browserSessionPersistence
+    signOut, onAuthStateChanged, browserLocalPersistence, browserSessionPersistence,
+    updatePassword, reauthenticateWithCredential, EmailAuthProvider
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import {
-    collection, doc, setDoc, getDoc, getDocs, updateDoc, query, where, limit
+    collection, doc, setDoc, getDoc, getDocs, updateDoc, query, where, limit,
+    serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-import { renderDashboard, setCurrentUser } from "./members.js";
+import { renderDashboard, setCurrentUser, getCurrentUser } from "./members.js";
 import { renderLogsView, logAction, setLogsCurrentUser } from "./logs.js";
 import { renderCarsView, setCarsCurrentUser } from "./cars.js";
 import { renderRequestsView, setRequestsCurrentUser } from "./requests.js";
 import { renderSearchView, setSearchCurrentUser } from "./search.js";
 import { renderStatsView, setStatsCurrentUser } from "./stats.js";
 import { showMessage, handleFirebaseError } from "./utils.js";
+
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
+/** Safe Firestore doc id from email */
+function emailToDocId(email) {
+    return String(email || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+}
+
+async function getLoginAttemptDoc(email) {
+    const id = emailToDocId(email);
+    if (!id) return null;
+    const ref = doc(db, 'loginAttempts', id);
+    const snap = await getDoc(ref);
+    return snap.exists() ? { ref, data: snap.data() } : { ref, data: null };
+}
+
+async function isLoginLocked(email) {
+    const result = await getLoginAttemptDoc(email);
+    if (!result || !result.data || !result.data.lockedUntil) return { locked: false, remainingMs: 0 };
+
+    const lockedUntil = result.data.lockedUntil.toDate
+        ? result.data.lockedUntil.toDate()
+        : new Date(result.data.lockedUntil);
+    const now = new Date();
+    if (lockedUntil > now) {
+        return { locked: true, remainingMs: lockedUntil - now };
+    }
+    return { locked: false, remainingMs: 0 };
+}
+
+async function recordFailedLogin(email) {
+    const result = await getLoginAttemptDoc(email);
+    if (!result) return;
+
+    const prev = result.data || {};
+    let failCount = (prev.failCount || 0) + 1;
+    let lockedUntil = null;
+
+    // Reset counter if previous lock already expired
+    if (prev.lockedUntil) {
+        const prevLock = prev.lockedUntil.toDate ? prev.lockedUntil.toDate() : new Date(prev.lockedUntil);
+        if (prevLock <= new Date()) {
+            failCount = 1;
+        }
+    }
+
+    if (failCount >= MAX_LOGIN_ATTEMPTS) {
+        lockedUntil = Timestamp.fromDate(new Date(Date.now() + LOCK_DURATION_MS));
+        failCount = MAX_LOGIN_ATTEMPTS;
+    }
+
+    await setDoc(result.ref, {
+        email: String(email || '').trim().toLowerCase(),
+        failCount,
+        lockedUntil,
+        updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    return { failCount, locked: !!lockedUntil };
+}
+
+async function clearLoginAttempts(email) {
+    const result = await getLoginAttemptDoc(email);
+    if (!result) return;
+    await setDoc(result.ref, {
+        email: String(email || '').trim().toLowerCase(),
+        failCount: 0,
+        lockedUntil: null,
+        updatedAt: serverTimestamp()
+    }, { merge: true });
+}
+
+function formatRemainingLock(ms) {
+    const mins = Math.ceil(ms / 60000);
+    return mins <= 1 ? '1 minute' : `${mins} minutes`;
+}
 
 function updateDateTime() {
     const now = new Date();
@@ -46,6 +125,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
         logoutBtn.addEventListener('click', handleLogout);
+    }
+
+    const changePasswordBtn = document.getElementById('change-password-btn');
+    if (changePasswordBtn) {
+        changePasswordBtn.addEventListener('click', renderChangePasswordForm);
     }
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -103,19 +187,35 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function showAuthView() {
-    document.getElementById('auth-view').style.display = 'flex';
-    document.getElementById('dashboard-view').style.display = 'none';
-    document.getElementById('logout-btn').style.display = 'none';
-    document.getElementById('header-logo').style.display = 'none';
-    document.getElementById('main-logo').style.display = 'block';
+    const authView = document.getElementById('auth-view');
+    const dashView = document.getElementById('dashboard-view');
+    const logoutBtn = document.getElementById('logout-btn');
+    const changePassBtn = document.getElementById('change-password-btn');
+    const headerLogo = document.getElementById('header-logo');
+    const mainLogo = document.getElementById('main-logo');
+
+    if (authView) authView.style.display = 'flex';
+    if (dashView) dashView.style.display = 'none';
+    if (logoutBtn) logoutBtn.style.display = 'none';
+    if (changePassBtn) changePassBtn.style.display = 'none';
+    if (headerLogo) headerLogo.style.display = 'none';
+    if (mainLogo) mainLogo.style.display = 'block';
 }
 
 function showDashboard() {
-    document.getElementById('auth-view').style.display = 'none';
-    document.getElementById('dashboard-view').style.display = 'flex';
-    document.getElementById('logout-btn').style.display = 'block';
-    document.getElementById('header-logo').style.display = 'block';
-    document.getElementById('main-logo').style.display = 'none';
+    const authView = document.getElementById('auth-view');
+    const dashView = document.getElementById('dashboard-view');
+    const logoutBtn = document.getElementById('logout-btn');
+    const changePassBtn = document.getElementById('change-password-btn');
+    const headerLogo = document.getElementById('header-logo');
+    const mainLogo = document.getElementById('main-logo');
+
+    if (authView) authView.style.display = 'none';
+    if (dashView) dashView.style.display = 'flex';
+    if (logoutBtn) logoutBtn.style.display = 'block';
+    if (changePassBtn) changePassBtn.style.display = 'block';
+    if (headerLogo) headerLogo.style.display = 'block';
+    if (mainLogo) mainLogo.style.display = 'none';
 
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     const carsTab = document.querySelector('.tab-btn[data-tab="cars"]');
@@ -244,11 +344,34 @@ function renderLoginForm() {
 
 async function handleLogin(e) {
     e.preventDefault();
-    const email = document.getElementById('login-email').value.trim();
-    const password = document.getElementById('login-password').value;
-    const rememberMe = document.getElementById('remember-me').checked;
+    const emailEl = document.getElementById('login-email');
+    const passwordEl = document.getElementById('login-password');
+    const rememberEl = document.getElementById('remember-me');
+    if (!emailEl || !passwordEl) return;
+
+    const email = emailEl.value.trim();
+    const password = passwordEl.value;
+    const rememberMe = rememberEl ? rememberEl.checked : false;
+
+    if (!email || !password) {
+        showMessage('Error: Email and password are required.', 'error');
+        return;
+    }
 
     try {
+        // Check lock before attempting login
+        const lockStatus = await isLoginLocked(email);
+        if (lockStatus.locked) {
+            showMessage(
+                `Too many failed attempts. Try again after ${formatRemainingLock(lockStatus.remainingMs)}.`,
+                'error'
+            );
+            await logAction({ username: email }, 'LOGIN_FAILED', {
+                text: `Locked account login attempt for ${email}`
+            });
+            return;
+        }
+
         await auth.setPersistence(rememberMe ? browserLocalPersistence : browserSessionPersistence);
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const uid = userCredential.user.uid;
@@ -270,13 +393,41 @@ async function handleLogin(e) {
             return;
         }
 
+        // Successful login — clear failed attempts
+        await clearLoginAttempts(email);
+
         await updateDoc(doc(db, 'users', uid), { rememberSession: rememberMe });
         await logAction(userData, 'LOGIN', { text: 'User logged in' });
     } catch (error) {
+        // Record failed attempt (wrong password / user-not-found / etc.)
+        let failInfo = null;
+        try {
+            failInfo = await recordFailedLogin(email);
+        } catch (recordErr) {
+            console.error('Failed to record login attempt:', recordErr);
+        }
+
         await logAction({ username: email }, 'LOGIN_FAILED', {
             text: `Failed login attempt for ${email}`
         });
-        handleFirebaseError(error);
+
+        if (failInfo && failInfo.locked) {
+            showMessage(
+                `Too many failed attempts. Account locked for 15 minutes.`,
+                'error'
+            );
+        } else if (failInfo && failInfo.failCount) {
+            const left = MAX_LOGIN_ATTEMPTS - failInfo.failCount;
+            handleFirebaseError(error);
+            if (left > 0) {
+                showMessage(
+                    `Login failed. ${left} attempt${left === 1 ? '' : 's'} remaining before lock.`,
+                    'warning'
+                );
+            }
+        } else {
+            handleFirebaseError(error);
+        }
     }
 }
 
@@ -294,5 +445,117 @@ async function handleLogout() {
         await checkSystemState();
     } catch (error) {
         handleFirebaseError(error);
+    }
+}
+
+/* ===================== CHANGE PASSWORD ===================== */
+function renderChangePasswordForm() {
+    const userData = getCurrentUser();
+    if (!userData || !auth.currentUser) {
+        showMessage('You must be logged in to change password.', 'error', 'dashboard');
+        return;
+    }
+
+    const container = document.getElementById('dashboard-container');
+    if (!container) return;
+
+    container.innerHTML = `
+        <h2>Change Password</h2>
+        <p style="color:#666; margin-bottom:20px; text-align:center;">
+            Enter your current password, then choose a new one.
+        </p>
+        <form id="change-password-form" style="max-width:500px; margin:0 auto;">
+            <div class="form-group">
+                <label>Current Password</label>
+                <input type="password" id="cp-current" required minlength="6" autocomplete="current-password">
+            </div>
+            <div class="form-group">
+                <label>New Password</label>
+                <input type="password" id="cp-new" required minlength="6" autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label>Confirm New Password</label>
+                <input type="password" id="cp-confirm" required minlength="6" autocomplete="new-password">
+            </div>
+            <button type="submit" class="btn" id="cp-submit">Update Password</button>
+            <button type="button" class="btn btn-secondary" id="cp-cancel" style="margin-top:10px;">Cancel</button>
+        </form>
+    `;
+
+    const form = document.getElementById('change-password-form');
+    const cancelBtn = document.getElementById('cp-cancel');
+    if (form) form.addEventListener('submit', handleChangePassword);
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            const carsTab = document.querySelector('.tab-btn[data-tab="cars"]');
+            if (carsTab) carsTab.classList.add('active');
+            renderCarsView();
+        });
+    }
+}
+
+async function handleChangePassword(e) {
+    e.preventDefault();
+    const userData = getCurrentUser();
+    if (!userData || !auth.currentUser) return;
+
+    const currentEl = document.getElementById('cp-current');
+    const newEl = document.getElementById('cp-new');
+    const confirmEl = document.getElementById('cp-confirm');
+    const submitBtn = document.getElementById('cp-submit');
+    if (!currentEl || !newEl || !confirmEl) return;
+
+    const currentPassword = currentEl.value;
+    const newPassword = newEl.value;
+    const confirmPassword = confirmEl.value;
+
+    if (newPassword.length < 6) {
+        showMessage('Error: New password must be at least 6 characters.', 'error', 'dashboard');
+        return;
+    }
+    if (newPassword !== confirmPassword) {
+        showMessage('Error: New password and confirmation do not match.', 'error', 'dashboard');
+        return;
+    }
+    if (currentPassword === newPassword) {
+        showMessage('Error: New password must be different from the current password.', 'error', 'dashboard');
+        return;
+    }
+
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Updating...';
+    }
+
+    try {
+        const credential = EmailAuthProvider.credential(userData.email, currentPassword);
+        await reauthenticateWithCredential(auth.currentUser, credential);
+        await updatePassword(auth.currentUser, newPassword);
+
+        await logAction(userData, 'CHANGE_PASSWORD', {
+            targetId: userData.uid,
+            targetName: userData.username,
+            text: `Password changed by ${userData.username}`
+        });
+
+        showMessage('Password updated successfully.', 'success', 'dashboard');
+        currentEl.value = '';
+        newEl.value = '';
+        confirmEl.value = '';
+
+        setTimeout(() => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            const carsTab = document.querySelector('.tab-btn[data-tab="cars"]');
+            if (carsTab) carsTab.classList.add('active');
+            renderCarsView();
+        }, 1500);
+    } catch (error) {
+        handleFirebaseError(error, 'dashboard');
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Update Password';
+        }
     }
 }

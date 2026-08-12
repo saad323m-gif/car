@@ -74,11 +74,21 @@ export function renderDashboard() {
         <div id="load-more-container" class="load-more-container"></div>
     `;
 
-    document.getElementById('toggle-add-member').addEventListener('click', () => {
-        document.getElementById('add-member-form-wrapper').classList.toggle('hidden-form');
-    });
-    document.getElementById('add-user-form').addEventListener('submit', handleAddUser);
-    document.getElementById('edit-profile-btn').addEventListener('click', renderEditProfileForm);
+    const toggleAddMember = document.getElementById('toggle-add-member');
+    const addUserForm = document.getElementById('add-user-form');
+    const editProfileBtn = document.getElementById('edit-profile-btn');
+    if (toggleAddMember) {
+        toggleAddMember.addEventListener('click', () => {
+            const wrapper = document.getElementById('add-member-form-wrapper');
+            if (wrapper) wrapper.classList.toggle('hidden-form');
+        });
+    }
+    if (addUserForm) {
+        addUserForm.addEventListener('submit', handleAddUser);
+    }
+    if (editProfileBtn) {
+        editProfileBtn.addEventListener('click', renderEditProfileForm);
+    }
 
     lastVisibleUser = null;
     fetchUsersForAdmin(false);
@@ -88,11 +98,21 @@ async function handleAddUser(e) {
     e.preventDefault();
     if (!isAdmin(currentUserData)) return;
 
-    const username = document.getElementById('new-username').value.trim();
-    const email = document.getElementById('new-email').value.trim();
-    const password = document.getElementById('new-password').value;
-    const phone = document.getElementById('new-phone').value.trim();
-    const role = document.getElementById('new-role').value;
+    const usernameEl = document.getElementById('new-username');
+    const emailEl = document.getElementById('new-email');
+    const passwordEl = document.getElementById('new-password');
+    const phoneEl = document.getElementById('new-phone');
+    const roleEl = document.getElementById('new-role');
+    if (!usernameEl || !emailEl || !passwordEl || !phoneEl || !roleEl) {
+        showMessage('Error: Form elements not found.', 'error', 'dashboard');
+        return;
+    }
+
+    const username = usernameEl.value.trim();
+    const email = emailEl.value.trim();
+    const password = passwordEl.value;
+    const phone = phoneEl.value.trim();
+    const role = roleEl.value;
 
     if (!/^0\d{9}$/.test(phone)) {
         showMessage('Error: Phone must start with 0 and be exactly 10 digits.', 'error', 'dashboard');
@@ -133,8 +153,10 @@ async function handleAddUser(e) {
         });
 
         showMessage('Success: Member added successfully.', 'success', 'dashboard');
-        document.getElementById('add-user-form').reset();
-        document.getElementById('add-member-form-wrapper').classList.add('hidden-form');
+        const addForm = document.getElementById('add-user-form');
+        if (addForm) addForm.reset();
+        const addWrapper = document.getElementById('add-member-form-wrapper');
+        if (addWrapper) addWrapper.classList.add('hidden-form');
         lastVisibleUser = null;
         fetchUsersForAdmin(false);
     } catch (error) {
@@ -172,14 +194,16 @@ async function fetchUsersForAdmin(loadMore = false) {
         lastVisibleUser = snapshot.docs[snapshot.docs.length - 1];
         if (!loadMore) listContainer.innerHTML = '';
 
-        for (const d of snapshot.docs) {
-            await renderUserCard(d.id, d.data());
-        }
+        // Render cards in parallel for better performance on mobile
+        await Promise.all(snapshot.docs.map((d) => renderUserCard(d.id, d.data())));
 
         if (loadMoreContainer) {
             if (snapshot.size === 10) {
                 loadMoreContainer.innerHTML = '<button class="load-more-btn" id="load-more-btn">Load More</button>';
-                document.getElementById('load-more-btn').addEventListener('click', () => fetchUsersForAdmin(true));
+                const loadMoreBtn = document.getElementById('load-more-btn');
+                if (loadMoreBtn) {
+                    loadMoreBtn.addEventListener('click', () => fetchUsersForAdmin(true));
+                }
             } else {
                 loadMoreContainer.innerHTML = '';
             }
@@ -194,64 +218,86 @@ async function renderUserCard(uid, data) {
     if (!listContainer) return;
 
     const card = document.createElement('div');
-    card.className = 'card';
+    card.className = 'card border-blue';
     card.id = `card-${uid}`;
 
     let actionsHtml = '';
     if (!data.isProtected) {
         actionsHtml = `
-            <select class="action-select" id="action-${uid}">
-                <option value="">Select Action</option>
-                <option value="edit">Edit Member</option>
-                <option value="activity">View Activity Log</option>
+            <div class="action-buttons" id="member-actions-${uid}">
+                <button type="button" class="action-btn action-btn-edit" data-action="edit">✎ Edit</button>
+                <button type="button" class="action-btn action-btn-activity" data-action="activity">📋 Activity</button>
                 ${data.role === 'user'
-                    ? '<option value="promote">Promote</option>'
-                    : '<option value="demote">Demote</option>'}
+                    ? '<button type="button" class="action-btn action-btn-promote" data-action="promote">↑ Promote</button>'
+                    : '<button type="button" class="action-btn action-btn-demote" data-action="demote">↓ Demote</button>'}
                 ${data.status === 'active'
-                    ? '<option value="suspend">Suspend</option>'
-                    : '<option value="activate">Activate</option>'}
-            </select>
+                    ? '<button type="button" class="action-btn action-btn-suspend" data-action="suspend">⏸ Suspend</button>'
+                    : '<button type="button" class="action-btn action-btn-activate" data-action="activate">▶ Activate</button>'}
+            </div>
             <div id="activity-area-${uid}" style="margin-top: 15px; display: none;"></div>
         `;
     } else {
         actionsHtml = `
-            <select class="action-select" id="action-${uid}">
-                <option value="">Select Action</option>
-                <option value="activity">View Activity Log</option>
-            </select>
+            <div class="action-buttons" id="member-actions-${uid}">
+                <button type="button" class="action-btn action-btn-activity" data-action="activity">📋 Activity</button>
+            </div>
             <div id="activity-area-${uid}" style="margin-top: 15px; display: none;"></div>
         `;
     }
 
     // Fetch cars currently assigned to this user
+    let plateItems = [];
     let miniPlatesHtml = '<span class="no-cars-label">No cars assigned</span>';
+    let headerPlatesHtml = '<span class="no-cars-label">No cars</span>';
     try {
         const carsQ = query(collection(db, 'cars'), where('currentUserId', '==', uid));
         const carsSnap = await getDocs(carsQ);
         if (!carsSnap.empty) {
-            const plates = [];
             carsSnap.forEach(d => {
                 const c = d.data();
-                plates.push(`
-                    <div class="mini-plate" title="${c.carId}">
-                        <span class="mini-plate-emirate">${c.emirate}</span>
-                        <span class="mini-plate-number">${c.plateNumber}</span>
-                        <span class="mini-plate-code">${c.plateCode}</span>
+                plateItems.push(`
+                    <div class="mini-plate" title="${c.carId || ''}">
+                        <span class="mini-plate-emirate">${c.emirate || ''}</span>
+                        <span class="mini-plate-number">${c.plateNumber || ''}</span>
+                        <span class="mini-plate-code">${c.plateCode || ''}</span>
                     </div>
                 `);
             });
-            miniPlatesHtml = `<div class="mini-plates-container">${plates.join('')}</div>`;
+            miniPlatesHtml = `<div class="mini-plates-container">${plateItems.join('')}</div>`;
+
+            // Header: show first plate + Show more if needed
+            if (plateItems.length === 1) {
+                headerPlatesHtml = `<div class="mini-plates-container">${plateItems[0]}</div>`;
+            } else {
+                headerPlatesHtml = `
+                    <div class="mini-plates-container" id="header-plates-visible-${uid}">
+                        ${plateItems[0]}
+                    </div>
+                    <div class="mini-plates-container" id="header-plates-extra-${uid}" style="display:none;">
+                        ${plateItems.slice(1).join('')}
+                    </div>
+                    <button type="button" class="show-more-plates-btn" id="show-more-plates-${uid}">
+                        Show more (${plateItems.length - 1})
+                    </button>
+                `;
+            }
         }
     } catch (err) {
         miniPlatesHtml = '<span class="no-cars-label">Unable to load cars</span>';
+        headerPlatesHtml = '<span class="no-cars-label">Unable to load</span>';
     }
 
     card.innerHTML = `
         <div class="card-header" id="header-${uid}">
-            <span class="card-title">${data.username}</span>
-            <div class="card-meta">
-                <span class="role-${data.role}">${data.role}</span>
-                <span class="status-${data.status}">${data.status}</span>
+            <div class="card-header-top">
+                <span class="card-title">${data.username}</span>
+                <div class="card-meta">
+                    <span class="role-${data.role}">${data.role}</span>
+                    <span class="status-${data.status}">${data.status}</span>
+                </div>
+            </div>
+            <div class="card-header-plates" id="header-plates-${uid}">
+                ${headerPlatesHtml}
             </div>
         </div>
         <div class="card-body" id="body-${uid}">
@@ -281,17 +327,41 @@ async function renderUserCard(uid, data) {
     `;
     listContainer.appendChild(card);
 
-    document.getElementById(`header-${uid}`).addEventListener('click', (e) => {
-        if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
-            card.classList.toggle('open');
-        }
-    });
+    // Bind via card reference — avoids null when DOM is mid-update on mobile
+    const headerEl = card.querySelector(`#header-${uid}`);
+    if (headerEl) {
+        headerEl.addEventListener('click', (e) => {
+            if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
+                card.classList.toggle('open');
+            }
+        });
+    }
 
-    const actionSelect = document.getElementById(`action-${uid}`);
-    if (actionSelect) {
-        actionSelect.addEventListener('change', (e) => {
-            handleMemberAction(uid, e.target.value, data.username);
-            e.target.value = '';
+    const actionsWrap = card.querySelector(`#member-actions-${uid}`);
+    if (actionsWrap) {
+        actionsWrap.querySelectorAll('[data-action]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleMemberAction(uid, btn.getAttribute('data-action'), data.username);
+            });
+        });
+    }
+
+    // Show more / show less for header plates
+    const showMoreBtn = card.querySelector(`#show-more-plates-${uid}`);
+    if (showMoreBtn) {
+        showMoreBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const extra = card.querySelector(`#header-plates-extra-${uid}`);
+            if (!extra) return;
+            const isHidden = extra.style.display === 'none' || !extra.style.display;
+            if (isHidden) {
+                extra.style.display = 'flex';
+                showMoreBtn.textContent = 'Show less';
+            } else {
+                extra.style.display = 'none';
+                showMoreBtn.textContent = `Show more (${plateItems.length - 1})`;
+            }
         });
     }
 }
@@ -422,8 +492,10 @@ async function renderInlineEditForm(uid) {
     if (!userDoc.exists()) return;
     const data = userDoc.data();
 
-    document.getElementById(`view-info-${uid}`).style.display = 'none';
+    const viewInfo = document.getElementById(`view-info-${uid}`);
     const editArea = document.getElementById(`edit-form-${uid}`);
+    if (!editArea) return;
+    if (viewInfo) viewInfo.style.display = 'none';
     editArea.style.display = 'block';
     editArea.innerHTML = `
         <form id="form-edit-${uid}" class="inline-edit-form">
@@ -450,44 +522,57 @@ async function renderInlineEditForm(uid) {
         </form>
     `;
 
-    document.getElementById(`form-edit-${uid}`).addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const newUsername = document.getElementById(`edit-un-${uid}`).value.trim();
-        const newEmail = document.getElementById(`edit-em-${uid}`).value.trim();
-        const newPhone = document.getElementById(`edit-ph-${uid}`).value.trim();
-        const newNotes = document.getElementById(`edit-nt-${uid}`).value.trim();
+    const formEdit = document.getElementById(`form-edit-${uid}`);
+    if (formEdit) {
+        formEdit.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const unEl = document.getElementById(`edit-un-${uid}`);
+            const emEl = document.getElementById(`edit-em-${uid}`);
+            const phEl = document.getElementById(`edit-ph-${uid}`);
+            const ntEl = document.getElementById(`edit-nt-${uid}`);
+            if (!unEl || !emEl || !phEl) return;
 
-        if (!/^0\d{9}$/.test(newPhone)) {
-            showMessage('Error: Phone must be 10 digits starting with 0.', 'error', 'dashboard');
-            return;
-        }
+            const newUsername = unEl.value.trim();
+            const newEmail = emEl.value.trim();
+            const newPhone = phEl.value.trim();
+            const newNotes = ntEl ? ntEl.value.trim() : '';
 
-        try {
-            await updateDoc(doc(db, 'users', uid), {
-                username: newUsername,
-                email: newEmail,
-                phone: newPhone,
-                notes: newNotes
-            });
+            if (!/^0\d{9}$/.test(newPhone)) {
+                showMessage('Error: Phone must be 10 digits starting with 0.', 'error', 'dashboard');
+                return;
+            }
 
-            await logAction(currentUserData, 'EDIT_USER', {
-                targetId: uid,
-                targetName: newUsername,
-                text: `Edited details for ${newUsername}`
-            });
+            try {
+                await updateDoc(doc(db, 'users', uid), {
+                    username: newUsername,
+                    email: newEmail,
+                    phone: newPhone,
+                    notes: newNotes
+                });
 
-            showMessage('Member updated successfully.', 'success', 'dashboard');
-            lastVisibleUser = null;
-            fetchUsersForAdmin(false);
-        } catch (err) {
-            handleFirebaseError(err, 'dashboard');
-        }
-    });
+                await logAction(currentUserData, 'EDIT_USER', {
+                    targetId: uid,
+                    targetName: newUsername,
+                    text: `Edited details for ${newUsername}`
+                });
 
-    document.getElementById(`cancel-edit-${uid}`).addEventListener('click', () => {
-        editArea.style.display = 'none';
-        document.getElementById(`view-info-${uid}`).style.display = 'block';
-    });
+                showMessage('Member updated successfully.', 'success', 'dashboard');
+                lastVisibleUser = null;
+                fetchUsersForAdmin(false);
+            } catch (err) {
+                handleFirebaseError(err, 'dashboard');
+            }
+        });
+    }
+
+    const cancelEditBtn = document.getElementById(`cancel-edit-${uid}`);
+    if (cancelEditBtn) {
+        cancelEditBtn.addEventListener('click', () => {
+            editArea.style.display = 'none';
+            const vi = document.getElementById(`view-info-${uid}`);
+            if (vi) vi.style.display = 'block';
+        });
+    }
 }
 
 /* ===================== PROTECTED PROFILE EDIT ===================== */
@@ -497,17 +582,20 @@ function renderEditProfileForm() {
         return;
     }
 
-    document.getElementById('dashboard-container').innerHTML = `
+    const container = document.getElementById('dashboard-container');
+    if (!container) return;
+
+    container.innerHTML = `
         <h2>Edit Protected Profile</h2>
         <p style="color: #666; margin-bottom: 20px; text-align:center;">Two-step verification required.</p>
         <form id="edit-profile-form" style="max-width: 500px; margin: 0 auto;">
             <div class="form-group">
                 <label>Current Password</label>
-                <input type="password" id="verify-password" required>
+                <input type="password" id="verify-password" required autocomplete="current-password">
             </div>
             <div class="form-group">
-                <label>Security PIN (4 digits)</label>
-                <input type="password" id="verify-pin" required pattern="\\d{4}">
+                <label>Current Security PIN (4 digits)</label>
+                <input type="password" id="verify-pin" required pattern="\\d{4}" inputmode="numeric" maxlength="4">
             </div>
             <div class="divider"></div>
             <div class="form-group">
@@ -518,23 +606,52 @@ function renderEditProfileForm() {
                 <label>New Phone</label>
                 <input type="text" id="edit-phone" value="${currentUserData.phone}" required pattern="0\\d{9}">
             </div>
+            <div class="divider"></div>
+            <p style="color:#666; font-size:0.9rem; margin-bottom:12px; text-align:center;">
+                Leave New PIN fields empty if you do not want to change the PIN.
+            </p>
+            <div class="form-group">
+                <label>New Security PIN (4 digits, optional)</label>
+                <input type="password" id="edit-new-pin" pattern="\\d{4}" inputmode="numeric" maxlength="4" placeholder="Leave blank to keep current">
+            </div>
+            <div class="form-group">
+                <label>Confirm New Security PIN</label>
+                <input type="password" id="edit-confirm-pin" pattern="\\d{4}" inputmode="numeric" maxlength="4" placeholder="Leave blank to keep current">
+            </div>
             <button type="submit" class="btn">Verify & Update</button>
             <button type="button" class="btn btn-secondary" id="cancel-edit" style="margin-top:10px;">Cancel</button>
         </form>
     `;
 
-    document.getElementById('edit-profile-form').addEventListener('submit', handleEditProtectedProfile);
-    document.getElementById('cancel-edit').addEventListener('click', renderDashboard);
+    const editProfileForm = document.getElementById('edit-profile-form');
+    const cancelEdit = document.getElementById('cancel-edit');
+    if (editProfileForm) {
+        editProfileForm.addEventListener('submit', handleEditProtectedProfile);
+    }
+    if (cancelEdit) {
+        cancelEdit.addEventListener('click', renderDashboard);
+    }
 }
 
 async function handleEditProtectedProfile(e) {
     e.preventDefault();
     if (!currentUserData.isProtected) return;
 
-    const password = document.getElementById('verify-password').value;
-    const pin = document.getElementById('verify-pin').value;
-    const newUsername = document.getElementById('edit-username').value.trim();
-    const newPhone = document.getElementById('edit-phone').value.trim();
+    const passwordEl = document.getElementById('verify-password');
+    const pinEl = document.getElementById('verify-pin');
+    const usernameEl = document.getElementById('edit-username');
+    const phoneEl = document.getElementById('edit-phone');
+    const newPinEl = document.getElementById('edit-new-pin');
+    const confirmPinEl = document.getElementById('edit-confirm-pin');
+
+    if (!passwordEl || !pinEl || !usernameEl || !phoneEl) return;
+
+    const password = passwordEl.value;
+    const pin = pinEl.value;
+    const newUsername = usernameEl.value.trim();
+    const newPhone = phoneEl.value.trim();
+    const newPin = newPinEl ? newPinEl.value.trim() : '';
+    const confirmPin = confirmPinEl ? confirmPinEl.value.trim() : '';
 
     if (pin !== currentUserData.securityPin) {
         showMessage('Security Error: Invalid Security PIN.', 'error', 'dashboard');
@@ -543,6 +660,22 @@ async function handleEditProtectedProfile(e) {
     if (!/^0\d{9}$/.test(newPhone)) {
         showMessage('Error: Phone must start with 0 and be 10 digits.', 'error', 'dashboard');
         return;
+    }
+
+    // Optional PIN change validation
+    if (newPin || confirmPin) {
+        if (!/^\d{4}$/.test(newPin)) {
+            showMessage('Error: New Security PIN must be exactly 4 digits.', 'error', 'dashboard');
+            return;
+        }
+        if (newPin !== confirmPin) {
+            showMessage('Error: New PIN and confirmation do not match.', 'error', 'dashboard');
+            return;
+        }
+        if (newPin === pin) {
+            showMessage('Error: New PIN must be different from the current PIN.', 'error', 'dashboard');
+            return;
+        }
     }
 
     try {
@@ -561,15 +694,22 @@ async function handleEditProtectedProfile(e) {
             }
         }
 
-        await updateDoc(doc(db, 'users', currentUserData.uid), {
+        const updates = {
             username: newUsername,
             phone: newPhone
-        });
+        };
+        if (newPin) {
+            updates.securityPin = newPin;
+        }
+
+        await updateDoc(doc(db, 'users', currentUserData.uid), updates);
 
         await logAction(currentUserData, 'EDIT_SELF_PROFILE', {
             targetId: currentUserData.uid,
             targetName: newUsername,
-            text: 'Super Admin updated own profile'
+            text: newPin
+                ? 'Super Admin updated own profile and security PIN'
+                : 'Super Admin updated own profile'
         });
 
         showMessage('Profile updated. Reloading...', 'success', 'dashboard');

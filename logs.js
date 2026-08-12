@@ -108,13 +108,18 @@ async function fetchLogs(loadMore = false) {
         if (loadMoreContainer) {
             if (snapshot.size === 10) {
                 loadMoreContainer.innerHTML = '<button class="load-more-btn" id="load-more-btn">Load More</button>';
-                document.getElementById('load-more-btn').addEventListener('click', () => fetchLogs(true));
+                const loadMoreBtn = document.getElementById('load-more-btn');
+                if (loadMoreBtn) {
+                    loadMoreBtn.addEventListener('click', () => fetchLogs(true));
+                }
             } else {
                 loadMoreContainer.innerHTML = '';
             }
         }
     } catch (error) {
-        listContainer.innerHTML = `<p class="error">Error loading logs: ${error.message}</p>`;
+        if (listContainer) {
+            listContainer.innerHTML = `<p class="error">Error loading logs: ${error.message}</p>`;
+        }
     }
 }
 
