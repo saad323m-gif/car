@@ -3,25 +3,96 @@
  * English only | Latin digits only | Production-ready
  */
 
-import { auth, db } from "./firebase.js";
-import {
-    createUserWithEmailAndPassword, signInWithEmailAndPassword,
-    signOut, onAuthStateChanged, browserLocalPersistence, browserSessionPersistence,
-    updatePassword, reauthenticateWithCredential, EmailAuthProvider
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import {
-    collection, doc, setDoc, getDoc, getDocs, updateDoc, query, where, limit,
-    serverTimestamp, Timestamp
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+console.log('App module started.');
 
-import { renderDashboard, setCurrentUser, getCurrentUser } from "./members.js";
-import { renderLogsView, logAction, setLogsCurrentUser } from "./logs.js";
-import { renderCarsView, setCarsCurrentUser } from "./cars.js";
-import { renderRequestsView, setRequestsCurrentUser } from "./requests.js";
-import { renderSearchView, setSearchCurrentUser } from "./search.js";
-import { renderStatsView, setStatsCurrentUser } from "./stats.js";
-import { showDashboardMessage, showAuthMessage } from "./messageManager.js";
-import { handleFirebaseError } from "./utils.js";
+// استيراد Firebase
+import { auth, db } from "./firebase.js";
+console.log('Firebase imported.');
+
+// استيراد الوحدات الأخرى (مع التحقق من وجودها)
+let renderDashboard, setCurrentUser, getCurrentUser;
+let renderLogsView, logAction, setLogsCurrentUser;
+let renderCarsView, setCarsCurrentUser;
+let renderRequestsView, setRequestsCurrentUser;
+let renderSearchView, setSearchCurrentUser;
+let renderStatsView, setStatsCurrentUser;
+let showDashboardMessage, showAuthMessage;
+let handleFirebaseError;
+
+try {
+    const membersModule = await import("./members.js");
+    renderDashboard = membersModule.renderDashboard;
+    setCurrentUser = membersModule.setCurrentUser;
+    getCurrentUser = membersModule.getCurrentUser;
+    console.log('members.js loaded.');
+} catch (e) { console.error('Failed to load members.js:', e); }
+
+try {
+    const logsModule = await import("./logs.js");
+    renderLogsView = logsModule.renderLogsView;
+    logAction = logsModule.logAction;
+    setLogsCurrentUser = logsModule.setLogsCurrentUser;
+    console.log('logs.js loaded.');
+} catch (e) { console.error('Failed to load logs.js:', e); }
+
+try {
+    const carsModule = await import("./cars.js");
+    renderCarsView = carsModule.renderCarsView;
+    setCarsCurrentUser = carsModule.setCarsCurrentUser;
+    console.log('cars.js loaded.');
+} catch (e) { console.error('Failed to load cars.js:', e); }
+
+try {
+    const requestsModule = await import("./requests.js");
+    renderRequestsView = requestsModule.renderRequestsView;
+    setRequestsCurrentUser = requestsModule.setRequestsCurrentUser;
+    console.log('requests.js loaded.');
+} catch (e) { console.error('Failed to load requests.js:', e); }
+
+try {
+    const searchModule = await import("./search.js");
+    renderSearchView = searchModule.renderSearchView;
+    setSearchCurrentUser = searchModule.setSearchCurrentUser;
+    console.log('search.js loaded.');
+} catch (e) { console.error('Failed to load search.js:', e); }
+
+try {
+    const statsModule = await import("./stats.js");
+    renderStatsView = statsModule.renderStatsView;
+    setStatsCurrentUser = statsModule.setStatsCurrentUser;
+    console.log('stats.js loaded.');
+} catch (e) { console.error('Failed to load stats.js:', e); }
+
+try {
+    const msgModule = await import("./messageManager.js");
+    showDashboardMessage = msgModule.showDashboardMessage;
+    showAuthMessage = msgModule.showAuthMessage;
+    console.log('messageManager.js loaded.');
+} catch (e) { console.error('Failed to load messageManager.js:', e); }
+
+try {
+    const utilsModule = await import("./utils.js");
+    handleFirebaseError = utilsModule.handleFirebaseError;
+    console.log('utils.js loaded.');
+} catch (e) { console.error('Failed to load utils.js:', e); }
+
+// إذا فشل تحميل أي وحدة أساسية، اعرض رسالة خطأ واضحة
+if (!showAuthMessage) {
+    showAuthMessage = (text, type) => {
+        const box = document.getElementById('message-box');
+        if (box) { box.textContent = text; box.className = `message-box ${type || 'error'}`; }
+        console.error(text);
+    };
+}
+
+if (!handleFirebaseError) {
+    handleFirebaseError = (error) => {
+        console.error('Firebase error:', error);
+        showAuthMessage(`System Error: ${error.message}`);
+    };
+}
+
+// ========== بقية الكود (نفس الكود السابق لكن مع إضافة try/catch في checkSystemState) ==========
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000;
@@ -105,6 +176,7 @@ function updateDateTime() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM fully loaded.');
     updateDateTime();
     setInterval(updateDateTime, 1000);
 
@@ -130,52 +202,58 @@ window.addEventListener('DOMContentLoaded', () => {
             btn.classList.add('active');
             const tab = btn.dataset.tab;
             currentActiveTab = tab;
-            if (tab === 'members') renderDashboard();
-            else if (tab === 'logs') renderLogsView();
-            else if (tab === 'cars') renderCarsView();
-            else if (tab === 'requests') renderRequestsView();
-            else if (tab === 'search') renderSearchView();
-            else if (tab === 'stats') renderStatsView();
+            if (tab === 'members' && renderDashboard) renderDashboard();
+            else if (tab === 'logs' && renderLogsView) renderLogsView();
+            else if (tab === 'cars' && renderCarsView) renderCarsView();
+            else if (tab === 'requests' && renderRequestsView) renderRequestsView();
+            else if (tab === 'search' && renderSearchView) renderSearchView();
+            else if (tab === 'stats' && renderStatsView) renderStatsView();
         });
     });
 
     onAuthStateChanged(auth, async (user) => {
-        if (user) {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
-                userData.uid = user.uid;
-                setCurrentUser(userData);
-                setCarsCurrentUser(userData);
-                setRequestsCurrentUser(userData);
-                setLogsCurrentUser(userData);
-                setSearchCurrentUser(userData);
-                setStatsCurrentUser(userData);
+        console.log('Auth state changed:', user ? 'User logged in' : 'No user');
+        try {
+            if (user) {
+                const userDoc = await getDoc(doc(db, 'users', user.uid));
+                if (userDoc.exists()) {
+                    const userData = userDoc.data();
+                    userData.uid = user.uid;
+                    if (setCurrentUser) setCurrentUser(userData);
+                    if (setCarsCurrentUser) setCarsCurrentUser(userData);
+                    if (setRequestsCurrentUser) setRequestsCurrentUser(userData);
+                    if (setLogsCurrentUser) setLogsCurrentUser(userData);
+                    if (setSearchCurrentUser) setSearchCurrentUser(userData);
+                    if (setStatsCurrentUser) setStatsCurrentUser(userData);
 
-                document.querySelectorAll('.tab-btn').forEach(tab => {
-                    if (userData.role === 'admin' && userData.status === 'active') {
-                        tab.style.display = 'block';
-                        tab.disabled = false;
-                    } else {
-                        if (tab.dataset.tab === 'cars') {
+                    document.querySelectorAll('.tab-btn').forEach(tab => {
+                        if (userData.role === 'admin' && userData.status === 'active') {
                             tab.style.display = 'block';
                             tab.disabled = false;
                         } else {
-                            tab.style.display = 'none';
-                            tab.disabled = true;
+                            if (tab.dataset.tab === 'cars') {
+                                tab.style.display = 'block';
+                                tab.disabled = false;
+                            } else {
+                                tab.style.display = 'none';
+                                tab.disabled = true;
+                            }
                         }
-                    }
-                });
+                    });
 
-                showDashboard();
+                    showDashboard();
+                } else {
+                    await signOut(auth);
+                    showAuthView();
+                }
             } else {
-                await signOut(auth);
+                if (setCurrentUser) setCurrentUser(null);
                 showAuthView();
+                await checkSystemState();
             }
-        } else {
-            setCurrentUser(null);
-            showAuthView();
-            await checkSystemState();
+        } catch (error) {
+            console.error('Error in auth state handler:', error);
+            showAuthMessage(`System Error: ${error.message}`);
         }
     });
 });
@@ -215,12 +293,15 @@ function showDashboard() {
 }
 
 async function checkSystemState() {
+    console.log('Checking system state...');
     try {
         const q = query(collection(db, 'users'), limit(1));
         const snapshot = await getDocs(q);
+        console.log('System state check: users found?', !snapshot.empty);
         if (snapshot.empty) renderSetupForm();
         else renderLoginForm();
     } catch (error) {
+        console.error('System state check error:', error);
         showAuthMessage(`System Error: ${error.message}`);
     }
 }
@@ -273,7 +354,7 @@ async function handleSetup(e) {
             username, email, phone, role: 'admin', status: 'active',
             notes: '', isProtected: true, securityPin, rememberSession: false
         });
-        await logAction({ uid, username }, 'SYSTEM_SETUP', { text: 'System initialized with Super Admin' });
+        if (logAction) await logAction({ uid, username }, 'SYSTEM_SETUP', { text: 'System initialized with Super Admin' });
         showAuthMessage('Success: Super Admin created successfully.', 'success');
     } catch (error) {
         handleFirebaseError(error);
@@ -316,7 +397,7 @@ async function handleLogin(e) {
         const lockStatus = await isLoginLocked(email);
         if (lockStatus.locked) {
             showAuthMessage(`Too many failed attempts. Try again after ${formatRemainingLock(lockStatus.remainingMs)}.`);
-            await logAction({ username: email }, 'LOGIN_FAILED', { text: `Locked account login attempt for ${email}` });
+            if (logAction) await logAction({ username: email }, 'LOGIN_FAILED', { text: `Locked account login attempt for ${email}` });
             return;
         }
 
@@ -333,18 +414,18 @@ async function handleLogin(e) {
         const userData = userDoc.data();
         if (userData.status === 'suspended') {
             await signOut(auth);
-            await logAction({ username: email }, 'LOGIN_FAILED', { text: `Suspended account attempt: ${email}` });
+            if (logAction) await logAction({ username: email }, 'LOGIN_FAILED', { text: `Suspended account attempt: ${email}` });
             showAuthMessage('Access Denied: Your account is suspended.');
             return;
         }
 
         await clearLoginAttempts(email);
         await updateDoc(doc(db, 'users', uid), { rememberSession: rememberMe });
-        await logAction(userData, 'LOGIN', { text: 'User logged in' });
+        if (logAction) await logAction(userData, 'LOGIN', { text: 'User logged in' });
     } catch (error) {
         let failInfo = null;
         try { failInfo = await recordFailedLogin(email); } catch (_) {}
-        await logAction({ username: email }, 'LOGIN_FAILED', { text: `Failed login attempt for ${email}` });
+        if (logAction) await logAction({ username: email }, 'LOGIN_FAILED', { text: `Failed login attempt for ${email}` });
         if (failInfo && failInfo.locked) {
             showAuthMessage(`Too many failed attempts. Account locked for 15 minutes.`);
         } else if (failInfo && failInfo.failCount) {
@@ -362,7 +443,7 @@ async function handleLogout() {
         const currentUser = auth.currentUser;
         if (currentUser) {
             const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-            if (userDoc.exists()) await logAction(userDoc.data(), 'LOGOUT', { text: 'User logged out' });
+            if (userDoc.exists() && logAction) await logAction(userDoc.data(), 'LOGOUT', { text: 'User logged out' });
         }
         await signOut(auth);
         showAuthView();
@@ -373,6 +454,10 @@ async function handleLogout() {
 }
 
 function renderChangePasswordForm() {
+    if (!getCurrentUser) {
+        showDashboardMessage('Error: User data not available.', 'error');
+        return;
+    }
     const userData = getCurrentUser();
     if (!userData || !auth.currentUser) {
         showDashboardMessage('You must be logged in to change password.', 'error');
@@ -408,6 +493,10 @@ function renderChangePasswordForm() {
 
 async function handleChangePassword(e) {
     e.preventDefault();
+    if (!getCurrentUser) {
+        showDashboardMessage('Error: User data not available.', 'error');
+        return;
+    }
     const userData = getCurrentUser();
     if (!userData || !auth.currentUser) return;
     const currentEl = document.getElementById('cp-current');
@@ -439,7 +528,7 @@ async function handleChangePassword(e) {
         const credential = EmailAuthProvider.credential(userData.email, currentPassword);
         await reauthenticateWithCredential(auth.currentUser, credential);
         await updatePassword(auth.currentUser, newPassword);
-        await logAction(userData, 'CHANGE_PASSWORD', {
+        if (logAction) await logAction(userData, 'CHANGE_PASSWORD', {
             targetId: userData.uid,
             targetName: userData.username,
             text: `Password changed by ${userData.username}`
