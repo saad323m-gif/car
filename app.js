@@ -19,7 +19,7 @@ function showErrorOnScreen(text) {
         mainEl.textContent = '❌ ' + text;
     }
     const detailEl = document.getElementById('progress-details');
-    if (detailEl) detailEl.textContent = 'Please refresh or contact support.';
+    if (detailEl) detailEl.textContent = 'Please refresh.';
     console.error(text);
 }
 
@@ -29,13 +29,8 @@ setStatus('Initializing system...', 'Loading configuration...');
 setStatus('Loading Firebase...', 'Connecting to database...');
 import { auth, db } from "./firebase.js";
 
-// التحقق من أن auth و db تم تحميلهما
-if (!auth) {
-    showErrorOnScreen('Firebase Auth failed to initialize. Check firebase.js');
-}
-if (!db) {
-    showErrorOnScreen('Firebase Firestore failed to initialize. Check firebase.js');
-}
+if (!auth) showErrorOnScreen('Firebase Auth failed to initialize.');
+if (!db) showErrorOnScreen('Firebase Firestore failed to initialize.');
 
 // استيراد الوحدات المطلوبة من Firebase
 import {
@@ -68,7 +63,6 @@ async function loadModule(moduleName, filePath) {
         return module;
     } catch (error) {
         showErrorOnScreen(`Failed to load ${moduleName}: ${error.message}`);
-        console.error(`Error loading ${moduleName}:`, error);
         throw error;
     }
 }
@@ -107,9 +101,9 @@ try {
     renderStatsView = stats.renderStatsView;
     setStatsCurrentUser = stats.setStatsCurrentUser;
 
-    setStatus('All modules loaded successfully.', 'System ready.');
+    setStatus('All modules loaded.', 'Starting auth...');
 } catch (error) {
-    console.error('Critical loading error:', error);
+    console.error('Loading error:', error);
 }
 
 // ===== بقية الكود =====
@@ -196,7 +190,7 @@ function updateDateTime() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-    setStatus('DOM ready.', 'Starting application...');
+    setStatus('DOM ready.', 'Starting app...');
     updateDateTime();
     setInterval(updateDateTime, 1000);
 
@@ -231,21 +225,29 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // ===== [الجزء المعدل] مراقبة Auth مع رسائل مرئية =====
-    setStatus('Setting up auth listener...', 'Waiting for Firebase Auth...');
+    // ===== [الحل الجذري] مستمع Auth مع تجاوز قسري =====
+    setStatus('Waiting for auth listener...', 'If stuck, system will force continue in 5s.');
 
-    // مهلة: إذا لم يستجب Firebase خلال 10 ثوانٍ، اعرض رسالة خطأ
-    let authTimeout = setTimeout(() => {
-        const currentStatus = document.getElementById('status-message')?.textContent || '';
-        if (currentStatus.includes('Waiting for auth')) {
-            showErrorOnScreen('Firebase Auth timed out. Check internet connection and Firebase config.');
+    let authTriggered = false;
+    let forceTimeout = setTimeout(() => {
+        if (!authTriggered) {
+            setStatus('Auth listener timeout.', 'Continuing without auth callback...');
+            console.warn('onAuthStateChanged did not trigger. Forcing fallback.');
+            // تنفيذ المنطق الافتراضي (المستخدم غير مسجل)
+            if (setCurrentUser) setCurrentUser(null);
+            showAuthView();
+            checkSystemState().catch(err => {
+                showErrorOnScreen(`Force fallback error: ${err.message}`);
+            });
         }
-    }, 10000);
+    }, 5000); // 5 ثوانٍ فقط
 
     try {
         onAuthStateChanged(auth, async (user) => {
-            clearTimeout(authTimeout); // إلغاء المهلة عند الاستجابة
-            setStatus('Auth listener triggered.', user ? 'User logged in' : 'No user found');
+            clearTimeout(forceTimeout);
+            authTriggered = true;
+            setStatus('Auth listener triggered.', user ? 'User logged in' : 'No user');
+
             try {
                 if (user) {
                     setStatus('Checking user document...', `UID: ${user.uid}`);
@@ -291,13 +293,13 @@ window.addEventListener('DOMContentLoaded', () => {
                 }
             } catch (error) {
                 showErrorOnScreen(`Auth handler error: ${error.message}`);
-                console.error('Auth handler error:', error);
+                console.error(error);
             }
         });
     } catch (error) {
-        clearTimeout(authTimeout);
-        showErrorOnScreen(`Failed to set auth listener: ${error.message}`);
-        console.error('onAuthStateChanged error:', error);
+        clearTimeout(forceTimeout);
+        showErrorOnScreen(`onAuthStateChanged error: ${error.message}`);
+        console.error(error);
     }
 });
 
@@ -314,7 +316,7 @@ function showAuthView() {
     if (changePassBtn) changePassBtn.style.display = 'none';
     if (headerLogo) headerLogo.style.display = 'none';
     if (mainLogo) mainLogo.style.display = 'block';
-    setStatus('Auth view shown.', '');
+    setStatus('Auth view ready.', '');
 }
 
 function showDashboard() {
@@ -334,7 +336,7 @@ function showDashboard() {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     const targetTab = document.querySelector(`.tab-btn[data-tab="${currentActiveTab}"]`) || document.querySelector('.tab-btn[data-tab="cars"]');
     if (targetTab) { targetTab.classList.add('active'); targetTab.click(); }
-    setStatus('Dashboard loaded.', '');
+    setStatus('Dashboard ready.', '');
 }
 
 async function checkSystemState() {
