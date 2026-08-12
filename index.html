@@ -10,10 +10,11 @@
 
     <header>
         <div class="header-left">
-            <img src="icon.png" alt="Logo" class="header-logo" id="header-logo" style="display: none;">
+            <img src="icon.png" alt="Logo" class="header-logo" id="header-logo" style="display: none; cursor: pointer;">
         </div>
         <div id="datetime" class="header-center"></div>
         <div class="header-right">
+            <button id="change-password-btn" class="btn-change-password" style="display: none;">Change Password</button>
             <button id="logout-btn" class="btn-logout" style="display: none;">Logout</button>
         </div>
     </header>
@@ -44,6 +45,13 @@
         </div>
     </main>
 
+    <footer style="text-align: center; padding: 15px 0; font-size: 0.85rem; color: #888; border-top: 1px solid #e3f2fd; margin-top: 20px;">
+        &copy; <span id="year"></span> Developer. All rights reserved.
+    </footer>
+
     <script type="module" src="app.js"></script>
+    <script>
+        document.getElementById('year').textContent = new Date().getFullYear();
+    </script>
 </body>
 </html>
