@@ -3,13 +3,46 @@
  * English only | Latin digits only | Production-ready
  */
 
-console.log('App module started.');
+// ===== دالة مساعدة لعرض الحالة على الشاشة =====
+function setStatus(main, detail = '') {
+    const mainEl = document.getElementById('status-message');
+    const detailEl = document.getElementById('progress-details');
+    if (mainEl) mainEl.textContent = main;
+    if (detailEl) detailEl.textContent = detail;
+    console.log(`Status: ${main} - ${detail}`);
+}
+
+function showErrorOnScreen(text) {
+    const mainEl = document.getElementById('status-message');
+    if (mainEl) {
+        mainEl.style.color = '#d32f2f';
+        mainEl.textContent = '❌ ' + text;
+    }
+    const detailEl = document.getElementById('progress-details');
+    if (detailEl) detailEl.textContent = 'Please check console or contact support.';
+}
+
+// ===== بدء التحميل =====
+setStatus('Initializing system...', 'Loading configuration...');
 
 // استيراد Firebase
+setStatus('Loading Firebase...', 'Connecting to database...');
 import { auth, db } from "./firebase.js";
-console.log('Firebase imported.');
 
-// استيراد الوحدات الأخرى (مع التحقق من وجودها)
+// استيراد الوحدات المطلوبة من Firebase
+import {
+    createUserWithEmailAndPassword, signInWithEmailAndPassword,
+    signOut, onAuthStateChanged, browserLocalPersistence, browserSessionPersistence,
+    updatePassword, reauthenticateWithCredential, EmailAuthProvider
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import {
+    collection, doc, setDoc, getDoc, getDocs, updateDoc, query, where, limit,
+    serverTimestamp, Timestamp
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+setStatus('Firebase loaded.', 'Loading modules...');
+
+// ===== تحميل الوحدات المحلية مع رسائل مرئية =====
 let renderDashboard, setCurrentUser, getCurrentUser;
 let renderLogsView, logAction, setLogsCurrentUser;
 let renderCarsView, setCarsCurrentUser;
@@ -19,80 +52,71 @@ let renderStatsView, setStatsCurrentUser;
 let showDashboardMessage, showAuthMessage;
 let handleFirebaseError;
 
-try {
-    const membersModule = await import("./members.js");
-    renderDashboard = membersModule.renderDashboard;
-    setCurrentUser = membersModule.setCurrentUser;
-    getCurrentUser = membersModule.getCurrentUser;
-    console.log('members.js loaded.');
-} catch (e) { console.error('Failed to load members.js:', e); }
-
-try {
-    const logsModule = await import("./logs.js");
-    renderLogsView = logsModule.renderLogsView;
-    logAction = logsModule.logAction;
-    setLogsCurrentUser = logsModule.setLogsCurrentUser;
-    console.log('logs.js loaded.');
-} catch (e) { console.error('Failed to load logs.js:', e); }
-
-try {
-    const carsModule = await import("./cars.js");
-    renderCarsView = carsModule.renderCarsView;
-    setCarsCurrentUser = carsModule.setCarsCurrentUser;
-    console.log('cars.js loaded.');
-} catch (e) { console.error('Failed to load cars.js:', e); }
-
-try {
-    const requestsModule = await import("./requests.js");
-    renderRequestsView = requestsModule.renderRequestsView;
-    setRequestsCurrentUser = requestsModule.setRequestsCurrentUser;
-    console.log('requests.js loaded.');
-} catch (e) { console.error('Failed to load requests.js:', e); }
-
-try {
-    const searchModule = await import("./search.js");
-    renderSearchView = searchModule.renderSearchView;
-    setSearchCurrentUser = searchModule.setSearchCurrentUser;
-    console.log('search.js loaded.');
-} catch (e) { console.error('Failed to load search.js:', e); }
-
-try {
-    const statsModule = await import("./stats.js");
-    renderStatsView = statsModule.renderStatsView;
-    setStatsCurrentUser = statsModule.setStatsCurrentUser;
-    console.log('stats.js loaded.');
-} catch (e) { console.error('Failed to load stats.js:', e); }
-
-try {
-    const msgModule = await import("./messageManager.js");
-    showDashboardMessage = msgModule.showDashboardMessage;
-    showAuthMessage = msgModule.showAuthMessage;
-    console.log('messageManager.js loaded.');
-} catch (e) { console.error('Failed to load messageManager.js:', e); }
-
-try {
-    const utilsModule = await import("./utils.js");
-    handleFirebaseError = utilsModule.handleFirebaseError;
-    console.log('utils.js loaded.');
-} catch (e) { console.error('Failed to load utils.js:', e); }
-
-// إذا فشل تحميل أي وحدة أساسية، اعرض رسالة خطأ واضحة
-if (!showAuthMessage) {
-    showAuthMessage = (text, type) => {
-        const box = document.getElementById('message-box');
-        if (box) { box.textContent = text; box.className = `message-box ${type || 'error'}`; }
-        console.error(text);
-    };
+// دالة مساعدة لتحميل وحدة وعرض رسالة
+async function loadModule(moduleName, filePath) {
+    setStatus(`Loading ${moduleName}...`, `Importing from ${filePath}...`);
+    try {
+        const module = await import(filePath);
+        setStatus(`${moduleName} loaded successfully.`, '');
+        return module;
+    } catch (error) {
+        showErrorOnScreen(`Failed to load ${moduleName}: ${error.message}`);
+        console.error(`Error loading ${moduleName}:`, error);
+        throw error;
+    }
 }
 
-if (!handleFirebaseError) {
-    handleFirebaseError = (error) => {
-        console.error('Firebase error:', error);
-        showAuthMessage(`System Error: ${error.message}`);
-    };
+// تحميل جميع الوحدات بشكل متسلسل (لضمان ظهور أي خطأ)
+try {
+    // 1. utils
+    const utils = await loadModule('utils', './utils.js');
+    handleFirebaseError = utils.handleFirebaseError;
+    
+    // 2. messageManager
+    const msg = await loadModule('messageManager', './messageManager.js');
+    showDashboardMessage = msg.showDashboardMessage;
+    showAuthMessage = msg.showAuthMessage;
+
+    // 3. members
+    const members = await loadModule('members', './members.js');
+    renderDashboard = members.renderDashboard;
+    setCurrentUser = members.setCurrentUser;
+    getCurrentUser = members.getCurrentUser;
+
+    // 4. logs
+    const logs = await loadModule('logs', './logs.js');
+    renderLogsView = logs.renderLogsView;
+    logAction = logs.logAction;
+    setLogsCurrentUser = logs.setLogsCurrentUser;
+
+    // 5. cars
+    const cars = await loadModule('cars', './cars.js');
+    renderCarsView = cars.renderCarsView;
+    setCarsCurrentUser = cars.setCarsCurrentUser;
+
+    // 6. requests
+    const requests = await loadModule('requests', './requests.js');
+    renderRequestsView = requests.renderRequestsView;
+    setRequestsCurrentUser = requests.setRequestsCurrentUser;
+
+    // 7. search
+    const search = await loadModule('search', './search.js');
+    renderSearchView = search.renderSearchView;
+    setSearchCurrentUser = search.setSearchCurrentUser;
+
+    // 8. stats
+    const stats = await loadModule('stats', './stats.js');
+    renderStatsView = stats.renderStatsView;
+    setStatsCurrentUser = stats.setStatsCurrentUser;
+
+    setStatus('All modules loaded successfully.', 'System ready.');
+} catch (error) {
+    // الخطأ سيظهر بالفعل في showErrorOnScreen داخل loadModule
+    // ولكن نضمن عدم توقف التطبيق
+    console.error('Critical loading error:', error);
 }
 
-// ========== بقية الكود (نفس الكود السابق لكن مع إضافة try/catch في checkSystemState) ==========
+// ===== بقية الكود (نفس الكود السابق ولكن مع استخدام setStatus) =====
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000;
@@ -176,7 +200,7 @@ function updateDateTime() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM fully loaded.');
+    setStatus('DOM ready.', 'Starting application...');
     updateDateTime();
     setInterval(updateDateTime, 1000);
 
@@ -211,8 +235,9 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    setStatus('Setting up auth listener...', '');
     onAuthStateChanged(auth, async (user) => {
-        console.log('Auth state changed:', user ? 'User logged in' : 'No user');
+        setStatus('Auth state changed.', user ? 'User logged in' : 'No user');
         try {
             if (user) {
                 const userDoc = await getDoc(doc(db, 'users', user.uid));
@@ -252,8 +277,8 @@ window.addEventListener('DOMContentLoaded', () => {
                 await checkSystemState();
             }
         } catch (error) {
-            console.error('Error in auth state handler:', error);
-            showAuthMessage(`System Error: ${error.message}`);
+            showErrorOnScreen(`Auth error: ${error.message}`);
+            console.error('Auth handler error:', error);
         }
     });
 });
@@ -271,6 +296,7 @@ function showAuthView() {
     if (changePassBtn) changePassBtn.style.display = 'none';
     if (headerLogo) headerLogo.style.display = 'none';
     if (mainLogo) mainLogo.style.display = 'block';
+    setStatus('Auth view shown.', '');
 }
 
 function showDashboard() {
@@ -290,19 +316,24 @@ function showDashboard() {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     const targetTab = document.querySelector(`.tab-btn[data-tab="${currentActiveTab}"]`) || document.querySelector('.tab-btn[data-tab="cars"]');
     if (targetTab) { targetTab.classList.add('active'); targetTab.click(); }
+    setStatus('Dashboard loaded.', '');
 }
 
 async function checkSystemState() {
-    console.log('Checking system state...');
+    setStatus('Checking system state...', 'Querying database...');
     try {
         const q = query(collection(db, 'users'), limit(1));
         const snapshot = await getDocs(q);
-        console.log('System state check: users found?', !snapshot.empty);
-        if (snapshot.empty) renderSetupForm();
-        else renderLoginForm();
+        if (snapshot.empty) {
+            setStatus('No users found.', 'Showing setup form...');
+            renderSetupForm();
+        } else {
+            setStatus('Users found.', 'Showing login form...');
+            renderLoginForm();
+        }
     } catch (error) {
-        console.error('System state check error:', error);
-        showAuthMessage(`System Error: ${error.message}`);
+        showErrorOnScreen(`System check error: ${error.message}`);
+        console.error('checkSystemState error:', error);
     }
 }
 
@@ -333,11 +364,13 @@ async function handleSetup(e) {
     const securityPin = document.getElementById('securityPin').value;
 
     if (!/^0\d{9}$/.test(phone)) {
-        showAuthMessage('Error: Phone must start with 0 and be exactly 10 digits.');
+        if (showAuthMessage) showAuthMessage('Error: Phone must start with 0 and be exactly 10 digits.');
+        else alert('Error: Phone must start with 0 and be exactly 10 digits.');
         return;
     }
     if (!/^\d{4}$/.test(securityPin)) {
-        showAuthMessage('Error: Security PIN must be exactly 4 digits.');
+        if (showAuthMessage) showAuthMessage('Error: Security PIN must be exactly 4 digits.');
+        else alert('Error: Security PIN must be exactly 4 digits.');
         return;
     }
 
@@ -345,7 +378,8 @@ async function handleSetup(e) {
         const q = query(collection(db, 'users'), where('username', '==', username));
         const usernameSnapshot = await getDocs(q);
         if (!usernameSnapshot.empty) {
-            showAuthMessage('Error: Username already exists.');
+            if (showAuthMessage) showAuthMessage('Error: Username already exists.');
+            else alert('Error: Username already exists.');
             return;
         }
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -355,9 +389,11 @@ async function handleSetup(e) {
             notes: '', isProtected: true, securityPin, rememberSession: false
         });
         if (logAction) await logAction({ uid, username }, 'SYSTEM_SETUP', { text: 'System initialized with Super Admin' });
-        showAuthMessage('Success: Super Admin created successfully.', 'success');
+        if (showAuthMessage) showAuthMessage('Success: Super Admin created successfully.', 'success');
+        else alert('Success: Super Admin created successfully.');
     } catch (error) {
-        handleFirebaseError(error);
+        if (handleFirebaseError) handleFirebaseError(error);
+        else alert('Error: ' + error.message);
     }
 }
 
@@ -389,14 +425,17 @@ async function handleLogin(e) {
     const rememberMe = rememberEl ? rememberEl.checked : false;
 
     if (!email || !password) {
-        showAuthMessage('Error: Email and password are required.');
+        if (showAuthMessage) showAuthMessage('Error: Email and password are required.');
+        else alert('Error: Email and password are required.');
         return;
     }
 
     try {
         const lockStatus = await isLoginLocked(email);
         if (lockStatus.locked) {
-            showAuthMessage(`Too many failed attempts. Try again after ${formatRemainingLock(lockStatus.remainingMs)}.`);
+            const msg = `Too many failed attempts. Try again after ${formatRemainingLock(lockStatus.remainingMs)}.`;
+            if (showAuthMessage) showAuthMessage(msg);
+            else alert(msg);
             if (logAction) await logAction({ username: email }, 'LOGIN_FAILED', { text: `Locked account login attempt for ${email}` });
             return;
         }
@@ -407,7 +446,8 @@ async function handleLogin(e) {
 
         const userDoc = await getDoc(doc(db, 'users', uid));
         if (!userDoc.exists()) {
-            showAuthMessage('Error: User data not found.');
+            if (showAuthMessage) showAuthMessage('Error: User data not found.');
+            else alert('Error: User data not found.');
             await signOut(auth);
             return;
         }
@@ -415,7 +455,8 @@ async function handleLogin(e) {
         if (userData.status === 'suspended') {
             await signOut(auth);
             if (logAction) await logAction({ username: email }, 'LOGIN_FAILED', { text: `Suspended account attempt: ${email}` });
-            showAuthMessage('Access Denied: Your account is suspended.');
+            if (showAuthMessage) showAuthMessage('Access Denied: Your account is suspended.');
+            else alert('Access Denied: Your account is suspended.');
             return;
         }
 
@@ -427,13 +468,16 @@ async function handleLogin(e) {
         try { failInfo = await recordFailedLogin(email); } catch (_) {}
         if (logAction) await logAction({ username: email }, 'LOGIN_FAILED', { text: `Failed login attempt for ${email}` });
         if (failInfo && failInfo.locked) {
-            showAuthMessage(`Too many failed attempts. Account locked for 15 minutes.`);
+            if (showAuthMessage) showAuthMessage(`Too many failed attempts. Account locked for 15 minutes.`);
+            else alert(`Too many failed attempts. Account locked for 15 minutes.`);
         } else if (failInfo && failInfo.failCount) {
             const left = MAX_LOGIN_ATTEMPTS - failInfo.failCount;
-            handleFirebaseError(error);
-            if (left > 0) showAuthMessage(`Login failed. ${left} attempt${left === 1 ? '' : 's'} remaining before lock.`, 'warning');
+            if (handleFirebaseError) handleFirebaseError(error);
+            else alert('Login failed: ' + error.message);
+            if (left > 0 && showAuthMessage) showAuthMessage(`Login failed. ${left} attempt${left === 1 ? '' : 's'} remaining before lock.`, 'warning');
         } else {
-            handleFirebaseError(error);
+            if (handleFirebaseError) handleFirebaseError(error);
+            else alert('Login failed: ' + error.message);
         }
     }
 }
@@ -449,18 +493,21 @@ async function handleLogout() {
         showAuthView();
         await checkSystemState();
     } catch (error) {
-        handleFirebaseError(error);
+        if (handleFirebaseError) handleFirebaseError(error);
+        else alert('Logout error: ' + error.message);
     }
 }
 
 function renderChangePasswordForm() {
     if (!getCurrentUser) {
-        showDashboardMessage('Error: User data not available.', 'error');
+        if (showDashboardMessage) showDashboardMessage('Error: User data not available.', 'error');
+        else alert('Error: User data not available.');
         return;
     }
     const userData = getCurrentUser();
     if (!userData || !auth.currentUser) {
-        showDashboardMessage('You must be logged in to change password.', 'error');
+        if (showDashboardMessage) showDashboardMessage('You must be logged in to change password.', 'error');
+        else alert('You must be logged in to change password.');
         return;
     }
     const container = document.getElementById('dashboard-container');
@@ -494,7 +541,8 @@ function renderChangePasswordForm() {
 async function handleChangePassword(e) {
     e.preventDefault();
     if (!getCurrentUser) {
-        showDashboardMessage('Error: User data not available.', 'error');
+        if (showDashboardMessage) showDashboardMessage('Error: User data not available.', 'error');
+        else alert('Error: User data not available.');
         return;
     }
     const userData = getCurrentUser();
@@ -510,15 +558,18 @@ async function handleChangePassword(e) {
     const confirmPassword = confirmEl.value;
 
     if (newPassword.length < 6) {
-        showDashboardMessage('Error: New password must be at least 6 characters.', 'error');
+        if (showDashboardMessage) showDashboardMessage('Error: New password must be at least 6 characters.', 'error');
+        else alert('Error: New password must be at least 6 characters.');
         return;
     }
     if (newPassword !== confirmPassword) {
-        showDashboardMessage('Error: New password and confirmation do not match.', 'error');
+        if (showDashboardMessage) showDashboardMessage('Error: New password and confirmation do not match.', 'error');
+        else alert('Error: New password and confirmation do not match.');
         return;
     }
     if (currentPassword === newPassword) {
-        showDashboardMessage('Error: New password must be different from the current password.', 'error');
+        if (showDashboardMessage) showDashboardMessage('Error: New password must be different from the current password.', 'error');
+        else alert('Error: New password must be different from the current password.');
         return;
     }
 
@@ -533,7 +584,8 @@ async function handleChangePassword(e) {
             targetName: userData.username,
             text: `Password changed by ${userData.username}`
         });
-        showDashboardMessage('Password updated successfully.', 'success');
+        if (showDashboardMessage) showDashboardMessage('Password updated successfully.', 'success');
+        else alert('Password updated successfully.');
         currentEl.value = ''; newEl.value = ''; confirmEl.value = '';
         setTimeout(() => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -542,8 +594,13 @@ async function handleChangePassword(e) {
             else { const carsTab = document.querySelector('.tab-btn[data-tab="cars"]'); if (carsTab) { carsTab.classList.add('active'); carsTab.click(); } }
         }, 1500);
     } catch (error) {
-        handleFirebaseError(error);
+        if (handleFirebaseError) handleFirebaseError(error);
+        else alert('Password change error: ' + error.message);
     } finally {
         if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Update Password'; }
     }
 }
+
+// نهاية الملف
+console.log('app.js execution completed.');
+setStatus('App initialization complete.', 'Waiting for auth...');
