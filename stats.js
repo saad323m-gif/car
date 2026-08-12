@@ -6,8 +6,6 @@
 
 import { db } from "./firebase.js";
 import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { showDashboardMessage } from "./messageManager.js";
-import { setLoading, UI_TEXTS } from "./loadingManager.js";
 import { isAdmin, renderAccessDenied, daysUntil } from "./utils.js";
 import { renderCarsView } from "./cars.js";
 import { renderDashboard } from "./members.js";
@@ -18,17 +16,21 @@ let currentUserData = null;
 export const setStatsCurrentUser = (data) => { currentUserData = data; };
 
 export async function renderStatsView() {
-    if (!isAdmin(currentUserData)) { renderAccessDenied(); return; }
+    if (!isAdmin(currentUserData)) {
+        renderAccessDenied();
+        return;
+    }
 
     const container = document.getElementById('dashboard-container');
     container.innerHTML = `
         <h2>System Statistics</h2>
         <div class="divider"></div>
-        <div class="stats-grid" id="stats-grid"></div>
+        <div class="stats-grid" id="stats-grid">
+            <p class="loading-text">Calculating stats...</p>
+        </div>
     `;
 
     const grid = document.getElementById('stats-grid');
-    setLoading(grid, UI_TEXTS.LOADING);
 
     try {
         const usersSnap = await getDocs(collection(db, 'users'));
@@ -100,13 +102,17 @@ export async function renderStatsView() {
                     if (filter) sessionStorage.setItem('carsFilter', filter);
                     else sessionStorage.removeItem('carsFilter');
                     renderCarsView();
-                } else if (nav === 'members') renderDashboard();
-                else if (nav === 'requests') renderRequestsView();
-                else if (nav === 'logs') renderLogsView();
+                } else if (nav === 'members') {
+                    renderDashboard();
+                } else if (nav === 'requests') {
+                    renderRequestsView();
+                } else if (nav === 'logs') {
+                    renderLogsView();
+                }
             });
         });
 
     } catch (error) {
-        grid.innerHTML = `<p class="error">${UI_TEXTS.ERROR_PREFIX}${error.message}</p>`;
+        grid.innerHTML = '<p class="error">Error loading stats: ' + error.message + '</p>';
     }
 }
