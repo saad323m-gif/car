@@ -4,7 +4,7 @@
  */
 
 import { db } from "./firebase.js";
-import { collection, query, where, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, query, where, limit, startAfter, getDocs, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import {
     isAdmin, renderAccessDenied, formatDateTime, formatCarLabel, daysUntil
 } from "./utils.js";
@@ -42,6 +42,9 @@ export function renderSearchView() {
     `;
 
     document.getElementById('search-btn').addEventListener('click', () => handleSearch(false));
+    document.getElementById('search-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSearch(false);
+    });
 }
 
 async function handleSearch(loadMore = false) {
@@ -69,26 +72,62 @@ async function handleSearch(loadMore = false) {
         const endTerm = term + '\uf8ff';
 
         if (currentSearchCategory === 'users') {
-            q = query(
-                collection(db, 'users'),
-                where('username', '>=', term),
-                where('username', '<=', endTerm),
-                limit(10)
-            );
+            if (loadMore && lastVisibleSearch) {
+                q = query(
+                    collection(db, 'users'),
+                    where('username', '>=', term),
+                    where('username', '<=', endTerm),
+                    orderBy('username'),
+                    startAfter(lastVisibleSearch),
+                    limit(10)
+                );
+            } else {
+                q = query(
+                    collection(db, 'users'),
+                    where('username', '>=', term),
+                    where('username', '<=', endTerm),
+                    orderBy('username'),
+                    limit(10)
+                );
+            }
         } else if (currentSearchCategory === 'cars') {
-            q = query(
-                collection(db, 'cars'),
-                where('plateIdentifier', '>=', term),
-                where('plateIdentifier', '<=', endTerm),
-                limit(10)
-            );
+            if (loadMore && lastVisibleSearch) {
+                q = query(
+                    collection(db, 'cars'),
+                    where('plateIdentifier', '>=', term),
+                    where('plateIdentifier', '<=', endTerm),
+                    orderBy('plateIdentifier'),
+                    startAfter(lastVisibleSearch),
+                    limit(10)
+                );
+            } else {
+                q = query(
+                    collection(db, 'cars'),
+                    where('plateIdentifier', '>=', term),
+                    where('plateIdentifier', '<=', endTerm),
+                    orderBy('plateIdentifier'),
+                    limit(10)
+                );
+            }
         } else if (currentSearchCategory === 'logs') {
-            q = query(
-                collection(db, 'logs'),
-                where('details', '>=', term),
-                where('details', '<=', endTerm),
-                limit(10)
-            );
+            if (loadMore && lastVisibleSearch) {
+                q = query(
+                    collection(db, 'logs'),
+                    where('details', '>=', term),
+                    where('details', '<=', endTerm),
+                    orderBy('details'),
+                    startAfter(lastVisibleSearch),
+                    limit(10)
+                );
+            } else {
+                q = query(
+                    collection(db, 'logs'),
+                    where('details', '>=', term),
+                    where('details', '<=', endTerm),
+                    orderBy('details'),
+                    limit(10)
+                );
+            }
         }
 
         const snapshot = await getDocs(q);
