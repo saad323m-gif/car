@@ -1,7 +1,6 @@
 /**
  * Stats Module - Car Management System
  * English only | Latin digits only | Production-ready
- * Stats cards are clickable and navigate to relevant views
  */
 
 import { db } from "./firebase.js";
@@ -43,6 +42,7 @@ export async function renderStatsView() {
 
         let expiredCars = 0;
         let warningCars = 0;
+        let assignedCars = 0;
 
         carsSnap.forEach(doc => {
             const data = doc.data();
@@ -51,6 +51,7 @@ export async function renderStatsView() {
             const minDiff = Math.min(licDiff, insDiff);
             if (minDiff < 0) expiredCars++;
             else if (minDiff <= 15) warningCars++;
+            if (data.currentUserId) assignedCars++;
         });
 
         grid.innerHTML = `
@@ -69,6 +70,10 @@ export async function renderStatsView() {
             <div class="stat-card clickable" data-nav="cars" data-filter="all" title="View all cars">
                 <div class="stat-value">${carsSnap.size}</div>
                 <div class="stat-label">Total Cars</div>
+            </div>
+            <div class="stat-card success clickable" data-nav="cars" data-filter="all" title="View assigned cars">
+                <div class="stat-value">${assignedCars}</div>
+                <div class="stat-label">Assigned Cars</div>
             </div>
             <div class="stat-card danger clickable" data-nav="cars" data-filter="expired" title="View expired cars">
                 <div class="stat-value">${expiredCars}</div>
