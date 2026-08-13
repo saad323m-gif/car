@@ -12,6 +12,8 @@ body {
     border: 2px solid #e3f2fd;
     border-radius: 10px;
     margin: 10px;
+    display: flex;
+    flex-direction: column;
 }
 
 /* ========== Header ========== */
@@ -23,10 +25,11 @@ header {
     padding: 15px 25px;
     border-bottom: 1px solid #e3f2fd;
     min-height: 70px;
+    flex-shrink: 0;
 }
 .header-left { flex: 1; }
 .header-center { flex: 2; text-align: center; }
-.header-right { flex: 1; display: flex; justify-content: flex-end; }
+.header-right { flex: 1; display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
 .header-logo { width: 40px; height: 40px; object-fit: contain; }
 #datetime { font-size: 1rem; font-weight: bold; color: #1976d2; }
 
@@ -53,20 +56,15 @@ header {
     cursor: pointer;
     font-weight: bold;
     transition: background-color 0.3s;
-    margin-right: 10px;
 }
 .btn-change-password:hover { background-color: #1565c0; }
-
-.header-right {
-    align-items: center;
-}
 
 /* ========== Layout ========== */
 main {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     flex-grow: 1;
     width: 100%;
     padding: 20px;
@@ -211,11 +209,13 @@ main {
     display: flex;
     gap: 10px;
     margin-bottom: 20px;
+    flex-wrap: wrap;
 }
-.search-bar input { flex: 3; }
-.search-bar select { flex: 1; }
+.search-bar input { flex: 3; min-width: 180px; }
+.search-bar select { flex: 1; min-width: 120px; }
 .search-bar button {
     flex: 1;
+    min-width: 100px;
     padding: 10px;
 }
 
@@ -226,6 +226,10 @@ main {
     text-align: center;
     font-weight: 600;
     min-height: 24px;
+    transition: opacity 0.4s ease;
+}
+.message-box.fade-out {
+    opacity: 0;
 }
 .error { color: #d32f2f; }
 .success { color: #388e3c; }
@@ -408,6 +412,7 @@ h4 {
 .action-btn-activity:hover { background: #1565c0; }
 .action-btn-unlink { background: #f57c00; }
 .action-btn-unlink:hover { background: #ef6c00; }
+
 .card-body {
     padding: 20px;
     display: none;
@@ -419,7 +424,7 @@ h4 {
 .detail-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
 }
 .detail-item {
     border: 1px solid #e3f2fd;
@@ -441,6 +446,7 @@ h4 {
     word-wrap: break-word;
     overflow-wrap: break-word;
     white-space: normal;
+    line-height: 1.4;
 }
 
 .status-active { color: #388e3c; font-weight: bold; }
@@ -481,7 +487,7 @@ h4 {
 .date-warning { color: #f57c00; font-weight: bold; }
 .date-expired { color: #d32f2f; font-weight: bold; }
 
-/* ========== UAE Plate - Fixed Size ========== */
+/* ========== UAE Plate - FIXED SIZE ========== */
 .plate-wrapper {
     display: flex;
     flex-direction: column;
@@ -520,64 +526,76 @@ h4 {
     background: #fff;
     border: 2px solid #000;
     border-radius: 8px;
-    padding: 8px 12px;
+    padding: 8px 14px;
     display: inline-flex;
     align-items: center;
-    gap: 12px;
+    gap: 14px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    min-width: 260px;
+    width: 290px;
+    min-width: 290px;
+    max-width: 290px;
+    height: 68px;
+    box-sizing: border-box;
 }
 
 .plate-top-bar {
-    width: 100%;
+    width: 70px;
     height: 5px;
-    margin-bottom: 5px;
+    margin-bottom: 4px;
     border-radius: 2px;
+    flex-shrink: 0;
 }
 
 .plate-emirate {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: bold;
     text-transform: uppercase;
     color: #000;
     text-align: center;
-    max-width: 90px;
-    line-height: 1.2;
+    width: 70px;
+    max-width: 70px;
+    line-height: 1.15;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex-shrink: 0;
 }
 
-/* Fixed-width monospace for plate number & code so size never changes */
 .plate-number {
     font-family: 'Courier New', Courier, monospace;
-    font-size: 1.7rem;
+    font-size: 1.65rem;
     font-weight: bold;
-    letter-spacing: 3px;
+    letter-spacing: 2px;
     color: #000;
     font-variant-numeric: tabular-nums;
-    width: 6ch;
-    min-width: 6ch;
-    max-width: 6ch;
+    width: 7.2ch;
+    min-width: 7.2ch;
+    max-width: 7.2ch;
     text-align: center;
     display: inline-block;
     overflow: hidden;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .plate-code {
     font-family: 'Courier New', Courier, monospace;
-    font-size: 1.4rem;
+    font-size: 1.35rem;
     font-weight: bold;
     color: #fff;
     background: #000;
-    padding: 2px 10px;
+    padding: 3px 8px;
     border-radius: 4px;
-    letter-spacing: 2px;
+    letter-spacing: 1px;
     font-variant-numeric: tabular-nums;
-    width: 3.5ch;
-    min-width: 3.5ch;
+    width: 3.8ch;
+    min-width: 3.8ch;
+    max-width: 3.8ch;
     text-align: center;
     display: inline-block;
+    overflow: hidden;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 /* ========== Timeline ========== */
@@ -700,13 +718,15 @@ h4 {
     align-items: center;
     gap: 6px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    height: 32px;
 }
 .mini-plate-emirate {
     font-size: 0.55rem;
     font-weight: bold;
     text-transform: uppercase;
     color: #000;
-    max-width: 50px;
+    width: 42px;
+    max-width: 42px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -714,15 +734,19 @@ h4 {
 }
 .mini-plate-number {
     font-family: 'Courier New', Courier, monospace;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-weight: bold;
-    letter-spacing: 1.5px;
+    letter-spacing: 1px;
     color: #000;
     font-variant-numeric: tabular-nums;
+    width: 5.5ch;
+    text-align: center;
+    overflow: hidden;
+    white-space: nowrap;
 }
 .mini-plate-code {
     font-family: 'Courier New', Courier, monospace;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-weight: bold;
     color: #fff;
     background: #000;
@@ -730,11 +754,35 @@ h4 {
     border-radius: 3px;
     letter-spacing: 1px;
     font-variant-numeric: tabular-nums;
+    width: 2.8ch;
+    text-align: center;
+    overflow: hidden;
+    white-space: nowrap;
 }
 .no-cars-label {
     font-size: 0.85rem;
     color: #999;
     font-style: italic;
+}
+
+/* ========== Footer ========== */
+#app-footer {
+    width: 100%;
+    text-align: center;
+    padding: 16px 20px;
+    border-top: 1px solid #e3f2fd;
+    background: #fafafa;
+    color: #666;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+    margin-top: auto;
+}
+#app-footer p {
+    margin: 2px 0;
+}
+.footer-dev {
+    font-size: 0.78rem;
+    color: #999;
 }
 
 /* ========== Responsive ========== */
@@ -759,21 +807,28 @@ h4 {
         font-size: 0.9rem;
     }
     .plate-container {
-        min-width: 220px;
-        gap: 8px;
+        width: 260px;
+        min-width: 260px;
+        max-width: 260px;
+        height: 62px;
+        gap: 10px;
         padding: 6px 10px;
     }
     .plate-number {
         font-size: 1.4rem;
-        letter-spacing: 2px;
-        width: 6ch;
-        min-width: 6ch;
-        max-width: 6ch;
+        width: 6.5ch;
+        min-width: 6.5ch;
+        max-width: 6.5ch;
     }
     .plate-code {
         font-size: 1.2rem;
         width: 3.5ch;
         min-width: 3.5ch;
+        max-width: 3.5ch;
+    }
+    .plate-emirate, .plate-top-bar {
+        width: 60px;
+        max-width: 60px;
     }
     .action-buttons {
         gap: 6px;
