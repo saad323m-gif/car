@@ -17,12 +17,6 @@ let currentUserData = null;
 
 export const setLogsCurrentUser = (data) => { currentUserData = data; };
 
-/**
- * Write an immutable log entry
- * @param {object} actor - { uid, username }
- * @param {string} actionType
- * @param {object} details - { targetId, targetName, assigneeId, text }
- */
 export async function logAction(actor, actionType, details = {}) {
     try {
         await addDoc(collection(db, 'logs'), {
@@ -129,7 +123,6 @@ function renderLogTimelineItem(container, data) {
 
     const dateStr = formatDateTime(data.timestamp);
 
-    // Prefer targetName (which now includes plate + code + carId) when available
     let extra = '';
     if (data.targetName) {
         extra = `<br><strong>Target:</strong> ${data.targetName}`;
