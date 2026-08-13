@@ -67,8 +67,8 @@ export function renderCarsView() {
                         <input type="text" id="car-owner" required>
                     </div>
                     <div class="form-group">
-                        <label>VIN (Unique)</label>
-                        <input type="text" id="car-vin" required maxlength="17">
+                        <label>VIN</label>
+                        <input type="text" id="car-vin" required placeholder="Vehicle Identification Number">
                     </div>
                     <div class="form-group">
                         <label>License Expiry</label>
@@ -108,7 +108,6 @@ export function renderCarsView() {
         lastVisibleCar = null;
         fetchCars(false);
     } else {
-        // Regular user view
         container.innerHTML = `
             <h2>My Assigned Cars</h2>
             <div class="divider"></div>
@@ -216,7 +215,6 @@ async function handleAddCar(e) {
     const plateIdentifier = `${plateNum}-${plateCode.toLowerCase()}-${emirate.toLowerCase()}`;
 
     try {
-        // Uniqueness checks
         const plateQ = query(collection(db, 'cars'), where('plateIdentifier', '==', plateIdentifier));
         const plateSnap = await getDocs(plateQ);
         if (!plateSnap.empty) throw new Error('This plate combination already exists.');
@@ -295,7 +293,24 @@ async function fetchCars(loadMore = false) {
         lastVisibleCar = snapshot.docs[snapshot.docs.length - 1];
         if (!loadMore) listContainer.innerHTML = '';
 
-        snapshot.forEach((d) => renderCarCard(d.id, d.data(), false));
+        const filter = sessionStorage.getItem('carsFilter');
+        let docs = snapshot.docs;
+
+        if (filter === 'expired' || filter === 'warning') {
+            docs = docs.filter(d => {
+                const data = d.data();
+                const minDiff = Math.min(daysUntil(data.licenseExpiry), daysUntil(data.insuranceExpiry));
+                if (filter === 'expired') return minDiff < 0;
+                if (filter === 'warning') return minDiff >= 0 && minDiff <= 15;
+                return true;
+            });
+        }
+
+        if (docs.length === 0 && !loadMore) {
+            listContainer.innerHTML = '<p style="text-align:center; color:#666;">No cars match the current filter.</p>';
+        } else {
+            docs.forEach((d) => renderCarCard(d.id, d.data(), false));
+        }
 
         if (loadMoreContainer) {
             if (snapshot.size === 10) {
@@ -308,6 +323,9 @@ async function fetchCars(loadMore = false) {
                 loadMoreContainer.innerHTML = '';
             }
         }
+
+        // Clear filter after applying once
+        if (filter) sessionStorage.removeItem('carsFilter');
     } catch (error) {
         if (listContainer) {
             listContainer.innerHTML = `<p class="error">Error loading cars: ${error.message}</p>`;
@@ -451,7 +469,6 @@ function renderCarCard(id, data, isUserView = false) {
 
     listContainer.appendChild(card);
 
-    // Toggle open/close — bind via card reference (safe, no null)
     const headerEl = card.querySelector(`#header-${id}`);
     if (headerEl) {
         headerEl.addEventListener('click', (e) => {
@@ -504,7 +521,6 @@ async function handleCarAction(id, action, data, topBarColor) {
     }
 }
 
-/* ===================== EDIT CAR ===================== */
 function renderEditCarForm(carId, data) {
     const editArea = document.getElementById(`edit-area-${carId}`);
     if (!editArea) return;
@@ -544,7 +560,7 @@ function renderEditCarForm(carId, data) {
             </div>
             <div class="form-group">
                 <label>VIN</label>
-                <input type="text" id="edit-vin-${carId}" value="${data.vin}" required maxlength="17">
+                <input type="text" id="edit-vin-${carId}" value="${data.vin}" required>
             </div>
             <div class="form-group">
                 <label>License Expiry</label>
@@ -598,14 +614,12 @@ async function handleSaveEditCar(carId, originalData) {
     const plateIdentifier = `${plateNum}-${plateCode.toLowerCase()}-${emirate.toLowerCase()}`;
 
     try {
-        // Check plate uniqueness (exclude current car)
         if (plateIdentifier !== originalData.plateIdentifier) {
             const plateQ = query(collection(db, 'cars'), where('plateIdentifier', '==', plateIdentifier));
             const plateSnap = await getDocs(plateQ);
             if (!plateSnap.empty) throw new Error('This plate combination already exists.');
         }
 
-        // Check VIN uniqueness (exclude current car)
         if (vin !== originalData.vin) {
             const vinQ = query(collection(db, 'cars'), where('vin', '==', vin));
             const vinSnap = await getDocs(vinQ);
@@ -640,7 +654,6 @@ async function handleSaveEditCar(carId, originalData) {
     }
 }
 
-/* ===================== PRINT ===================== */
 function handlePrintCard(data, topBarColor) {
     try {
         const label = formatCarLabel(data);
@@ -666,7 +679,7 @@ function handlePrintCard(data, topBarColor) {
         .plate-container { display: inline-flex; align-items: center; gap: 14px; border: 2px solid #000; border-radius: 8px; padding: 10px 18px; margin: 16px 0; }
         .plate-top-bar { width: 100%; height: 5px; margin-bottom: 5px; border-radius: 2px; background: ${topBarColor || '#666'}; }
         .plate-emirate { font-size: 12px; font-weight: bold; text-transform: uppercase; }
-        .plate-number { font-family: 'Courier New', monospace; font-size: 28px; font-weight: bold; letter-spacing: 3px; font-variant-numeric: tabular-nums; width: 6ch; text-align: center; display: inline-block; }
+        .plate-number { font-family: 'Courier New', monospace; font-size: 28px; font-weight: bold; letter-spacing: 3px; font-variant-numeric: tabular-nums; width: 7ch; text-align: center; display: inline-block; }
         .plate-code { font-family: 'Courier New', monospace; font-size: 22px; font-weight: bold; color: #fff; background: #000; padding: 2px 8px; border-radius: 4px; letter-spacing: 2px; }
         .details { text-align: left; max-width: 420px; margin: 0 auto; }
         .detail-row { margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
@@ -699,7 +712,6 @@ function handlePrintCard(data, topBarColor) {
 </body>
 </html>`;
 
-        // Use hidden iframe — more reliable than window.open on mobile (popup blockers)
         const iframe = document.createElement('iframe');
         iframe.setAttribute('aria-hidden', 'true');
         iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
@@ -722,7 +734,6 @@ function handlePrintCard(data, topBarColor) {
             }, 1500);
         };
 
-        // Wait for content to be ready
         if (iframe.contentWindow.document.readyState === 'complete') {
             setTimeout(triggerPrint, 200);
         } else {
@@ -734,7 +745,6 @@ function handlePrintCard(data, topBarColor) {
     }
 }
 
-/* ===================== HISTORY ===================== */
 async function renderCarHistory(carId, carData) {
     const historyArea = document.getElementById(`history-area-${carId}`);
     if (!historyArea) return;
@@ -746,7 +756,6 @@ async function renderCarHistory(carId, carData) {
     let html = `<div class="history-list"><h4>History for ${carLabel}</h4>`;
 
     try {
-        // Recent logs related to this car
         const logsQuery = query(collection(db, 'logs'), where('targetId', '==', carId), limit(20));
         const logsSnap = await getDocs(logsQuery);
 
@@ -773,7 +782,6 @@ async function renderCarHistory(carId, carData) {
             });
         }
 
-        // Assignment periods
         const assignQuery = query(
             collection(db, 'cars', carId, 'assignments'),
             orderBy('startTime', 'desc'),
@@ -802,7 +810,6 @@ async function renderCarHistory(carId, carData) {
     }
 }
 
-/* ===================== ASSIGN / UNASSIGN ===================== */
 async function renderAssignUserUI(carId) {
     const assignArea = document.getElementById(`assign-area-${carId}`);
     if (!assignArea) return;
