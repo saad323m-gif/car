@@ -1,10 +1,6 @@
 /**
  * Requests Module - Car Management System
  * English only | Latin digits only | Production-ready
- *
- * New logic for regular users:
- * - If plate matches an existing car → auto-link immediately
- * - If no match → create PENDING request for admin
  */
 
 import { db } from "./firebase.js";
@@ -21,7 +17,6 @@ import {
 let currentUserData = null;
 export const setRequestsCurrentUser = (data) => { currentUserData = data; };
 
-/* ===================== ADMIN VIEW ===================== */
 export function renderRequestsView() {
     if (!isAdmin(currentUserData)) {
         renderAccessDenied();
@@ -157,7 +152,6 @@ async function handleApprove(reqId, reqData) {
 
     try {
         if (reqData.type === 'UNLINK') {
-            // Approve Unlink
             const carRef = doc(db, 'cars', reqData.carId);
             const carSnap = await getDoc(carRef);
             const carData = carSnap.exists() ? carSnap.data() : null;
@@ -194,13 +188,11 @@ async function handleApprove(reqId, reqData) {
             fetchRequests();
 
         } else if (reqData.type === 'LINK') {
-            // Check if car already exists
             const plateId = `${reqData.plateNumber}-${reqData.plateCode.toLowerCase()}-${reqData.emirate.toLowerCase()}`;
             const carQ = query(collection(db, 'cars'), where('plateIdentifier', '==', plateId));
             const carSnap = await getDocs(carQ);
 
             if (!carSnap.empty) {
-                // Car exists → assign directly
                 const carDoc = carSnap.docs[0];
                 const carData = carDoc.data();
                 const label = formatCarLabel(carData);
@@ -232,7 +224,6 @@ async function handleApprove(reqId, reqData) {
                 showMessage('Link approved successfully.', 'success', 'dashboard');
                 fetchRequests();
             } else {
-                // Car does not exist → show form to complete details
                 renderCompleteCarForm(reqId, reqData);
             }
         }
@@ -258,8 +249,8 @@ function renderCompleteCarForm(reqId, reqData) {
                 <input type="text" id="cc-owner-${reqId}" required>
             </div>
             <div class="form-group">
-                <label>VIN (Unique)</label>
-                <input type="text" id="cc-vin-${reqId}" required maxlength="17">
+                <label>VIN</label>
+                <input type="text" id="cc-vin-${reqId}" required>
             </div>
             <div class="form-group">
                 <label>License Expiry</label>
@@ -296,7 +287,6 @@ async function handleCompleteAndAssign(reqId, reqData) {
     const notes = document.getElementById(`cc-notes-${reqId}`).value.trim();
 
     try {
-        // VIN uniqueness
         const vinQ = query(collection(db, 'cars'), where('vin', '==', vin));
         const vinSnap = await getDocs(vinQ);
         if (!vinSnap.empty) {
@@ -304,7 +294,6 @@ async function handleCompleteAndAssign(reqId, reqData) {
             return;
         }
 
-        // Generate Car ID
         const counterRef = doc(db, 'counters', 'carId');
         const newCount = await runTransaction(db, async (transaction) => {
             const counterDoc = await transaction.get(counterRef);
@@ -397,15 +386,6 @@ async function handleReject(reqId, reqData) {
     }
 }
 
-/* ===================== USER ACTIONS ===================== */
-
-/**
- * New logic:
- * 1. Build plateIdentifier
- * 2. Search for existing car
- * 3. If found → auto-assign immediately
- * 4. If not found → create PENDING request
- */
 export async function createLinkRequest(e) {
     e.preventDefault();
     if (!isActiveUser(currentUserData)) return;
@@ -424,23 +404,19 @@ export async function createLinkRequest(e) {
     const plateIdentifier = `${plateNum}-${plateCode.toLowerCase()}-${emirate.toLowerCase()}`;
 
     try {
-        // Check if car already exists
         const carQ = query(collection(db, 'cars'), where('plateIdentifier', '==', plateIdentifier));
         const carSnap = await getDocs(carQ);
 
         if (!carSnap.empty) {
-            // ===== AUTO LINK (force re-assign even if already assigned) =====
             const carDoc = carSnap.docs[0];
             const carData = carDoc.data();
             const label = formatCarLabel(carData);
 
-            // Already assigned to this same user?
             if (carData.currentUserId === currentUserData.uid) {
                 showMessage('This car is already assigned to you.', 'warning', 'dashboard');
                 return;
             }
 
-            // If currently assigned to someone else → unassign them first
             if (carData.currentUserId) {
                 const prevAssignQ = query(
                     collection(db, 'cars', carDoc.id, 'assignments'),
@@ -463,7 +439,6 @@ export async function createLinkRequest(e) {
                 });
             }
 
-            // Assign to the requesting user
             await updateDoc(doc(db, 'cars', carDoc.id), {
                 currentUserId: currentUserData.uid,
                 currentUserName: currentUserData.username
@@ -488,12 +463,10 @@ export async function createLinkRequest(e) {
             document.getElementById('request-car-form').reset();
             document.getElementById('request-car-form-wrapper').classList.add('hidden-form');
 
-            // Refresh user cars list
             const { renderCarsView } = await import('./cars.js');
             renderCarsView();
 
         } else {
-            // ===== CREATE PENDING REQUEST =====
             await addDoc(collection(db, 'requests'), {
                 type: 'LINK',
                 userId: currentUserData.uid,
