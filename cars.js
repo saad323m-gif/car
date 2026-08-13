@@ -36,7 +36,7 @@ export function renderCarsView() {
             <div class="divider"></div>
             <button class="btn-add-toggle" id="toggle-add-car">+ Add New Car</button>
             <div id="add-car-form-wrapper" class="hidden-form" style="margin-bottom: 30px;">
-                <form id="add-car-form" style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <form id="add-car-form">
                     <div class="form-group">
                         <label>Plate Number (Digits)</label>
                         <input type="text" id="car-plate-num" required pattern="\\d+" maxlength="6" placeholder="e.g. 12345">
@@ -78,11 +78,11 @@ export function renderCarsView() {
                         <label>Insurance Expiry</label>
                         <input type="date" id="car-insurance-exp" required>
                     </div>
-                    <div class="form-group" style="grid-column: 1 / -1;">
+                    <div class="form-group">
                         <label>Notes</label>
                         <input type="text" id="car-notes">
                     </div>
-                    <div class="form-group" style="grid-column: 1 / -1;">
+                    <div class="form-group">
                         <button type="submit" class="btn" id="btn-submit-car">Add Car</button>
                     </div>
                 </form>
@@ -113,7 +113,7 @@ export function renderCarsView() {
             <div class="divider"></div>
             <button class="btn-add-toggle" id="toggle-request-car">+ Request to Use a Car</button>
             <div id="request-car-form-wrapper" class="hidden-form" style="margin-bottom: 30px;">
-                <form id="request-car-form" style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <form id="request-car-form">
                     <div class="form-group">
                         <label>Plate Number</label>
                         <input type="text" id="req-plate-num" required pattern="\\d+" maxlength="6">
@@ -135,7 +135,7 @@ export function renderCarsView() {
                             <option value="Other">Other</option>
                         </select>
                     </div>
-                    <div class="form-group" style="grid-column: 1 / -1;">
+                    <div class="form-group">
                         <button type="submit" class="btn" id="btn-submit-req">Send Request</button>
                     </div>
                 </form>
@@ -324,7 +324,6 @@ async function fetchCars(loadMore = false) {
             }
         }
 
-        // Clear filter after applying once
         if (filter) sessionStorage.removeItem('carsFilter');
     } catch (error) {
         if (listContainer) {
@@ -430,9 +429,6 @@ function renderCarCard(id, data, isUserView = false) {
                             <span class="plate-code">${data.plateCode}</span>
                         </div>
                     </div>
-                </div>
-                <div class="card-meta">
-                    <span>${data.currentUserName ? 'Assigned' : 'Unassigned'}</span>
                 </div>
             </div>
         </div>
