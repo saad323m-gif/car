@@ -14,13 +14,16 @@
         </div>
         <div id="datetime" class="header-center"></div>
         <div class="header-right">
-            <button id="refresh-btn" class="btn-refresh" title="Refresh Page" onclick="location.reload()" style="display: none;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <!-- أيقونة تحديث الصفحة (ظاهرة للجميع دائماً) -->
+            <button id="refresh-btn" class="btn-refresh" title="Refresh Page" onclick="location.reload()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M23 4v6h-6"></path>
                     <path d="M1 20v-6h6"></path>
                     <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
                 </svg>
             </button>
+
+            <!-- أزرار تحتاج تسجيل دخول -->
             <button id="change-password-btn" class="btn-change-password" style="display: none;">Change Password</button>
             <button id="logout-btn" class="btn-logout" style="display: none;">Logout</button>
         </div>
