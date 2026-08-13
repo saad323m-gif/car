@@ -5,25 +5,55 @@
 
 import { auth } from "./firebase.js";
 
+let messageTimeout = null;
+
 /**
  * Display message in the appropriate message box
- * @param {string} text - Message text
- * @param {string} type - 'success' | 'error' | 'warning'
- * @param {string} target - 'auth' | 'dashboard'
+ * Auto-dismiss after 5 seconds
  */
 export function showMessage(text, type = 'error', target = 'auth') {
     const boxId = target === 'dashboard' ? 'dashboard-message-box' : 'message-box';
     const box = document.getElementById(boxId);
+    if (!box) return;
+
+    if (messageTimeout) {
+        clearTimeout(messageTimeout);
+        messageTimeout = null;
+    }
+
+    box.textContent = text;
+    box.className = `message-box ${type}`;
+    box.style.opacity = '1';
+
+    messageTimeout = setTimeout(() => {
+        box.classList.add('fade-out');
+        setTimeout(() => {
+            box.textContent = '';
+            box.className = 'message-box';
+            box.style.opacity = '1';
+        }, 400);
+    }, 5000);
+}
+
+/**
+ * Clear any visible message immediately (used on tab change)
+ */
+export function clearMessage(target = 'dashboard') {
+    const boxId = target === 'dashboard' ? 'dashboard-message-box' : 'message-box';
+    const box = document.getElementById(boxId);
     if (box) {
-        box.textContent = text;
-        box.className = `message-box ${type}`;
+        if (messageTimeout) {
+            clearTimeout(messageTimeout);
+            messageTimeout = null;
+        }
+        box.textContent = '';
+        box.className = 'message-box';
+        box.style.opacity = '1';
     }
 }
 
 /**
  * Centralized Firebase / general error handler
- * @param {Error} error
- * @param {string} target - 'auth' | 'dashboard'
  */
 export function handleFirebaseError(error, target = 'auth') {
     let message = '';
@@ -64,12 +94,6 @@ export function handleFirebaseError(error, target = 'auth') {
     showMessage(message, 'error', target);
 }
 
-/**
- * Format a Firestore Timestamp or Date to full English datetime with seconds (Asia/Dubai)
- * Example: "12 Aug 2025, 02:30:45 PM"
- * @param {FirebaseFirestore.Timestamp|Date|null} ts
- * @returns {string}
- */
 export function formatDateTime(ts) {
     if (!ts) return 'N/A';
     const date = ts.toDate ? ts.toDate() : new Date(ts);
@@ -85,12 +109,6 @@ export function formatDateTime(ts) {
     });
 }
 
-/**
- * Format a date only (no time)
- * Example: "12 Aug 2025"
- * @param {FirebaseFirestore.Timestamp|Date|null} ts
- * @returns {string}
- */
 export function formatDateOnly(ts) {
     if (!ts) return 'N/A';
     const date = ts.toDate ? ts.toDate() : new Date(ts);
@@ -102,14 +120,6 @@ export function formatDateOnly(ts) {
     });
 }
 
-/**
- * Build a human-readable period string for assignments / timelines
- * Ongoing : "From 12 Aug 2025, 02:30:45 PM to Now"
- * Closed  : "From 12 Aug 2025, 02:30:45 PM to 13 Aug 2025, 09:15:22 AM"
- * @param {FirebaseFirestore.Timestamp|Date|null} start
- * @param {FirebaseFirestore.Timestamp|Date|null} end
- * @returns {string}
- */
 export function formatPeriod(start, end) {
     const startStr = formatDateTime(start);
     if (!end) {
@@ -119,12 +129,6 @@ export function formatPeriod(start, end) {
     return `From ${startStr} to ${endStr}`;
 }
 
-/**
- * Build a consistent car display label used everywhere
- * Example: "UAE-001 | 12345 A (Dubai)"
- * @param {object} carData - must contain carId, plateNumber, plateCode, emirate
- * @returns {string}
- */
 export function formatCarLabel(carData) {
     if (!carData) return 'Unknown Car';
     const id = carData.carId || 'N/A';
@@ -134,27 +138,14 @@ export function formatCarLabel(carData) {
     return `${id} | ${num} ${code} (${emirate})`;
 }
 
-/**
- * Security guard - returns true only if current user is an active admin
- * @param {object|null} userData
- * @returns {boolean}
- */
 export function isAdmin(userData) {
     return !!(userData && userData.role === 'admin' && userData.status === 'active');
 }
 
-/**
- * Security guard - returns true if user is logged in and active
- * @param {object|null} userData
- * @returns {boolean}
- */
 export function isActiveUser(userData) {
     return !!(userData && userData.uid && userData.status === 'active');
 }
 
-/**
- * Simple access denied renderer
- */
 export function renderAccessDenied() {
     const container = document.getElementById('dashboard-container');
     if (container) {
@@ -165,11 +156,6 @@ export function renderAccessDenied() {
     }
 }
 
-/**
- * Calculate days remaining until a date (can be negative)
- * @param {FirebaseFirestore.Timestamp|Date} expiry
- * @returns {number}
- */
 export function daysUntil(expiry) {
     if (!expiry) return 0;
     const today = new Date();
@@ -178,22 +164,12 @@ export function daysUntil(expiry) {
     return Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
 }
 
-/**
- * Return CSS class for expiry status
- * @param {number} days
- * @returns {string}
- */
 export function expiryClass(days) {
     if (days < 0) return 'date-expired';
     if (days <= 15) return 'date-warning';
     return 'date-valid';
 }
 
-/**
- * Safely convert Firestore Timestamp / Date to YYYY-MM-DD for <input type="date">
- * @param {FirebaseFirestore.Timestamp|Date|null|undefined} ts
- * @returns {string}
- */
 export function toDateInputValue(ts) {
     if (!ts) return '';
     try {
