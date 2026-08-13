@@ -20,12 +20,11 @@ import { renderCarsView, setCarsCurrentUser } from "./cars.js";
 import { renderRequestsView, setRequestsCurrentUser } from "./requests.js";
 import { renderSearchView, setSearchCurrentUser } from "./search.js";
 import { renderStatsView, setStatsCurrentUser } from "./stats.js";
-import { showMessage, handleFirebaseError } from "./utils.js";
+import { showMessage, handleFirebaseError, clearMessage } from "./utils.js";
 
 const MAX_LOGIN_ATTEMPTS = 5;
-const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const LOCK_DURATION_MS = 15 * 60 * 1000;
 
-/** Safe Firestore doc id from email */
 function emailToDocId(email) {
     return String(email || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
 }
@@ -60,7 +59,6 @@ async function recordFailedLogin(email) {
     let failCount = (prev.failCount || 0) + 1;
     let lockedUntil = null;
 
-    // Reset counter if previous lock already expired
     if (prev.lockedUntil) {
         const prevLock = prev.lockedUntil.toDate ? prev.lockedUntil.toDate() : new Date(prev.lockedUntil);
         if (prevLock <= new Date()) {
@@ -118,8 +116,16 @@ function updateDateTime() {
     }
 }
 
+function updateCopyrightYear() {
+    const yearEl = document.getElementById('copyright-year');
+    if (yearEl) {
+        yearEl.textContent = new Date().getFullYear();
+    }
+}
+
 window.addEventListener('DOMContentLoaded', () => {
     updateDateTime();
+    updateCopyrightYear();
     setInterval(updateDateTime, 1000);
 
     const logoutBtn = document.getElementById('logout-btn');
@@ -135,6 +141,8 @@ window.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             if (btn.disabled || btn.style.display === 'none') return;
+
+            clearMessage('dashboard');
 
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
@@ -156,7 +164,6 @@ window.addEventListener('DOMContentLoaded', () => {
                 const userData = userDoc.data();
                 userData.uid = user.uid;
 
-                // Sync to all modules
                 setCurrentUser(userData);
                 setCarsCurrentUser(userData);
                 setRequestsCurrentUser(userData);
@@ -164,7 +171,6 @@ window.addEventListener('DOMContentLoaded', () => {
                 setSearchCurrentUser(userData);
                 setStatsCurrentUser(userData);
 
-                // UI visibility by role
                 document.querySelectorAll('.tab-btn').forEach(tab => {
                     if (userData.role === 'admin' && userData.status === 'active') {
                         tab.style.display = 'block';
@@ -359,7 +365,6 @@ async function handleLogin(e) {
     }
 
     try {
-        // Check lock before attempting login
         const lockStatus = await isLoginLocked(email);
         if (lockStatus.locked) {
             showMessage(
@@ -393,13 +398,10 @@ async function handleLogin(e) {
             return;
         }
 
-        // Successful login — clear failed attempts
         await clearLoginAttempts(email);
-
         await updateDoc(doc(db, 'users', uid), { rememberSession: rememberMe });
         await logAction(userData, 'LOGIN', { text: 'User logged in' });
     } catch (error) {
-        // Record failed attempt (wrong password / user-not-found / etc.)
         let failInfo = null;
         try {
             failInfo = await recordFailedLogin(email);
@@ -412,10 +414,7 @@ async function handleLogin(e) {
         });
 
         if (failInfo && failInfo.locked) {
-            showMessage(
-                `Too many failed attempts. Account locked for 15 minutes.`,
-                'error'
-            );
+            showMessage(`Too many failed attempts. Account locked for 15 minutes.`, 'error');
         } else if (failInfo && failInfo.failCount) {
             const left = MAX_LOGIN_ATTEMPTS - failInfo.failCount;
             handleFirebaseError(error);
@@ -448,7 +447,6 @@ async function handleLogout() {
     }
 }
 
-/* ===================== CHANGE PASSWORD ===================== */
 function renderChangePasswordForm() {
     const userData = getCurrentUser();
     if (!userData || !auth.currentUser) {
@@ -458,6 +456,8 @@ function renderChangePasswordForm() {
 
     const container = document.getElementById('dashboard-container');
     if (!container) return;
+
+    clearMessage('dashboard');
 
     container.innerHTML = `
         <h2>Change Password</h2>
