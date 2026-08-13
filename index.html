@@ -10,7 +10,7 @@
 
     <header>
         <div class="header-left">
-            <img src="icon.png" alt="Logo" class="header-logo" id="header-logo" style="display: none; cursor: pointer;">
+            <img src="icon.png" alt="Logo" class="header-logo" id="header-logo" style="display: none;">
         </div>
         <div id="datetime" class="header-center"></div>
         <div class="header-right">
@@ -23,9 +23,7 @@
         <div id="auth-view" class="view-container">
             <img src="icon.png" alt="Logo" class="logo-main" id="main-logo">
             <div id="form-container" class="form-box">
-                <!-- سيتم عرض رسائل التحميل هنا -->
-                <div id="status-message" style="text-align:center; color:#1976d2; font-weight:bold; padding:10px;">Loading system...</div>
-                <div id="progress-details" style="font-size:0.9rem; color:#666; text-align:center; margin-top:5px;"></div>
+                <p class="loading-text">Loading system...</p>
             </div>
             <div id="message-box" class="message-box"></div>
         </div>
@@ -47,13 +45,11 @@
         </div>
     </main>
 
-    <footer style="text-align: center; padding: 15px 0; font-size: 0.85rem; color: #888; border-top: 1px solid #e3f2fd; margin-top: 20px;">
-        &copy; <span id="year"></span> Developer. All rights reserved.
+    <footer id="app-footer">
+        <p>© <span id="copyright-year"></span> Car Management System — All Rights Reserved</p>
+        <p class="footer-dev">Developed with care</p>
     </footer>
 
     <script type="module" src="app.js"></script>
-    <script>
-        document.getElementById('year').textContent = new Date().getFullYear();
-    </script>
 </body>
 </html>
