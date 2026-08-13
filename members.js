@@ -8,7 +8,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import {
     collection, doc, setDoc, getDoc, getDocs, updateDoc,
-    query, where, limit, startAfter
+    query, where, limit, startAfter, orderBy
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { logAction } from "./logs.js";
 import {
@@ -176,9 +176,9 @@ async function fetchUsersForAdmin(loadMore = false) {
     try {
         let q;
         if (loadMore && lastVisibleUser) {
-            q = query(collection(db, 'users'), startAfter(lastVisibleUser), limit(10));
+            q = query(collection(db, 'users'), orderBy('username'), startAfter(lastVisibleUser), limit(10));
         } else {
-            q = query(collection(db, 'users'), limit(10));
+            q = query(collection(db, 'users'), orderBy('username'), limit(10));
         }
 
         const snapshot = await getDocs(q);
@@ -194,8 +194,7 @@ async function fetchUsersForAdmin(loadMore = false) {
         lastVisibleUser = snapshot.docs[snapshot.docs.length - 1];
         if (!loadMore) listContainer.innerHTML = '';
 
-        // Render cards in parallel for better performance on mobile
-        await Promise.all(snapshot.docs.map((d) => renderUserCard(d.id, d.data())));
+        snapshot.docs.forEach((d) => renderUserCard(d.id, d.data()));
 
         if (loadMoreContainer) {
             if (snapshot.size === 10) {
@@ -213,7 +212,7 @@ async function fetchUsersForAdmin(loadMore = false) {
     }
 }
 
-async function renderUserCard(uid, data) {
+function renderUserCard(uid, data) {
     const listContainer = document.getElementById('users-card-list');
     if (!listContainer) return;
 
@@ -245,48 +244,6 @@ async function renderUserCard(uid, data) {
         `;
     }
 
-    // Fetch cars currently assigned to this user
-    let plateItems = [];
-    let miniPlatesHtml = '<span class="no-cars-label">No cars assigned</span>';
-    let headerPlatesHtml = '<span class="no-cars-label">No cars</span>';
-    try {
-        const carsQ = query(collection(db, 'cars'), where('currentUserId', '==', uid));
-        const carsSnap = await getDocs(carsQ);
-        if (!carsSnap.empty) {
-            carsSnap.forEach(d => {
-                const c = d.data();
-                plateItems.push(`
-                    <div class="mini-plate" title="${c.carId || ''}">
-                        <span class="mini-plate-emirate">${c.emirate || ''}</span>
-                        <span class="mini-plate-number">${c.plateNumber || ''}</span>
-                        <span class="mini-plate-code">${c.plateCode || ''}</span>
-                    </div>
-                `);
-            });
-            miniPlatesHtml = `<div class="mini-plates-container">${plateItems.join('')}</div>`;
-
-            // Header: show first plate + Show more if needed
-            if (plateItems.length === 1) {
-                headerPlatesHtml = `<div class="mini-plates-container">${plateItems[0]}</div>`;
-            } else {
-                headerPlatesHtml = `
-                    <div class="mini-plates-container" id="header-plates-visible-${uid}">
-                        ${plateItems[0]}
-                    </div>
-                    <div class="mini-plates-container" id="header-plates-extra-${uid}" style="display:none;">
-                        ${plateItems.slice(1).join('')}
-                    </div>
-                    <button type="button" class="show-more-plates-btn" id="show-more-plates-${uid}">
-                        Show more (${plateItems.length - 1})
-                    </button>
-                `;
-            }
-        }
-    } catch (err) {
-        miniPlatesHtml = '<span class="no-cars-label">Unable to load cars</span>';
-        headerPlatesHtml = '<span class="no-cars-label">Unable to load</span>';
-    }
-
     card.innerHTML = `
         <div class="card-header" id="header-${uid}">
             <div class="card-header-top">
@@ -297,7 +254,7 @@ async function renderUserCard(uid, data) {
                 </div>
             </div>
             <div class="card-header-plates" id="header-plates-${uid}">
-                ${headerPlatesHtml}
+                <span class="no-cars-label">Click to load assigned cars</span>
             </div>
         </div>
         <div class="card-body" id="body-${uid}">
@@ -317,7 +274,7 @@ async function renderUserCard(uid, data) {
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">Assigned Cars</span>
-                        <span class="detail-value">${miniPlatesHtml}</span>
+                        <span class="detail-value" id="cars-detail-${uid}">Click card to load</span>
                     </div>
                 </div>
                 <div style="margin-top: 15px;">${actionsHtml}</div>
@@ -327,12 +284,15 @@ async function renderUserCard(uid, data) {
     `;
     listContainer.appendChild(card);
 
-    // Bind via card reference — avoids null when DOM is mid-update on mobile
     const headerEl = card.querySelector(`#header-${uid}`);
     if (headerEl) {
-        headerEl.addEventListener('click', (e) => {
+        headerEl.addEventListener('click', async (e) => {
             if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
+                const wasOpen = card.classList.contains('open');
                 card.classList.toggle('open');
+                if (!wasOpen) {
+                    await loadUserCars(uid);
+                }
             }
         });
     }
@@ -346,23 +306,77 @@ async function renderUserCard(uid, data) {
             });
         });
     }
+}
 
-    // Show more / show less for header plates
-    const showMoreBtn = card.querySelector(`#show-more-plates-${uid}`);
-    if (showMoreBtn) {
-        showMoreBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const extra = card.querySelector(`#header-plates-extra-${uid}`);
-            if (!extra) return;
-            const isHidden = extra.style.display === 'none' || !extra.style.display;
-            if (isHidden) {
-                extra.style.display = 'flex';
-                showMoreBtn.textContent = 'Show less';
+async function loadUserCars(uid) {
+    const headerPlates = document.getElementById(`header-plates-${uid}`);
+    const carsDetail = document.getElementById(`cars-detail-${uid}`);
+    if (!headerPlates) return;
+
+    if (headerPlates.dataset.loaded === 'true') return;
+    headerPlates.innerHTML = '<span class="no-cars-label">Loading cars...</span>';
+
+    try {
+        const carsQ = query(collection(db, 'cars'), where('currentUserId', '==', uid));
+        const carsSnap = await getDocs(carsQ);
+
+        if (carsSnap.empty) {
+            headerPlates.innerHTML = '<span class="no-cars-label">No cars assigned</span>';
+            if (carsDetail) carsDetail.textContent = 'No cars assigned';
+        } else {
+            const plateItems = [];
+            carsSnap.forEach(d => {
+                const c = d.data();
+                plateItems.push(`
+                    <div class="mini-plate" title="${c.carId || ''}">
+                        <span class="mini-plate-emirate">${c.emirate || ''}</span>
+                        <span class="mini-plate-number">${c.plateNumber || ''}</span>
+                        <span class="mini-plate-code">${c.plateCode || ''}</span>
+                    </div>
+                `);
+            });
+
+            if (plateItems.length === 1) {
+                headerPlates.innerHTML = `<div class="mini-plates-container">${plateItems[0]}</div>`;
             } else {
-                extra.style.display = 'none';
-                showMoreBtn.textContent = `Show more (${plateItems.length - 1})`;
+                headerPlates.innerHTML = `
+                    <div class="mini-plates-container" id="header-plates-visible-${uid}">
+                        ${plateItems[0]}
+                    </div>
+                    <div class="mini-plates-container" id="header-plates-extra-${uid}" style="display:none;">
+                        ${plateItems.slice(1).join('')}
+                    </div>
+                    <button type="button" class="show-more-plates-btn" id="show-more-plates-${uid}">
+                        Show more (${plateItems.length - 1})
+                    </button>
+                `;
+
+                const showMoreBtn = document.getElementById(`show-more-plates-${uid}`);
+                if (showMoreBtn) {
+                    showMoreBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const extra = document.getElementById(`header-plates-extra-${uid}`);
+                        if (!extra) return;
+                        const isHidden = extra.style.display === 'none' || !extra.style.display;
+                        if (isHidden) {
+                            extra.style.display = 'flex';
+                            showMoreBtn.textContent = 'Show less';
+                        } else {
+                            extra.style.display = 'none';
+                            showMoreBtn.textContent = `Show more (${plateItems.length - 1})`;
+                        }
+                    });
+                }
             }
-        });
+
+            if (carsDetail) {
+                carsDetail.innerHTML = `<div class="mini-plates-container">${plateItems.join('')}</div>`;
+            }
+        }
+        headerPlates.dataset.loaded = 'true';
+    } catch (err) {
+        headerPlates.innerHTML = '<span class="no-cars-label">Unable to load cars</span>';
+        if (carsDetail) carsDetail.textContent = 'Unable to load';
     }
 }
 
@@ -417,7 +431,6 @@ async function handleMemberAction(uid, action, username) {
     }
 }
 
-/* ===================== USER ACTIVITY TIMELINE ===================== */
 async function renderUserActivity(uid) {
     const activityArea = document.getElementById(`activity-area-${uid}`);
     if (!activityArea) return;
@@ -426,11 +439,9 @@ async function renderUserActivity(uid) {
     activityArea.innerHTML = '<p class="loading-text" style="font-size: 0.85rem;">Loading activity...</p>';
 
     try {
-        // Actions done BY the user
         const actorQ = query(collection(db, 'logs'), where('actorId', '==', uid), limit(20));
         const actorSnap = await getDocs(actorQ);
 
-        // Actions done TO the user (assignments)
         const assigneeQ = query(collection(db, 'logs'), where('assigneeId', '==', uid), limit(20));
         const assigneeSnap = await getDocs(assigneeQ);
 
@@ -484,7 +495,6 @@ async function renderUserActivity(uid) {
     }
 }
 
-/* ===================== INLINE EDIT ===================== */
 async function renderInlineEditForm(uid) {
     if (!isAdmin(currentUserData)) return;
 
@@ -575,7 +585,6 @@ async function renderInlineEditForm(uid) {
     }
 }
 
-/* ===================== PROTECTED PROFILE EDIT ===================== */
 function renderEditProfileForm() {
     if (!currentUserData || !currentUserData.isProtected) {
         showMessage('Only Super Admin can use this secure edit feature.', 'warning', 'dashboard');
@@ -662,7 +671,6 @@ async function handleEditProtectedProfile(e) {
         return;
     }
 
-    // Optional PIN change validation
     if (newPin || confirmPin) {
         if (!/^\d{4}$/.test(newPin)) {
             showMessage('Error: New Security PIN must be exactly 4 digits.', 'error', 'dashboard');
