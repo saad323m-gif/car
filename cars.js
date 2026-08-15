@@ -855,20 +855,29 @@ async function renderMyCarHistory(carId, carData) {
     let html = `<div class="history-list"><h4>My History for ${carLabel}</h4>`;
 
     try {
+        // استعلام بسيط بدون orderBy (لا يحتاج Composite Index)
         const assignQuery = query(
             collection(db, 'cars', carId, 'assignments'),
             where('userId', '==', currentUserData.uid),
-            orderBy('startTime', 'desc'),
-            limit(10)
+            limit(20)
         );
         const assignSnap = await getDocs(assignQuery);
 
         if (assignSnap.empty) {
             html += '<p class="history-item">No assignment periods found for you.</p>';
         } else {
+            const assignments = [];
+            assignSnap.forEach(doc => assignments.push(doc.data()));
+
+            // ترتيب على العميل
+            assignments.sort((a, b) => {
+                const tA = a.startTime ? (a.startTime.toDate ? a.startTime.toDate().getTime() : new Date(a.startTime).getTime()) : 0;
+                const tB = b.startTime ? (b.startTime.toDate ? b.startTime.toDate().getTime() : new Date(b.startTime).getTime()) : 0;
+                return tB - tA;
+            });
+
             html += '<h4 style="margin-top: 10px;">Your Assignment Periods</h4>';
-            assignSnap.forEach(doc => {
-                const a = doc.data();
+            assignments.slice(0, 10).forEach(a => {
                 const period = formatPeriod(a.startTime, a.endTime);
                 html += `
                     <div class="history-item">
@@ -879,10 +888,11 @@ async function renderMyCarHistory(carId, carData) {
             });
         }
 
+        // جلب السجلات الخاصة بالمستخدم فقط
         const logsQuery = query(
             collection(db, 'logs'),
             where('targetId', '==', carId),
-            limit(20)
+            limit(30)
         );
         const logsSnap = await getDocs(logsQuery);
 
@@ -919,8 +929,9 @@ async function renderMyCarHistory(carId, carData) {
     } catch (error) {
         historyArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error loading history: ${error.message}</p>`;
     }
-}
-
+    
+    }
+    
 async function renderAssignUserUI(carId) {
     const assignArea = document.getElementById(`assign-area-${carId}`);
     if (!assignArea) return;
