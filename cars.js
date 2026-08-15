@@ -422,7 +422,7 @@ function renderCarCard(id, data, isUserView = false) {
     const emirateColors = {
         'Abu Dhabi': '#0070c0',
         'Dubai': '#b91d1d',
-        'Sharjah': '#000000',
+        'Sharjah': '#ff0000000',
         'Ajman': '#ed1c24',
         'Fujairah': '#8a2be2',
         'Umm Al Quwain': '#006400',
@@ -741,11 +741,11 @@ function handlePrintCard(data, topBarColor) {
         .print-header { border-bottom: 2px solid #1976d2; margin-bottom: 16px; padding-bottom: 10px; }
         .print-header h2 { margin: 0; color: #1565c0; font-size: 18px; }
         h3 { margin: 12px 0; font-size: 15px; word-break: break-word; }
-        .plate-container { display: inline-flex; align-items: center; gap: 14px; border: 2px solid #000; border-radius: 8px; padding: 10px 18px; margin: 16px 0; }
+        .plate-container { display: inline-flex; align-items: center; gap: 14px; border: 2px solid #ff0000; border-radius: 8px; padding: 10px 18px; margin: 16px 0; }
         .plate-top-bar { width: 100%; height: 5px; margin-bottom: 5px; border-radius: 2px; background: ${topBarColor || '#666'}; }
         .plate-emirate { font-size: 12px; font-weight: bold; text-transform: uppercase; }
         .plate-number { font-family: 'Courier New', monospace; font-size: 28px; font-weight: bold; letter-spacing: 3px; font-variant-numeric: tabular-nums; width: 7ch; text-align: center; display: inline-block; }
-        .plate-code { font-family: 'Courier New', monospace; font-size: 22px; font-weight: bold; color: #fff; background: #000; padding: 2px 8px; border-radius: 4px; letter-spacing: 2px; }
+        .plate-code { font-family: 'Courier New', monospace; font-size: 22px; font-weight: bold; color: #fff; background: #ff0000; padding: 2px 8px; border-radius: 4px; letter-spacing: 2px; }
         .details { text-align: left; max-width: 420px; margin: 0 auto; }
         .detail-row { margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
         .detail-label { font-weight: bold; color: #1976d2; font-size: 12px; display: inline-block; min-width: 140px; }
