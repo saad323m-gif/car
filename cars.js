@@ -855,7 +855,7 @@ async function renderMyCarHistory(carId, carData) {
     let html = `<div class="history-list"><h4>My History for ${carLabel}</h4>`;
 
     try {
-        // استعلام بسيط بدون orderBy (لا يحتاج Composite Index)
+        // 1. فترات التعيين الخاصة بالمستخدم فقط
         const assignQuery = query(
             collection(db, 'cars', carId, 'assignments'),
             where('userId', '==', currentUserData.uid),
@@ -869,7 +869,6 @@ async function renderMyCarHistory(carId, carData) {
             const assignments = [];
             assignSnap.forEach(doc => assignments.push(doc.data()));
 
-            // ترتيب على العميل
             assignments.sort((a, b) => {
                 const tA = a.startTime ? (a.startTime.toDate ? a.startTime.toDate().getTime() : new Date(a.startTime).getTime()) : 0;
                 const tB = b.startTime ? (b.startTime.toDate ? b.startTime.toDate().getTime() : new Date(b.startTime).getTime()) : 0;
@@ -888,31 +887,49 @@ async function renderMyCarHistory(carId, carData) {
             });
         }
 
-        // جلب السجلات الخاصة بالمستخدم فقط
-        const logsQuery = query(
+        // 2. السجلات الخاصة بالمستخدم فقط (استعلامان منفصلان لتجنب مشكلة القواعد)
+        const actorLogsQuery = query(
             collection(db, 'logs'),
+            where('actorId', '==', currentUserData.uid),
             where('targetId', '==', carId),
-            limit(30)
+            limit(15)
         );
-        const logsSnap = await getDocs(logsQuery);
+        const assigneeLogsQuery = query(
+            collection(db, 'logs'),
+            where('assigneeId', '==', currentUserData.uid),
+            where('targetId', '==', carId),
+            limit(15)
+        );
+
+        const [actorSnap, assigneeSnap] = await Promise.all([
+            getDocs(actorLogsQuery),
+            getDocs(assigneeLogsQuery)
+        ]);
 
         const myLogs = [];
-        logsSnap.forEach(doc => {
-            const log = doc.data();
-            if (log.actorId === currentUserData.uid || log.assigneeId === currentUserData.uid) {
-                myLogs.push(log);
+        actorSnap.forEach(doc => myLogs.push(doc.data()));
+        assigneeSnap.forEach(doc => myLogs.push(doc.data()));
+
+        // إزالة التكرار
+        const uniqueLogs = [];
+        const seen = new Set();
+        myLogs.forEach(log => {
+            const key = (log.timestamp?.seconds || 0) + log.actionType + (log.details || '');
+            if (!seen.has(key)) {
+                seen.add(key);
+                uniqueLogs.push(log);
             }
         });
 
-        myLogs.sort((a, b) => {
+        uniqueLogs.sort((a, b) => {
             const tA = a.timestamp ? a.timestamp.toDate().getTime() : 0;
             const tB = b.timestamp ? b.timestamp.toDate().getTime() : 0;
             return tB - tA;
         });
 
-        if (myLogs.length > 0) {
+        if (uniqueLogs.length > 0) {
             html += '<h4 style="margin-top: 15px;">Related Activity</h4>';
-            myLogs.slice(0, 8).forEach(log => {
+            uniqueLogs.slice(0, 8).forEach(log => {
                 const date = formatDateTime(log.timestamp);
                 html += `
                     <div class="history-item">
@@ -926,11 +943,14 @@ async function renderMyCarHistory(carId, carData) {
 
         html += '</div>';
         historyArea.innerHTML = html;
+
     } catch (error) {
+        console.error(error);
         historyArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error loading history: ${error.message}</p>`;
     }
     
     }
+    
     
 async function renderAssignUserUI(carId) {
     const assignArea = document.getElementById(`assign-area-${carId}`);
