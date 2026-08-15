@@ -34,6 +34,15 @@ export function renderCarsView() {
         container.innerHTML = `
             <h2>Cars Management</h2>
             <div class="divider"></div>
+            
+            <div class="cars-filters" id="cars-filters">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="expired">Expired</button>
+                <button class="filter-btn" data-filter="warning">Expiring Soon</button>
+                <button class="filter-btn" data-filter="assigned">Assigned</button>
+                <button class="filter-btn" data-filter="unassigned">Unassigned</button>
+            </div>
+
             <button class="btn-add-toggle" id="toggle-add-car">+ Add New Car</button>
             <div id="add-car-form-wrapper" class="hidden-form" style="margin-bottom: 30px;">
                 <form id="add-car-form">
@@ -105,6 +114,19 @@ export function renderCarsView() {
         if (addCarForm) {
             addCarForm.addEventListener('submit', handleAddCar);
         }
+
+        // Filters
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const filter = btn.dataset.filter;
+                sessionStorage.setItem('carsFilter', filter);
+                lastVisibleCar = null;
+                fetchCars(false);
+            });
+        });
+
         lastVisibleCar = null;
         fetchCars(false);
     } else {
@@ -293,17 +315,24 @@ async function fetchCars(loadMore = false) {
         lastVisibleCar = snapshot.docs[snapshot.docs.length - 1];
         if (!loadMore) listContainer.innerHTML = '';
 
-        const filter = sessionStorage.getItem('carsFilter');
+        const filter = sessionStorage.getItem('carsFilter') || 'all';
         let docs = snapshot.docs;
 
-        if (filter === 'expired' || filter === 'warning') {
+        if (filter === 'expired') {
+            docs = docs.filter(d => {
+                const data = d.data();
+                return Math.min(daysUntil(data.licenseExpiry), daysUntil(data.insuranceExpiry)) < 0;
+            });
+        } else if (filter === 'warning') {
             docs = docs.filter(d => {
                 const data = d.data();
                 const minDiff = Math.min(daysUntil(data.licenseExpiry), daysUntil(data.insuranceExpiry));
-                if (filter === 'expired') return minDiff < 0;
-                if (filter === 'warning') return minDiff >= 0 && minDiff <= 15;
-                return true;
+                return minDiff >= 0 && minDiff <= 15;
             });
+        } else if (filter === 'assigned') {
+            docs = docs.filter(d => !!d.data().currentUserId);
+        } else if (filter === 'unassigned') {
+            docs = docs.filter(d => !d.data().currentUserId);
         }
 
         if (docs.length === 0 && !loadMore) {
@@ -324,7 +353,7 @@ async function fetchCars(loadMore = false) {
             }
         }
 
-        if (filter) sessionStorage.removeItem('carsFilter');
+        if (filter && filter !== 'all') sessionStorage.removeItem('carsFilter');
     } catch (error) {
         if (listContainer) {
             listContainer.innerHTML = `<p class="error">Error loading cars: ${error.message}</p>`;
@@ -405,6 +434,7 @@ function renderCarCard(id, data, isUserView = false) {
         actionsHtml = `
             <div class="action-buttons">
                 <button type="button" class="action-btn action-btn-unlink" id="req-unlink-${id}">✎ Request Unlink</button>
+                <button type="button" class="action-btn action-btn-history" id="my-history-${id}">📋 My History</button>
             </div>
             <div id="history-area-${id}" style="margin-top: 10px; display:none;"></div>
         `;
@@ -489,6 +519,14 @@ function renderCarCard(id, data, isUserView = false) {
         reqUnlinkBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             createUnlinkRequest(id, data);
+        });
+    }
+
+    const myHistoryBtn = card.querySelector(`#my-history-${id}`);
+    if (myHistoryBtn) {
+        myHistoryBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            renderMyCarHistory(id, data);
         });
     }
 }
@@ -806,6 +844,83 @@ async function renderCarHistory(carId, carData) {
     }
 }
 
+async function renderMyCarHistory(carId, carData) {
+    const historyArea = document.getElementById(`history-area-${carId}`);
+    if (!historyArea) return;
+
+    historyArea.style.display = 'block';
+    historyArea.innerHTML = '<p class="loading-text" style="font-size: 0.85rem;">Loading your history...</p>';
+
+    const carLabel = formatCarLabel(carData);
+    let html = `<div class="history-list"><h4>My History for ${carLabel}</h4>`;
+
+    try {
+        const assignQuery = query(
+            collection(db, 'cars', carId, 'assignments'),
+            where('userId', '==', currentUserData.uid),
+            orderBy('startTime', 'desc'),
+            limit(10)
+        );
+        const assignSnap = await getDocs(assignQuery);
+
+        if (assignSnap.empty) {
+            html += '<p class="history-item">No assignment periods found for you.</p>';
+        } else {
+            html += '<h4 style="margin-top: 10px;">Your Assignment Periods</h4>';
+            assignSnap.forEach(doc => {
+                const a = doc.data();
+                const period = formatPeriod(a.startTime, a.endTime);
+                html += `
+                    <div class="history-item">
+                        <strong>You</strong><br>
+                        ${period}
+                    </div>
+                `;
+            });
+        }
+
+        const logsQuery = query(
+            collection(db, 'logs'),
+            where('targetId', '==', carId),
+            limit(20)
+        );
+        const logsSnap = await getDocs(logsQuery);
+
+        const myLogs = [];
+        logsSnap.forEach(doc => {
+            const log = doc.data();
+            if (log.actorId === currentUserData.uid || log.assigneeId === currentUserData.uid) {
+                myLogs.push(log);
+            }
+        });
+
+        myLogs.sort((a, b) => {
+            const tA = a.timestamp ? a.timestamp.toDate().getTime() : 0;
+            const tB = b.timestamp ? b.timestamp.toDate().getTime() : 0;
+            return tB - tA;
+        });
+
+        if (myLogs.length > 0) {
+            html += '<h4 style="margin-top: 15px;">Related Activity</h4>';
+            myLogs.slice(0, 8).forEach(log => {
+                const date = formatDateTime(log.timestamp);
+                html += `
+                    <div class="history-item">
+                        <span class="action-type">${log.actionType}</span><br>
+                        ${log.details || ''}<br>
+                        <span class="timestamp-meta">${date}</span>
+                    </div>
+                `;
+            });
+        }
+
+        html += '</div>';
+        historyArea.innerHTML = html;
+    } catch (error) {
+        historyArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error loading history: ${error.message}</p>`;
+    }
+}
+
 async function renderAssignUserUI(carId) {
     const assignArea = document.getElementById(`assign-area-${carId}`);
     if (!assignArea) return;
@@ -881,6 +996,10 @@ async function renderAssignUserUI(carId) {
 
 async function handleUnassignUser(carId, data) {
     if (!data.currentUserId || !isAdmin(currentUserData)) return;
+
+    if (!confirm(`Are you sure you want to unassign "${data.currentUserName}" from this car?`)) {
+        return;
+    }
 
     try {
         const label = formatCarLabel(data);

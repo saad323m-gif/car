@@ -402,6 +402,9 @@ async function handleMemberAction(uid, action, username) {
                 text: `Demoted ${username}`
             });
         } else if (action === 'suspend') {
+            if (!confirm(`Are you sure you want to suspend the user "${username}"?`)) {
+                return;
+            }
             await updateDoc(doc(db, 'users', uid), { status: 'suspended' });
             await logAction(currentUserData, 'SUSPEND_USER', {
                 targetId: uid,

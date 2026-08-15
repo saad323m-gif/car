@@ -13,6 +13,7 @@ import {
     showMessage, isAdmin, isActiveUser, renderAccessDenied,
     formatDateTime, formatCarLabel
 } from "./utils.js";
+import { updateRequestsBadge } from "./app.js";
 
 let currentUserData = null;
 export const setRequestsCurrentUser = (data) => { currentUserData = data; };
@@ -186,6 +187,7 @@ async function handleApprove(reqId, reqData) {
 
             showMessage('Unlink approved successfully.', 'success', 'dashboard');
             fetchRequests();
+            updateRequestsBadge();
 
         } else if (reqData.type === 'LINK') {
             const plateId = `${reqData.plateNumber}-${reqData.plateCode.toLowerCase()}-${reqData.emirate.toLowerCase()}`;
@@ -223,6 +225,7 @@ async function handleApprove(reqId, reqData) {
 
                 showMessage('Link approved successfully.', 'success', 'dashboard');
                 fetchRequests();
+                updateRequestsBadge();
             } else {
                 renderCompleteCarForm(reqId, reqData);
             }
@@ -362,6 +365,7 @@ async function handleCompleteAndAssign(reqId, reqData) {
 
         showMessage('Car created and assigned successfully.', 'success', 'dashboard');
         fetchRequests();
+        updateRequestsBadge();
     } catch (error) {
         showMessage(`Error: ${error.message}`, 'error', 'dashboard');
     }
@@ -369,6 +373,10 @@ async function handleCompleteAndAssign(reqId, reqData) {
 
 async function handleReject(reqId, reqData) {
     if (!isAdmin(currentUserData)) return;
+
+    if (!confirm(`Are you sure you want to reject the ${reqData.type} request from ${reqData.userName}?`)) {
+        return;
+    }
 
     try {
         await updateDoc(doc(db, 'requests', reqId), { status: 'REJECTED' });
@@ -381,6 +389,7 @@ async function handleReject(reqId, reqData) {
 
         showMessage('Request rejected.', 'warning', 'dashboard');
         fetchRequests();
+        updateRequestsBadge();
     } catch (error) {
         showMessage(`Error: ${error.message}`, 'error', 'dashboard');
     }
@@ -487,6 +496,7 @@ export async function createLinkRequest(e) {
 
             document.getElementById('request-car-form').reset();
             document.getElementById('request-car-form-wrapper').classList.add('hidden-form');
+            updateRequestsBadge();
         }
     } catch (error) {
         showMessage(`Error: ${error.message}`, 'error', 'dashboard');
@@ -522,6 +532,7 @@ export async function createUnlinkRequest(carId, carData) {
         });
 
         showMessage('Unlink request sent to admin.', 'success', 'dashboard');
+        updateRequestsBadge();
     } catch (error) {
         showMessage(`Error: ${error.message}`, 'error', 'dashboard');
     }

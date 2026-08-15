@@ -138,6 +138,13 @@ window.addEventListener('DOMContentLoaded', () => {
         changePasswordBtn.addEventListener('click', renderChangePasswordForm);
     }
 
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            window.location.reload();
+        });
+    }
+
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             if (btn.disabled || btn.style.display === 'none') return;
@@ -180,6 +187,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 });
 
                 showDashboard();
+                updateRequestsBadge();
             } else {
                 await signOut(auth);
                 showAuthView();
@@ -199,6 +207,7 @@ function showAuthView() {
     const changePassBtn = document.getElementById('change-password-btn');
     const headerLogo = document.getElementById('header-logo');
     const mainLogo = document.getElementById('main-logo');
+    const refreshBtn = document.getElementById('refresh-btn');
 
     if (authView) authView.style.display = 'flex';
     if (dashView) dashView.style.display = 'none';
@@ -206,6 +215,7 @@ function showAuthView() {
     if (changePassBtn) changePassBtn.style.display = 'none';
     if (headerLogo) headerLogo.style.display = 'none';
     if (mainLogo) mainLogo.style.display = 'block';
+    if (refreshBtn) refreshBtn.style.display = 'none';
 }
 
 function showDashboard() {
@@ -215,6 +225,7 @@ function showDashboard() {
     const changePassBtn = document.getElementById('change-password-btn');
     const headerLogo = document.getElementById('header-logo');
     const mainLogo = document.getElementById('main-logo');
+    const refreshBtn = document.getElementById('refresh-btn');
 
     if (authView) authView.style.display = 'none';
     if (dashView) dashView.style.display = 'flex';
@@ -222,6 +233,7 @@ function showDashboard() {
     if (changePassBtn) changePassBtn.style.display = 'block';
     if (headerLogo) headerLogo.style.display = 'block';
     if (mainLogo) mainLogo.style.display = 'none';
+    if (refreshBtn) refreshBtn.style.display = 'block';
 
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     const carsTab = document.querySelector('.tab-btn[data-tab="cars"]');
@@ -557,5 +569,25 @@ async function handleChangePassword(e) {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Update Password';
         }
+    }
+}
+
+export async function updateRequestsBadge() {
+    const badge = document.getElementById('requests-badge');
+    if (!badge) return;
+
+    try {
+        const q = query(collection(db, 'requests'), where('status', '==', 'PENDING'));
+        const snap = await getDocs(q);
+        const count = snap.size;
+
+        if (count > 0) {
+            badge.textContent = count > 99 ? '99+' : count;
+            badge.style.display = 'inline-block';
+        } else {
+            badge.style.display = 'none';
+        }
+    } catch (err) {
+        badge.style.display = 'none';
     }
 }
