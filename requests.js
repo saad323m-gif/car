@@ -256,6 +256,10 @@ function renderCompleteCarForm(reqId, reqData) {
                 <input type="text" id="cc-vin-${reqId}" required>
             </div>
             <div class="form-group">
+                <label>Manufacture Year</label>
+                <input type="number" id="cc-year-${reqId}" required min="1900" max="2026" placeholder="e.g. 2020">
+            </div>
+            <div class="form-group">
                 <label>License Expiry</label>
                 <input type="date" id="cc-lic-${reqId}" required>
             </div>
@@ -285,9 +289,15 @@ async function handleCompleteAndAssign(reqId, reqData) {
     const type = document.getElementById(`cc-type-${reqId}`).value.trim();
     const owner = document.getElementById(`cc-owner-${reqId}`).value.trim();
     const vin = document.getElementById(`cc-vin-${reqId}`).value.trim().toUpperCase();
+    const year = parseInt(document.getElementById(`cc-year-${reqId}`).value);
     const licExp = document.getElementById(`cc-lic-${reqId}`).value;
     const insExp = document.getElementById(`cc-ins-${reqId}`).value;
     const notes = document.getElementById(`cc-notes-${reqId}`).value.trim();
+
+    if (isNaN(year) || year < 1900 || year > 2026) {
+        showMessage('Error: Please enter a valid manufacture year (1900-2026).', 'error', 'dashboard');
+        return;
+    }
 
     try {
         const vinQ = query(collection(db, 'cars'), where('vin', '==', vin));
@@ -322,6 +332,7 @@ async function handleCompleteAndAssign(reqId, reqData) {
             type,
             ownerName: owner,
             vin,
+            manufactureYear: year,
             licenseExpiry: new Date(licExp),
             insuranceExpiry: new Date(insExp),
             notes,
