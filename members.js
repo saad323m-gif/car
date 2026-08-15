@@ -729,3 +729,102 @@ async function handleEditProtectedProfile(e) {
         handleFirebaseError(error, 'dashboard');
     }
 }
+
+// New functions for "My Activity" tab
+
+export function renderMyPersonalActivity() {
+    if (!currentUserData || !currentUserData.uid) {
+        renderAccessDenied();
+        return;
+    }
+
+    const container = document.getElementById('dashboard-container');
+    container.innerHTML = `
+        <h2>My Personal Activity</h2>
+        <p style="text-align:center; color:#666; margin-bottom:20px;">
+            Your own activity history and cars you have used.
+        </p>
+        <div class="divider"></div>
+        <div id="my-activity-timeline" class="timeline">
+            <p class="loading-text">Loading your activity...</p>
+        </div>
+    `;
+
+    loadMyPersonalActivity();
+}
+
+async function loadMyPersonalActivity() {
+    const timeline = document.getElementById('my-activity-timeline');
+    if (!timeline) return;
+
+    try {
+        const actorQ = query(collection(db, 'logs'), where('actorId', '==', currentUserData.uid), limit(30));
+        const assigneeQ = query(collection(db, 'logs'), where('assigneeId', '==', currentUserData.uid), limit(30));
+
+        const [actorSnap, assigneeSnap] = await Promise.all([
+            getDocs(actorQ),
+            getDocs(assigneeQ)
+        ]);
+
+        const logs = [];
+        actorSnap.forEach(d => logs.push(d.data()));
+        assigneeSnap.forEach(d => logs.push(d.data()));
+
+        // إزالة التكرار
+        const unique = [];
+        const seen = new Set();
+        logs.forEach(log => {
+            const key = `${log.timestamp?.seconds || 0}-${log.actionType}-${log.details || ''}`;
+            if (!seen.has(key)) {
+                seen.add(key);
+                unique.push(log);
+            }
+        });
+
+        unique.sort((a, b) => {
+            const tA = a.timestamp ? a.timestamp.toDate().getTime() : 0;
+            const tB = b.timestamp ? b.timestamp.toDate().getTime() : 0;
+            return tB - tA;
+        });
+
+        if (unique.length === 0) {
+            timeline.innerHTML = '<p style="text-align:center; color:#666;">No activity recorded yet.</p>';
+            return;
+        }
+
+        let html = '';
+        unique.slice(0, 25).forEach(log => {
+            const dateStr = formatDateTime(log.timestamp);
+            let itemClass = 'timeline-item';
+            let text = log.details || log.actionType;
+
+            if (log.actionType === 'CAR_ASSIGN' || log.actionType === 'AUTO_LINK' || log.actionType === 'APPROVE_LINK') {
+                itemClass += ' ongoing';
+                text = `Assigned / Linked to car <strong>${log.targetName || log.targetId}</strong>`;
+            } else if (log.actionType === 'CAR_UNASSIGN' || log.actionType === 'APPROVE_UNLINK' || log.actionType === 'REQUEST_UNLINK') {
+                itemClass += ' completed';
+                text = `Unassigned / Unlinked from car <strong>${log.targetName || log.targetId}</strong>`;
+            } else if (log.actionType === 'LOGIN') {
+                text = 'Logged into the system';
+            } else if (log.actionType === 'LOGOUT') {
+                text = 'Logged out';
+            } else if (log.actionType === 'REQUEST_LINK') {
+                text = `Requested to link car: <strong>${log.targetName || ''}</strong>`;
+            }
+
+            html += `
+                <div class="${itemClass}">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-date">${dateStr}</div>
+                        <div class="timeline-text">${text}</div>
+                    </div>
+                </div>
+            `;
+        });
+
+        timeline.innerHTML = html;
+    } catch (error) {
+        timeline.innerHTML = `<p class="error">Error loading activity: ${error.message}</p>`;
+    }
+}
