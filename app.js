@@ -161,6 +161,7 @@ window.addEventListener('DOMContentLoaded', () => {
             else if (tab === 'requests') renderRequestsView();
             else if (tab === 'search') renderSearchView();
             else if (tab === 'stats') renderStatsView();
+            else if (tab === 'my-activity') renderMyActivityView();
         });
     });
 
@@ -185,6 +186,12 @@ window.addEventListener('DOMContentLoaded', () => {
                         tab.style.display = tab.dataset.tab === 'cars' ? 'block' : 'none';
                     }
                 });
+
+                // Show My Activity tab for all active users
+                const myActivityTab = document.getElementById('my-activity-tab');
+                if (myActivityTab) {
+                    myActivityTab.style.display = userData.status === 'active' ? 'block' : 'none';
+                }
 
                 showDashboard();
                 updateRequestsBadge();
@@ -590,4 +597,10 @@ export async function updateRequestsBadge() {
     } catch (err) {
         badge.style.display = 'none';
     }
+}
+
+// New function for My Activity tab
+async function renderMyActivityView() {
+    const { renderMyPersonalActivity } = await import('./members.js');
+    renderMyPersonalActivity();
 }
