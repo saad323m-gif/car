@@ -80,6 +80,10 @@ export function renderCarsView() {
                         <input type="text" id="car-vin" required placeholder="Vehicle Identification Number">
                     </div>
                     <div class="form-group">
+                        <label>Manufacture Year</label>
+                        <input type="number" id="car-year" required min="1900" max="2026" placeholder="e.g. 2020">
+                    </div>
+                    <div class="form-group">
                         <label>License Expiry</label>
                         <input type="date" id="car-license-exp" required>
                     </div>
@@ -211,11 +215,12 @@ async function handleAddCar(e) {
     const typeEl = document.getElementById('car-type');
     const ownerEl = document.getElementById('car-owner');
     const vinEl = document.getElementById('car-vin');
+    const yearEl = document.getElementById('car-year');
     const licenseExpEl = document.getElementById('car-license-exp');
     const insuranceExpEl = document.getElementById('car-insurance-exp');
     const notesEl = document.getElementById('car-notes');
 
-    if (!plateNumEl || !plateCodeEl || !emirateSelect || !typeEl || !ownerEl || !vinEl || !licenseExpEl || !insuranceExpEl) {
+    if (!plateNumEl || !plateCodeEl || !emirateSelect || !typeEl || !ownerEl || !vinEl || !yearEl || !licenseExpEl || !insuranceExpEl) {
         if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Add Car';
@@ -230,9 +235,19 @@ async function handleAddCar(e) {
     const type = typeEl.value.trim();
     const owner = ownerEl.value.trim();
     const vin = vinEl.value.trim().toUpperCase();
+    const manufactureYear = parseInt(yearEl.value);
     const licenseExp = licenseExpEl.value;
     const insuranceExp = insuranceExpEl.value;
     const notes = notesEl ? notesEl.value.trim() : '';
+
+    if (isNaN(manufactureYear) || manufactureYear < 1900 || manufactureYear > 2026) {
+        showMessage('Error: Please enter a valid manufacture year (1900-2026).', 'error', 'dashboard');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Add Car';
+        }
+        return;
+    }
 
     const plateIdentifier = `${plateNum}-${plateCode.toLowerCase()}-${emirate.toLowerCase()}`;
 
@@ -256,6 +271,7 @@ async function handleAddCar(e) {
             type,
             ownerName: owner,
             vin,
+            manufactureYear,
             licenseExpiry: new Date(licenseExp),
             insuranceExpiry: new Date(insuranceExp),
             notes,
@@ -477,6 +493,10 @@ function renderCarCard(id, data, isUserView = false) {
                     <span class="detail-value">${data.vin}</span>
                 </div>
                 <div class="detail-item">
+                    <span class="detail-label">Manufacture Year</span>
+                    <span class="detail-value">${data.manufactureYear || 'N/A'}</span>
+                </div>
+                <div class="detail-item">
                     <span class="detail-label">License Expiry</span>
                     <span class="detail-value ${licClass}">${formatDateOnly(data.licenseExpiry)} (${licDiff} days left)</span>
                 </div>
@@ -597,6 +617,10 @@ function renderEditCarForm(carId, data) {
                 <input type="text" id="edit-vin-${carId}" value="${data.vin}" required>
             </div>
             <div class="form-group">
+                <label>Manufacture Year</label>
+                <input type="number" id="edit-year-${carId}" value="${data.manufactureYear || ''}" required min="1900" max="2026">
+            </div>
+            <div class="form-group">
                 <label>License Expiry</label>
                 <input type="date" id="edit-lic-${carId}" value="${toDateInputValue(data.licenseExpiry)}" required>
             </div>
@@ -641,9 +665,15 @@ async function handleSaveEditCar(carId, originalData) {
     const type = document.getElementById(`edit-type-${carId}`).value.trim();
     const owner = document.getElementById(`edit-owner-${carId}`).value.trim();
     const vin = document.getElementById(`edit-vin-${carId}`).value.trim().toUpperCase();
+    const year = parseInt(document.getElementById(`edit-year-${carId}`).value);
     const licExp = document.getElementById(`edit-lic-${carId}`).value;
     const insExp = document.getElementById(`edit-ins-${carId}`).value;
     const notes = document.getElementById(`edit-notes-${carId}`).value.trim();
+
+    if (isNaN(year) || year < 1900 || year > 2026) {
+        showMessage('Error: Please enter a valid manufacture year (1900-2026).', 'error', 'dashboard');
+        return;
+    }
 
     const plateIdentifier = `${plateNum}-${plateCode.toLowerCase()}-${emirate.toLowerCase()}`;
 
@@ -668,6 +698,7 @@ async function handleSaveEditCar(carId, originalData) {
             type,
             ownerName: owner,
             vin,
+            manufactureYear: year,
             licenseExpiry: new Date(licExp),
             insuranceExpiry: new Date(insExp),
             notes
@@ -738,6 +769,7 @@ function handlePrintCard(data, topBarColor) {
         <div class="detail-row"><span class="detail-label">Owner Name:</span> <span class="detail-value">${safe(data.ownerName)}</span></div>
         <div class="detail-row"><span class="detail-label">Type:</span> <span class="detail-value">${safe(data.type)}</span></div>
         <div class="detail-row"><span class="detail-label">VIN:</span> <span class="detail-value">${safe(data.vin)}</span></div>
+        <div class="detail-row"><span class="detail-label">Manufacture Year:</span> <span class="detail-value">${safe(data.manufactureYear || 'N/A')}</span></div>
         <div class="detail-row"><span class="detail-label">License Expiry:</span> <span class="detail-value">${safe(licStr)}</span></div>
         <div class="detail-row"><span class="detail-label">Insurance Expiry:</span> <span class="detail-value">${safe(insStr)}</span></div>
         <div class="detail-row"><span class="detail-label">Current Assignee:</span> <span class="detail-value">${safe(data.currentUserName || 'Unassigned')}</span></div>
