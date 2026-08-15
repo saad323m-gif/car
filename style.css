@@ -524,7 +524,7 @@ h4 {
 
 .plate-container {
     background: #fff;
-    border: 2px solid #000;
+    border: 2px solid #ff0000;
     border-radius: 8px;
     padding: 8px 14px;
     display: inline-flex;
@@ -550,7 +550,7 @@ h4 {
     font-size: 0.7rem;
     font-weight: bold;
     text-transform: uppercase;
-    color: #000;
+    color: #ff0000;
     text-align: center;
     width: 70px;
     max-width: 70px;
@@ -566,7 +566,7 @@ h4 {
     font-size: 1.65rem;
     font-weight: bold;
     letter-spacing: 2px;
-    color: #000;
+    color: #ff0000;
     font-variant-numeric: tabular-nums;
     width: 7.2ch;
     min-width: 7.2ch;
@@ -583,7 +583,7 @@ h4 {
     font-size: 1.35rem;
     font-weight: bold;
     color: #fff;
-    background: #000;
+    background: #ff0000;
     padding: 3px 8px;
     border-radius: 4px;
     letter-spacing: 1px;
@@ -711,7 +711,7 @@ h4 {
 }
 .mini-plate {
     background: #fff;
-    border: 1.5px solid #000;
+    border: 1.5px solid #ff0000;
     border-radius: 5px;
     padding: 4px 8px;
     display: inline-flex;
@@ -724,7 +724,7 @@ h4 {
     font-size: 0.55rem;
     font-weight: bold;
     text-transform: uppercase;
-    color: #000;
+    color: #ff0000;
     width: 42px;
     max-width: 42px;
     white-space: nowrap;
@@ -737,7 +737,7 @@ h4 {
     font-size: 0.9rem;
     font-weight: bold;
     letter-spacing: 1px;
-    color: #000;
+    color: #ff0000;
     font-variant-numeric: tabular-nums;
     width: 5.5ch;
     text-align: center;
@@ -749,7 +749,7 @@ h4 {
     font-size: 0.75rem;
     font-weight: bold;
     color: #fff;
-    background: #000;
+    background: #ff0000;
     padding: 1px 5px;
     border-radius: 3px;
     letter-spacing: 1px;
