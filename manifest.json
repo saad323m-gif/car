@@ -1,0 +1,15 @@
+{
+  "short_name": "Car System",
+  "name": "Car Management System",
+  "icons": [
+    {
+      "src": "icon.png",
+      "type": "image/png",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "./",
+  "background_color": "#ffffff",
+  "theme_color": "#1b2a4a",
+  "display": "standalone"
+}

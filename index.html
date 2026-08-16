@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>System Management</title>
     <link rel="stylesheet" href="style.css">
+    
+    <!-- PWA Settings -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon.png">
+    <meta name="theme-color" content="#1b2a4a">
 </head>
 <body>
 
@@ -55,6 +60,15 @@
         <p class="footer-dev">Developed By MOHAMED SAAD</p>
     </footer>
 
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .catch(err => console.log('SW registration failed: ', err));
+            });
+        }
+    </script>
     <script type="module" src="app.js"></script>
 </body>
 </html>
