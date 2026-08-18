@@ -778,33 +778,32 @@ function handlePrintCard(data, topBarColor) {
 </body>
 </html>`;
 
-        const iframe = document.createElement('iframe');
-        iframe.setAttribute('aria-hidden', 'true');
-        iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
-        document.body.appendChild(iframe);
-
-        const idoc = iframe.contentWindow.document;
-        idoc.open();
-        idoc.write(html);
-        idoc.close();
-
-        const triggerPrint = () => {
+        // FIXED PRINT - works in all browsers
+        const printWin = window.open('', '_blank', 'width=900,height=700');
+        if (!printWin) {
+            showMessage('Please allow popups to print.', 'warning', 'dashboard');
+            return;
+        }
+        printWin.document.open();
+        printWin.document.write(html);
+        printWin.document.close();
+        printWin.focus();
+        // Wait for content to render
+        const doPrint = () => {
             try {
-                iframe.contentWindow.focus();
-                iframe.contentWindow.print();
-            } catch (err) {
+                printWin.print();
+            } catch (e) {
                 showMessage('Error: Unable to open print dialog.', 'error', 'dashboard');
             }
+            // Don't auto-close immediately, let user close after print
             setTimeout(() => {
-                if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-            }, 1500);
+                try { if (!printWin.closed) printWin.close(); } catch(e){}
+            }, 1000);
         };
-
-        if (iframe.contentWindow.document.readyState === 'complete') {
-            setTimeout(triggerPrint, 200);
+        if (printWin.document.readyState === 'complete') {
+            setTimeout(doPrint, 300);
         } else {
-            iframe.onload = () => setTimeout(triggerPrint, 200);
-            setTimeout(triggerPrint, 500);
+            printWin.onload = () => setTimeout(doPrint, 300);
         }
     } catch (error) {
         showMessage(`Print error: ${error.message}`, 'error', 'dashboard');
