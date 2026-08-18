@@ -250,15 +250,37 @@ function showDashboard() {
 
 async function checkSystemState() {
     try {
-        const q = query(collection(db, 'users'), limit(1));
-        const snapshot = await getDocs(q);
-        if (snapshot.empty) {
-            renderSetupForm();
+        // الطريقة الآمنة الجديدة - تقرأ مستند عام لا يحتوي بيانات حساسة
+        const statusRef = doc(db, 'system', 'status');
+        const statusSnap = await getDoc(statusRef);
+        
+        if (statusSnap.exists()) {
+            const data = statusSnap.data();
+            if (data.usersCount > 0 || data.initialized === true) {
+                renderLoginForm();
+            } else {
+                renderSetupForm();
+            }
         } else {
-            renderLoginForm();
+            // هجرة أول مرة - إذا لم يوجد المستند العام
+            try {
+                const q = query(collection(db, 'users'), limit(1));
+                const snapshot = await getDocs(q);
+                if (snapshot.empty) {
+                    renderSetupForm();
+                } else {
+                    renderLoginForm();
+                }
+            } catch (e) {
+                // إذا فشل بسبب الصلاحيات الجديدة، اعرض تسجيل الدخول مباشرة ولا تكسر الفورم
+                console.warn('Fallback to login form:', e.message);
+                renderLoginForm();
+            }
         }
     } catch (error) {
-        showMessage(`System Error: ${error.message}`, 'error');
+        // أهم حماية: حتى لو فشل كل شيء، اعرض فورم الدخول
+        console.error('checkSystemState error:', error);
+        renderLoginForm();
     }
 }
 
