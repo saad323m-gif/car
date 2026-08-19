@@ -131,15 +131,41 @@ window.addEventListener('DOMContentLoaded', () => {
     updateCopyrightYear();
     setInterval(updateDateTime, 1000);
 
-    // ====== مستمع تغيير اللغة ======
-    const langSelect = document.getElementById('lang-select');
-    if (langSelect) {
-        // تعيين اللغة الافتراضية عند التحميل
-        setLanguage(langSelect.value);
+    // ====== إنشاء محدد اللغة ======
+    const langSelectorDiv = document.getElementById('language-selector');
+    if (langSelectorDiv) {
+        // إنشاء عنصر select
+        const select = document.createElement('select');
+        select.id = 'lang-select';
+        select.style.cssText = 'padding:6px 12px; border-radius:4px; border:1px solid #90caf9;';
         
-        langSelect.addEventListener('change', (e) => {
+        const optionEn = document.createElement('option');
+        optionEn.value = 'en';
+        optionEn.textContent = 'English';
+        select.appendChild(optionEn);
+        
+        const optionAr = document.createElement('option');
+        optionAr.value = 'ar';
+        optionAr.textContent = 'العربية';
+        select.appendChild(optionAr);
+        
+        // إضافة label
+        const label = document.createElement('label');
+        label.style.cssText = 'font-weight:600; color:#1565c0; margin-right:10px;';
+        label.textContent = 'اختر اللغة / Select Language:';
+        
+        langSelectorDiv.appendChild(label);
+        langSelectorDiv.appendChild(select);
+        
+        // تعيين اللغة المخزنة أو الافتراضية
+        const savedLang = getLanguage();
+        select.value = savedLang;
+        setLanguage(savedLang);
+        
+        // مستمع تغيير اللغة
+        select.addEventListener('change', (e) => {
             setLanguage(e.target.value);
-            // إعادة عرض النموذج الحالي حسب وجود login-form أو setup-form
+            // إعادة عرض النموذج الحالي
             const loginForm = document.getElementById('login-form');
             const setupForm = document.getElementById('setup-form');
             if (loginForm) {
@@ -147,7 +173,7 @@ window.addEventListener('DOMContentLoaded', () => {
             } else if (setupForm) {
                 renderSetupForm();
             } else {
-                // إذا كان Dashboard ظاهراً، نعيد تحميل الصفحة لتطبيق اللغة
+                // إذا كان Dashboard ظاهراً، نعيد تحميل الصفحة لتطبيق اللغة على جميع العناصر
                 window.location.reload();
             }
         });
