@@ -1,6 +1,6 @@
 /**
  * Main Application Entry - Car Management System
- * English only | Latin digits only | Production-ready
+ * English & Arabic support
  */
 
 import { auth, db } from "./firebase.js";
@@ -21,8 +21,8 @@ import { renderRequestsView, setRequestsCurrentUser } from "./requests.js";
 import { renderSearchView, setSearchCurrentUser } from "./search.js";
 import { renderStatsView, setStatsCurrentUser } from "./stats.js";
 import { 
-    showMessage, handleFirebaseError, clearMessage, 
-    t, setLanguage, getLanguage, lockUI, unlockUI 
+    showMessage, handleFirebaseError, clearMessage,
+    t, setLanguage, getLanguage, lockUI, unlockUI
 } from "./utils.js";
 
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -169,47 +169,51 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     onAuthStateChanged(auth, async (user) => {
-        if (user) {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
-                userData.uid = user.uid;
+        try {
+            if (user) {
+                const userDoc = await getDoc(doc(db, 'users', user.uid));
+                if (userDoc.exists()) {
+                    const userData = userDoc.data();
+                    userData.uid = user.uid;
 
-                // تطبيق اللغة المفضلة من المستخدم
-                const preferredLang = userData.preferredLanguage || getLanguage();
-                setLanguage(preferredLang);
+                    const preferredLang = userData.preferredLanguage || getLanguage();
+                    setLanguage(preferredLang);
 
-                setCurrentUser(userData);
-                setCarsCurrentUser(userData);
-                setRequestsCurrentUser(userData);
-                setLogsCurrentUser(userData);
-                setSearchCurrentUser(userData);
-                setStatsCurrentUser(userData);
+                    setCurrentUser(userData);
+                    setCarsCurrentUser(userData);
+                    setRequestsCurrentUser(userData);
+                    setLogsCurrentUser(userData);
+                    setSearchCurrentUser(userData);
+                    setStatsCurrentUser(userData);
 
-                document.querySelectorAll('.tab-btn').forEach(tab => {
-                    if (userData.role === 'admin' && userData.status === 'active') {
-                        tab.style.display = 'block';
-                    } else {
-                        tab.style.display = tab.dataset.tab === 'cars' ? 'block' : 'none';
+                    document.querySelectorAll('.tab-btn').forEach(tab => {
+                        if (userData.role === 'admin' && userData.status === 'active') {
+                            tab.style.display = 'block';
+                        } else {
+                            tab.style.display = tab.dataset.tab === 'cars' ? 'block' : 'none';
+                        }
+                    });
+
+                    const myActivityTab = document.getElementById('my-activity-tab');
+                    if (myActivityTab) {
+                        myActivityTab.style.display = userData.status === 'active' ? 'block' : 'none';
                     }
-                });
 
-                // Show My Activity tab for all active users
-                const myActivityTab = document.getElementById('my-activity-tab');
-                if (myActivityTab) {
-                    myActivityTab.style.display = userData.status === 'active' ? 'block' : 'none';
+                    showDashboard();
+                    updateRequestsBadge();
+                } else {
+                    await signOut(auth);
+                    showAuthView();
                 }
-
-                showDashboard();
-                updateRequestsBadge();
             } else {
-                await signOut(auth);
+                setCurrentUser(null);
                 showAuthView();
+                await checkSystemState();
             }
-        } else {
-            setCurrentUser(null);
+        } catch (error) {
+            console.error('onAuthStateChanged error:', error);
             showAuthView();
-            await checkSystemState();
+            renderLoginForm(); // Force login form on error
         }
     });
 });
@@ -289,14 +293,8 @@ async function checkSystemState() {
 
 export function renderLoginForm() {
     const container = document.getElementById('form-container');
+    if (!container) return;
     container.innerHTML = `
-        <div id="language-selector" style="text-align: center; margin-bottom: 20px;">
-            <label style="font-weight:600; color:#1565c0; margin-right:10px;">${t('common.selectLanguage')}:</label>
-            <select id="lang-select" style="padding:6px 12px; border-radius:4px; border:1px solid #90caf9;">
-                <option value="en" ${getLanguage() === 'en' ? 'selected' : ''}>English</option>
-                <option value="ar" ${getLanguage() === 'ar' ? 'selected' : ''}>العربية</option>
-            </select>
-        </div>
         <h2>${t('auth.login')}</h2>
         <form id="login-form">
             <div class="form-group">
@@ -315,23 +313,12 @@ export function renderLoginForm() {
         </form>
     `;
     document.getElementById('login-form').addEventListener('submit', handleLogin);
-
-    document.getElementById('lang-select').addEventListener('change', (e) => {
-        setLanguage(e.target.value);
-        renderLoginForm();
-    });
 }
 
 export function renderSetupForm() {
     const container = document.getElementById('form-container');
+    if (!container) return;
     container.innerHTML = `
-        <div id="language-selector" style="text-align: center; margin-bottom: 20px;">
-            <label style="font-weight:600; color:#1565c0; margin-right:10px;">${t('common.selectLanguage')}:</label>
-            <select id="lang-select" style="padding:6px 12px; border-radius:4px; border:1px solid #90caf9;">
-                <option value="en" ${getLanguage() === 'en' ? 'selected' : ''}>English</option>
-                <option value="ar" ${getLanguage() === 'ar' ? 'selected' : ''}>العربية</option>
-            </select>
-        </div>
         <h2>${t('auth.setupTitle')}</h2>
         <p style="margin-bottom: 20px; font-size: 0.9rem; color: #666; text-align:center;">
             ${t('auth.setupDesc')}
@@ -361,11 +348,6 @@ export function renderSetupForm() {
         </form>
     `;
     document.getElementById('setup-form').addEventListener('submit', handleSetup);
-
-    document.getElementById('lang-select').addEventListener('change', (e) => {
-        setLanguage(e.target.value);
-        renderSetupForm();
-    });
 }
 
 async function handleSetup(e) {
@@ -477,7 +459,6 @@ async function handleLogin(e) {
         await updateDoc(doc(db, 'users', uid), { rememberSession: rememberMe });
         await logAction(userData, 'LOGIN', { text: t('dash.loggedIn') });
 
-        // تطبيق اللغة المفضلة من المستخدم
         const preferredLang = userData.preferredLanguage || getLanguage();
         setLanguage(preferredLang);
 
