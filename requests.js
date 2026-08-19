@@ -432,11 +432,29 @@ export async function createLinkRequest(e) {
             const carData = carDoc.data();
             const label = formatCarLabel(carData);
 
+            // If car is already assigned to the current user, show warning and return
             if (carData.currentUserId === currentUserData.uid) {
                 showMessage('This car is already assigned to you.', 'warning', 'dashboard');
                 return;
             }
 
+            // Build confirmation message based on car assignment status
+            let confirmMessage = '';
+            if (carData.currentUserId) {
+                confirmMessage = `⚠️ Are you sure you want to request this car?\n\nThis car is currently assigned to "${carData.currentUserName}".\n\nIf you continue, you will become fully responsible for this car during this period.\n\nDo you wish to proceed?`;
+            } else {
+                confirmMessage = `⚠️ Are you sure you want to request this car?\n\nThis car is unassigned.\n\nIf you continue, you will become fully responsible for this car during this period.\n\nDo you wish to proceed?`;
+            }
+
+            // Ask for confirmation
+            if (!confirm(confirmMessage)) {
+                btn.disabled = false;
+                btn.textContent = 'Send Request';
+                return; // User cancelled
+            }
+
+            // Proceed with auto-link
+            // If car is assigned to another user, end that assignment first
             if (carData.currentUserId) {
                 const prevAssignQ = query(
                     collection(db, 'cars', carDoc.id, 'assignments'),
@@ -459,6 +477,7 @@ export async function createLinkRequest(e) {
                 });
             }
 
+            // Assign to current user
             await updateDoc(doc(db, 'cars', carDoc.id), {
                 currentUserId: currentUserData.uid,
                 currentUserName: currentUserData.username
@@ -487,6 +506,7 @@ export async function createLinkRequest(e) {
             renderCarsView();
 
         } else {
+            // Car not found, create a request for admin
             await addDoc(collection(db, 'requests'), {
                 type: 'LINK',
                 userId: currentUserData.uid,
