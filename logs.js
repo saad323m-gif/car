@@ -9,7 +9,8 @@ import {
     collection, addDoc, query, orderBy, limit, startAfter, getDocs, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import {
-    showMessage, isAdmin, renderAccessDenied, formatDateTime
+    showMessage, isAdmin, renderAccessDenied, formatDateTime,
+    t, getActionTypeTranslation
 } from "./utils.js";
 
 let lastVisibleLog = null;
@@ -42,13 +43,13 @@ export function renderLogsView() {
 
     const container = document.getElementById('dashboard-container');
     container.innerHTML = `
-        <h2>System Logs Timeline</h2>
+        <h2>${t('logs.title')}</h2>
         <p style="text-align: center; color: #666; margin-bottom: 20px;">
-            Immutable audit trail of all system activities.
+            ${t('logs.desc')}
         </p>
         <div class="divider"></div>
         <div id="logs-timeline" class="timeline">
-            <p class="loading-text">Loading logs...</p>
+            <p class="loading-text">${t('common.loading')}</p>
         </div>
         <div id="load-more-container" class="load-more-container"></div>
     `;
@@ -63,7 +64,7 @@ async function fetchLogs(loadMore = false) {
     const loadMoreContainer = document.getElementById('load-more-container');
     if (!listContainer) return;
 
-    if (!loadMore) listContainer.innerHTML = '<p class="loading-text">Loading logs...</p>';
+    if (!loadMore) listContainer.innerHTML = `<p class="loading-text">${t('common.loading')}</p>`;
 
     try {
         let q;
@@ -86,7 +87,7 @@ async function fetchLogs(loadMore = false) {
 
         if (snapshot.empty) {
             if (!loadMore) {
-                listContainer.innerHTML = '<p style="text-align:center; color:#666;">No logs found.</p>';
+                listContainer.innerHTML = `<p style="text-align:center; color:#666;">${t('logs.noLogs')}</p>`;
             }
             if (loadMoreContainer) loadMoreContainer.innerHTML = '';
             return;
@@ -101,7 +102,7 @@ async function fetchLogs(loadMore = false) {
 
         if (loadMoreContainer) {
             if (snapshot.size === 10) {
-                loadMoreContainer.innerHTML = '<button class="load-more-btn" id="load-more-btn">Load More</button>';
+                loadMoreContainer.innerHTML = `<button class="load-more-btn" id="load-more-btn">${t('common.loadMore')}</button>`;
                 const loadMoreBtn = document.getElementById('load-more-btn');
                 if (loadMoreBtn) {
                     loadMoreBtn.addEventListener('click', () => fetchLogs(true));
@@ -112,7 +113,7 @@ async function fetchLogs(loadMore = false) {
         }
     } catch (error) {
         if (listContainer) {
-            listContainer.innerHTML = `<p class="error">Error loading logs: ${error.message}</p>`;
+            listContainer.innerHTML = `<p class="error">${t('error.loadFailed')} ${error.message}</p>`;
         }
     }
 }
@@ -122,10 +123,12 @@ function renderLogTimelineItem(container, data) {
     item.className = 'timeline-item';
 
     const dateStr = formatDateTime(data.timestamp);
+    const actionLabel = getActionTypeTranslation(data.actionType) || data.actionType;
+    const byText = t('common.by');
 
     let extra = '';
     if (data.targetName) {
-        extra = `<br><strong>Target:</strong> ${data.targetName}`;
+        extra = `<br><strong>${t('logs.target')}:</strong> ${data.targetName}`;
     }
     if (data.details) {
         extra += `<br>${data.details}`;
@@ -136,7 +139,7 @@ function renderLogTimelineItem(container, data) {
         <div class="timeline-content">
             <div class="timeline-date">${dateStr}</div>
             <div class="timeline-text">
-                <strong>${data.actionType}</strong> by ${data.actorName}
+                <strong>${actionLabel}</strong> ${byText} ${data.actorName}
                 ${extra}
             </div>
         </div>

@@ -4,6 +4,10 @@
  */
 
 import { auth } from "./firebase.js";
+import { t, getLanguage, setLanguage, getActionTypeTranslation } from './i18n.js';
+
+// إعادة تصدير دوال الترجمة لاستخدامها في الملفات الأخرى
+export { t, getLanguage, setLanguage, getActionTypeTranslation };
 
 let messageTimeout = null;
 
@@ -59,37 +63,37 @@ export function handleFirebaseError(error, target = 'auth') {
     let message = '';
     switch (error.code) {
         case 'auth/invalid-email':
-            message = 'Error: The email address is badly formatted.';
+            message = t('error.invalidEmail');
             break;
         case 'auth/user-disabled':
-            message = 'Error: This user has been disabled.';
+            message = t('error.userDisabled');
             break;
         case 'auth/user-not-found':
-            message = 'Error: No user found with this email.';
+            message = t('error.userNotFound');
             break;
         case 'auth/wrong-password':
-            message = 'Error: Incorrect password. Please try again.';
+            message = t('error.wrongPassword');
             break;
         case 'auth/email-already-in-use':
-            message = 'Error: The email is already in use.';
+            message = t('error.emailInUse');
             break;
         case 'auth/weak-password':
-            message = 'Error: Password should be at least 6 characters.';
+            message = t('error.weakPassword');
             break;
         case 'auth/too-many-requests':
-            message = 'Warning: Too many failed login attempts. Please try again later.';
+            message = t('error.tooManyRequests');
             break;
         case 'auth/network-request-failed':
-            message = 'Error: Network error. Check your connection.';
+            message = t('error.network');
             break;
         case 'auth/requires-recent-login':
-            message = 'Error: Please logout and login again to perform this action.';
+            message = t('error.requiresRecentLogin');
             break;
         case 'permission-denied':
-            message = 'Security Error: You do not have permission to perform this action.';
+            message = t('error.permissionDenied');
             break;
         default:
-            message = `System Error: ${error.message || 'Unknown error occurred.'}`;
+            message = `${t('error.unknown')} (${error.message || ''})`;
     }
     showMessage(message, 'error', target);
 }
@@ -123,19 +127,26 @@ export function formatDateOnly(ts) {
 export function formatPeriod(start, end) {
     const startStr = formatDateTime(start);
     if (!end) {
-        return `From ${startStr} to Now`;
+        return t('cars.fromNow', { start: startStr });
     }
     const endStr = formatDateTime(end);
-    return `From ${startStr} to ${endStr}`;
+    return t('cars.fromTo', { start: startStr, end: endStr });
 }
 
+/**
+ * تنسيق تسمية السيارة بحيث يكون رقم اللوحة والرمز والإمارة هي الأساس
+ */
 export function formatCarLabel(carData) {
     if (!carData) return 'Unknown Car';
-    const id = carData.carId || 'N/A';
     const num = carData.plateNumber || '';
     const code = carData.plateCode || '';
     const emirate = carData.emirate || '';
-    return `${id} | ${num} ${code} (${emirate})`;
+    const id = carData.carId || '';
+    const platePart = `${num} ${code} (${emirate})`.trim();
+    if (platePart && platePart !== '()') {
+        return id ? `${platePart} [${id}]` : platePart;
+    }
+    return id || 'Unknown Car';
 }
 
 export function isAdmin(userData) {
@@ -150,8 +161,8 @@ export function renderAccessDenied() {
     const container = document.getElementById('dashboard-container');
     if (container) {
         container.innerHTML = `
-            <h2>Access Denied</h2>
-            <p style="text-align:center; color:#666;">You do not have permission to view this page.</p>
+            <h2>${t('common.accessDenied')}</h2>
+            <p style="text-align:center; color:#666;">${t('common.accessDeniedText')}</p>
         `;
     }
 }
@@ -179,4 +190,79 @@ export function toDateInputValue(ts) {
     } catch {
         return '';
     }
+}
+
+// ====== UI Lock ======
+let uiLockCounter = 0;
+
+export function lockUI() {
+    uiLockCounter++;
+    if (uiLockCounter > 1) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'ui-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.3);
+        z-index: 9999;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        backdrop-filter: blur(2px);
+        cursor: wait;
+    `;
+    overlay.innerHTML = `
+        <div style="
+            background: #ffffff;
+            padding: 30px 50px;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+            text-align: center;
+        ">
+            <div style="
+                display: inline-block;
+                width: 40px;
+                height: 40px;
+                border: 4px solid #e3f2fd;
+                border-top: 4px solid #1976d2;
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+                margin-bottom: 15px;
+            "></div>
+            <p style="color: #1976d2; font-weight: bold; margin: 0;">
+                ${t('common.processing')}
+            </p>
+        </div>
+    `;
+
+    if (!document.getElementById('ui-spin-style')) {
+        const style = document.createElement('style');
+        style.id = 'ui-spin-style';
+        style.textContent = `
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    document.body.appendChild(overlay);
+    document.body.style.overflow = 'hidden';
+}
+
+export function unlockUI() {
+    uiLockCounter--;
+    if (uiLockCounter > 0) return;
+
+    const overlay = document.getElementById('ui-overlay');
+    if (overlay) {
+        overlay.remove();
+    }
+    document.body.style.overflow = '';
+    uiLockCounter = 0;
 }

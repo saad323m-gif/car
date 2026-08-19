@@ -13,7 +13,8 @@ import {
 import { logAction } from "./logs.js";
 import {
     showMessage, handleFirebaseError, isAdmin, isActiveUser,
-    renderAccessDenied, formatDateTime, formatPeriod
+    renderAccessDenied, formatDateTime, formatPeriod,
+    t, lockUI, unlockUI
 } from "./utils.js";
 
 let currentUserData = null;
@@ -31,45 +32,45 @@ export function renderDashboard() {
     const container = document.getElementById('dashboard-container');
     container.innerHTML = `
         <div class="dashboard-header">
-            <h2>Admin Dashboard</h2>
-            <p style="text-align:center;">Welcome, <strong>${currentUserData.username}</strong></p>
-            <button class="btn btn-sm btn-warning" id="edit-profile-btn" style="margin-top: 10px;">Edit My Profile</button>
+            <h2>${t('dash.adminDashboard')}</h2>
+            <p style="text-align:center;">${t('common.welcome', { username: currentUserData.username })}</p>
+            <button class="btn btn-sm btn-warning" id="edit-profile-btn" style="margin-top: 10px;">${t('members.editProfile')}</button>
         </div>
         <div class="divider"></div>
-        <button class="btn-add-toggle" id="toggle-add-member">+ Add New Member</button>
+        <button class="btn-add-toggle" id="toggle-add-member">${t('members.addNew')}</button>
         <div id="add-member-form-wrapper" class="hidden-form" style="margin-bottom: 30px;">
             <form id="add-user-form" style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                 <div class="form-group">
-                    <label>Username</label>
+                    <label>${t('auth.username')}</label>
                     <input type="text" id="new-username" required>
                 </div>
                 <div class="form-group">
-                    <label>Email</label>
+                    <label>${t('auth.email')}</label>
                     <input type="email" id="new-email" required>
                 </div>
                 <div class="form-group">
-                    <label>Password</label>
+                    <label>${t('auth.password')}</label>
                     <input type="password" id="new-password" required minlength="6">
                 </div>
                 <div class="form-group">
-                    <label>Phone</label>
+                    <label>${t('auth.phone')}</label>
                     <input type="text" id="new-phone" required pattern="0\\d{9}" placeholder="0XXXXXXXXX">
                 </div>
                 <div class="form-group" style="grid-column: 1 / -1;">
-                    <label>Role</label>
+                    <label>${t('members.role')}</label>
                     <select id="new-role">
-                        <option value="user">User</option>
+                        <option value="user">${t('members.role')}</option>
                         <option value="admin">Admin</option>
                     </select>
                 </div>
                 <div class="form-group" style="grid-column: 1 / -1;">
-                    <button type="submit" class="btn">Add Member</button>
+                    <button type="submit" class="btn">${t('members.addMember')}</button>
                 </div>
             </form>
         </div>
-        <h3>Members Management</h3>
+        <h3>${t('members.title')}</h3>
         <div id="users-card-list" class="card-list">
-            <p class="loading-text">Loading members...</p>
+            <p class="loading-text">${t('common.loading')}</p>
         </div>
         <div id="load-more-container" class="load-more-container"></div>
     `;
@@ -104,7 +105,7 @@ async function handleAddUser(e) {
     const phoneEl = document.getElementById('new-phone');
     const roleEl = document.getElementById('new-role');
     if (!usernameEl || !emailEl || !passwordEl || !phoneEl || !roleEl) {
-        showMessage('Error: Form elements not found.', 'error', 'dashboard');
+        showMessage(t('error.general'), 'error', 'dashboard');
         return;
     }
 
@@ -115,15 +116,16 @@ async function handleAddUser(e) {
     const role = roleEl.value;
 
     if (!/^0\d{9}$/.test(phone)) {
-        showMessage('Error: Phone must start with 0 and be exactly 10 digits.', 'error', 'dashboard');
+        showMessage(t('error.phoneInvalid'), 'error', 'dashboard');
         return;
     }
 
+    lockUI();
     try {
         const q = query(collection(db, 'users'), where('username', '==', username));
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
-            showMessage('Error: Username already exists.', 'error', 'dashboard');
+            showMessage(t('error.usernameExists'), 'error', 'dashboard');
             return;
         }
 
@@ -141,7 +143,8 @@ async function handleAddUser(e) {
             notes: '',
             isProtected: false,
             securityPin: null,
-            rememberSession: false
+            rememberSession: false,
+            preferredLanguage: 'en' // اللغة الافتراضية
         });
 
         await secondaryAuth.signOut();
@@ -149,10 +152,10 @@ async function handleAddUser(e) {
         await logAction(currentUserData, 'CREATE_USER', {
             targetId: uid,
             targetName: username,
-            text: `Created new ${role}: ${username}`
+            text: t('members.memberAdded')
         });
 
-        showMessage('Success: Member added successfully.', 'success', 'dashboard');
+        showMessage(t('members.memberAdded'), 'success', 'dashboard');
         const addForm = document.getElementById('add-user-form');
         if (addForm) addForm.reset();
         const addWrapper = document.getElementById('add-member-form-wrapper');
@@ -161,6 +164,8 @@ async function handleAddUser(e) {
         fetchUsersForAdmin(false);
     } catch (error) {
         handleFirebaseError(error, 'dashboard');
+    } finally {
+        unlockUI();
     }
 }
 
@@ -171,7 +176,7 @@ async function fetchUsersForAdmin(loadMore = false) {
     const loadMoreContainer = document.getElementById('load-more-container');
     if (!listContainer) return;
 
-    if (!loadMore) listContainer.innerHTML = '<p class="loading-text">Loading members...</p>';
+    if (!loadMore) listContainer.innerHTML = `<p class="loading-text">${t('common.loading')}</p>`;
 
     try {
         let q;
@@ -185,7 +190,7 @@ async function fetchUsersForAdmin(loadMore = false) {
 
         if (snapshot.empty) {
             if (!loadMore) {
-                listContainer.innerHTML = '<p style="text-align:center; color:#666;">No members found.</p>';
+                listContainer.innerHTML = `<p style="text-align:center; color:#666;">${t('members.noMembers')}</p>`;
             }
             if (loadMoreContainer) loadMoreContainer.innerHTML = '';
             return;
@@ -198,7 +203,7 @@ async function fetchUsersForAdmin(loadMore = false) {
 
         if (loadMoreContainer) {
             if (snapshot.size === 10) {
-                loadMoreContainer.innerHTML = '<button class="load-more-btn" id="load-more-btn">Load More</button>';
+                loadMoreContainer.innerHTML = `<button class="load-more-btn" id="load-more-btn">${t('common.loadMore')}</button>`;
                 const loadMoreBtn = document.getElementById('load-more-btn');
                 if (loadMoreBtn) {
                     loadMoreBtn.addEventListener('click', () => fetchUsersForAdmin(true));
@@ -224,21 +229,21 @@ function renderUserCard(uid, data) {
     if (!data.isProtected) {
         actionsHtml = `
             <div class="action-buttons" id="member-actions-${uid}">
-                <button type="button" class="action-btn action-btn-edit" data-action="edit">✎ Edit</button>
-                <button type="button" class="action-btn action-btn-activity" data-action="activity">📋 Activity</button>
+                <button type="button" class="action-btn action-btn-edit" data-action="edit">${t('common.edit')}</button>
+                <button type="button" class="action-btn action-btn-activity" data-action="activity">${t('members.activity')}</button>
                 ${data.role === 'user'
-                    ? '<button type="button" class="action-btn action-btn-promote" data-action="promote">↑ Promote</button>'
-                    : '<button type="button" class="action-btn action-btn-demote" data-action="demote">↓ Demote</button>'}
+                    ? `<button type="button" class="action-btn action-btn-promote" data-action="promote">${t('members.promote')}</button>`
+                    : `<button type="button" class="action-btn action-btn-demote" data-action="demote">${t('members.demote')}</button>`}
                 ${data.status === 'active'
-                    ? '<button type="button" class="action-btn action-btn-suspend" data-action="suspend">⏸ Suspend</button>'
-                    : '<button type="button" class="action-btn action-btn-activate" data-action="activate">▶ Activate</button>'}
+                    ? `<button type="button" class="action-btn action-btn-suspend" data-action="suspend">${t('members.suspend')}</button>`
+                    : `<button type="button" class="action-btn action-btn-activate" data-action="activate">${t('members.activate')}</button>`}
             </div>
             <div id="activity-area-${uid}" style="margin-top: 15px; display: none;"></div>
         `;
     } else {
         actionsHtml = `
             <div class="action-buttons" id="member-actions-${uid}">
-                <button type="button" class="action-btn action-btn-activity" data-action="activity">📋 Activity</button>
+                <button type="button" class="action-btn action-btn-activity" data-action="activity">${t('members.activity')}</button>
             </div>
             <div id="activity-area-${uid}" style="margin-top: 15px; display: none;"></div>
         `;
@@ -254,27 +259,27 @@ function renderUserCard(uid, data) {
                 </div>
             </div>
             <div class="card-header-plates" id="header-plates-${uid}">
-                <span class="no-cars-label">Click to load assigned cars</span>
+                <span class="no-cars-label">${t('members.clickToLoad')}</span>
             </div>
         </div>
         <div class="card-body" id="body-${uid}">
             <div id="view-info-${uid}">
                 <div class="detail-list">
                     <div class="detail-item">
-                        <span class="detail-label">Email</span>
+                        <span class="detail-label">${t('auth.email')}</span>
                         <span class="detail-value">${data.email}</span>
                     </div>
                     <div class="detail-item">
-                        <span class="detail-label">Phone</span>
+                        <span class="detail-label">${t('auth.phone')}</span>
                         <span class="detail-value">${data.phone}</span>
                     </div>
                     <div class="detail-item">
-                        <span class="detail-label">Notes</span>
+                        <span class="detail-label">${t('members.notes')}</span>
                         <span class="detail-value">${data.notes || 'N/A'}</span>
                     </div>
                     <div class="detail-item">
-                        <span class="detail-label">Assigned Cars</span>
-                        <span class="detail-value" id="cars-detail-${uid}">Click card to load</span>
+                        <span class="detail-label">${t('members.assignedCars')}</span>
+                        <span class="detail-value" id="cars-detail-${uid}">${t('members.clickToLoad')}</span>
                     </div>
                 </div>
                 <div style="margin-top: 15px;">${actionsHtml}</div>
@@ -314,15 +319,15 @@ async function loadUserCars(uid) {
     if (!headerPlates) return;
 
     if (headerPlates.dataset.loaded === 'true') return;
-    headerPlates.innerHTML = '<span class="no-cars-label">Loading cars...</span>';
+    headerPlates.innerHTML = `<span class="no-cars-label">${t('members.loadingCars')}</span>`;
 
     try {
         const carsQ = query(collection(db, 'cars'), where('currentUserId', '==', uid));
         const carsSnap = await getDocs(carsQ);
 
         if (carsSnap.empty) {
-            headerPlates.innerHTML = '<span class="no-cars-label">No cars assigned</span>';
-            if (carsDetail) carsDetail.textContent = 'No cars assigned';
+            headerPlates.innerHTML = `<span class="no-cars-label">${t('members.noCarsAssigned')}</span>`;
+            if (carsDetail) carsDetail.textContent = t('members.noCarsAssigned');
         } else {
             const plateItems = [];
             carsSnap.forEach(d => {
@@ -347,7 +352,7 @@ async function loadUserCars(uid) {
                         ${plateItems.slice(1).join('')}
                     </div>
                     <button type="button" class="show-more-plates-btn" id="show-more-plates-${uid}">
-                        Show more (${plateItems.length - 1})
+                        ${t('common.loadMore')} (${plateItems.length - 1})
                     </button>
                 `;
 
@@ -360,10 +365,10 @@ async function loadUserCars(uid) {
                         const isHidden = extra.style.display === 'none' || !extra.style.display;
                         if (isHidden) {
                             extra.style.display = 'flex';
-                            showMoreBtn.textContent = 'Show less';
+                            showMoreBtn.textContent = t('common.close');
                         } else {
                             extra.style.display = 'none';
-                            showMoreBtn.textContent = `Show more (${plateItems.length - 1})`;
+                            showMoreBtn.textContent = `${t('common.loadMore')} (${plateItems.length - 1})`;
                         }
                     });
                 }
@@ -375,8 +380,8 @@ async function loadUserCars(uid) {
         }
         headerPlates.dataset.loaded = 'true';
     } catch (err) {
-        headerPlates.innerHTML = '<span class="no-cars-label">Unable to load cars</span>';
-        if (carsDetail) carsDetail.textContent = 'Unable to load';
+        headerPlates.innerHTML = `<span class="no-cars-label">${t('members.unableToLoadCars')}</span>`;
+        if (carsDetail) carsDetail.textContent = t('members.unableToLoadCars');
     }
 }
 
@@ -386,37 +391,38 @@ async function handleMemberAction(uid, action, username) {
     const activityArea = document.getElementById(`activity-area-${uid}`);
     if (activityArea) activityArea.style.display = 'none';
 
+    lockUI();
     try {
         if (action === 'promote') {
             await updateDoc(doc(db, 'users', uid), { role: 'admin' });
             await logAction(currentUserData, 'PROMOTE_USER', {
                 targetId: uid,
                 targetName: username,
-                text: `Promoted ${username}`
+                text: t('members.actionCompleted', { username })
             });
         } else if (action === 'demote') {
             await updateDoc(doc(db, 'users', uid), { role: 'user' });
             await logAction(currentUserData, 'DEMOTE_USER', {
                 targetId: uid,
                 targetName: username,
-                text: `Demoted ${username}`
+                text: t('members.actionCompleted', { username })
             });
         } else if (action === 'suspend') {
-            if (!confirm(`Are you sure you want to suspend the user "${username}"?`)) {
+            if (!confirm(t('members.suspendConfirm', { username }))) {
                 return;
             }
             await updateDoc(doc(db, 'users', uid), { status: 'suspended' });
             await logAction(currentUserData, 'SUSPEND_USER', {
                 targetId: uid,
                 targetName: username,
-                text: `Suspended ${username}`
+                text: t('members.actionCompleted', { username })
             });
         } else if (action === 'activate') {
             await updateDoc(doc(db, 'users', uid), { status: 'active' });
             await logAction(currentUserData, 'ACTIVATE_USER', {
                 targetId: uid,
                 targetName: username,
-                text: `Activated ${username}`
+                text: t('members.actionCompleted', { username })
             });
         } else if (action === 'edit') {
             renderInlineEditForm(uid);
@@ -426,11 +432,13 @@ async function handleMemberAction(uid, action, username) {
             return;
         }
 
-        showMessage(`Action completed for ${username}.`, 'success', 'dashboard');
+        showMessage(t('members.actionCompleted', { username }), 'success', 'dashboard');
         lastVisibleUser = null;
         fetchUsersForAdmin(false);
     } catch (error) {
         handleFirebaseError(error, 'dashboard');
+    } finally {
+        unlockUI();
     }
 }
 
@@ -439,7 +447,7 @@ async function renderUserActivity(uid) {
     if (!activityArea) return;
 
     activityArea.style.display = 'block';
-    activityArea.innerHTML = '<p class="loading-text" style="font-size: 0.85rem;">Loading activity...</p>';
+    activityArea.innerHTML = `<p class="loading-text" style="font-size: 0.85rem;">${t('common.loading')}</p>`;
 
     try {
         const actorQ = query(collection(db, 'logs'), where('actorId', '==', uid), limit(20));
@@ -459,7 +467,7 @@ async function renderUserActivity(uid) {
         });
 
         if (logs.length === 0) {
-            activityArea.innerHTML = '<p style="font-size:0.85rem; text-align:center; color:#666;">No activity recorded.</p>';
+            activityArea.innerHTML = `<p style="font-size:0.85rem; text-align:center; color:#666;">${t('dash.noActivity')}</p>`;
             return;
         }
 
@@ -471,14 +479,14 @@ async function renderUserActivity(uid) {
 
             if (log.actionType === 'CAR_ASSIGN' || log.actionType === 'AUTO_LINK') {
                 itemClass += ' ongoing';
-                text = `Assigned car <strong>${log.targetName || log.targetId}</strong>`;
+                text = `${t('cars.assign')} ${t('cars.carLabel', { plateNumber: log.targetName || '', plateCode: '', emirate: '' })}`;
             } else if (log.actionType === 'CAR_UNASSIGN' || log.actionType === 'APPROVE_UNLINK') {
                 itemClass += ' completed';
-                text = `Unassigned car <strong>${log.targetName || log.targetId}</strong>`;
+                text = `${t('cars.unassign')} ${t('cars.carLabel', { plateNumber: log.targetName || '', plateCode: '', emirate: '' })}`;
             } else if (log.actionType === 'LOGIN') {
-                text = 'Logged into the system';
+                text = t('dash.loggedIn');
             } else if (log.actionType === 'LOGOUT') {
-                text = 'Logged out';
+                text = t('dash.loggedOut');
             }
 
             html += `
@@ -494,7 +502,7 @@ async function renderUserActivity(uid) {
         html += '</div>';
         activityArea.innerHTML = html;
     } catch (error) {
-        activityArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error: ${error.message}</p>`;
+        activityArea.innerHTML = `<p class="error" style="font-size:0.85rem;">${t('error.general')}</p>`;
     }
 }
 
@@ -513,24 +521,24 @@ async function renderInlineEditForm(uid) {
     editArea.innerHTML = `
         <form id="form-edit-${uid}" class="inline-edit-form">
             <div class="form-group">
-                <label>Username</label>
+                <label>${t('auth.username')}</label>
                 <input type="text" id="edit-un-${uid}" value="${data.username}" required>
             </div>
             <div class="form-group">
-                <label>Email</label>
+                <label>${t('auth.email')}</label>
                 <input type="email" id="edit-em-${uid}" value="${data.email}" required>
             </div>
             <div class="form-group">
-                <label>Phone</label>
+                <label>${t('auth.phone')}</label>
                 <input type="text" id="edit-ph-${uid}" value="${data.phone}" required pattern="0\\d{9}">
             </div>
             <div class="form-group">
-                <label>Notes (Admin only)</label>
+                <label>${t('members.notes')} (${t('members.role')})</label>
                 <input type="text" id="edit-nt-${uid}" value="${data.notes || ''}">
             </div>
             <div class="form-group full-width" style="display:flex; gap:10px;">
-                <button type="submit" class="btn btn-sm">Save Changes</button>
-                <button type="button" class="btn btn-sm btn-secondary" id="cancel-edit-${uid}">Cancel</button>
+                <button type="submit" class="btn btn-sm">${t('common.save')}</button>
+                <button type="button" class="btn btn-sm btn-secondary" id="cancel-edit-${uid}">${t('common.cancel')}</button>
             </div>
         </form>
     `;
@@ -551,10 +559,11 @@ async function renderInlineEditForm(uid) {
             const newNotes = ntEl ? ntEl.value.trim() : '';
 
             if (!/^0\d{9}$/.test(newPhone)) {
-                showMessage('Error: Phone must be 10 digits starting with 0.', 'error', 'dashboard');
+                showMessage(t('error.phoneInvalid'), 'error', 'dashboard');
                 return;
             }
 
+            lockUI();
             try {
                 await updateDoc(doc(db, 'users', uid), {
                     username: newUsername,
@@ -566,14 +575,16 @@ async function renderInlineEditForm(uid) {
                 await logAction(currentUserData, 'EDIT_USER', {
                     targetId: uid,
                     targetName: newUsername,
-                    text: `Edited details for ${newUsername}`
+                    text: t('members.memberUpdated')
                 });
 
-                showMessage('Member updated successfully.', 'success', 'dashboard');
+                showMessage(t('members.memberUpdated'), 'success', 'dashboard');
                 lastVisibleUser = null;
                 fetchUsersForAdmin(false);
             } catch (err) {
                 handleFirebaseError(err, 'dashboard');
+            } finally {
+                unlockUI();
             }
         });
     }
@@ -590,7 +601,7 @@ async function renderInlineEditForm(uid) {
 
 function renderEditProfileForm() {
     if (!currentUserData || !currentUserData.isProtected) {
-        showMessage('Only Super Admin can use this secure edit feature.', 'warning', 'dashboard');
+        showMessage(t('error.permissionDenied'), 'warning', 'dashboard');
         return;
     }
 
@@ -598,40 +609,40 @@ function renderEditProfileForm() {
     if (!container) return;
 
     container.innerHTML = `
-        <h2>Edit Protected Profile</h2>
-        <p style="color: #666; margin-bottom: 20px; text-align:center;">Two-step verification required.</p>
+        <h2>${t('members.editProtectedProfile')}</h2>
+        <p style="color: #666; margin-bottom: 20px; text-align:center;">${t('members.twoStepVerification')}</p>
         <form id="edit-profile-form" style="max-width: 500px; margin: 0 auto;">
             <div class="form-group">
-                <label>Current Password</label>
+                <label>${t('members.verifyPassword')}</label>
                 <input type="password" id="verify-password" required autocomplete="current-password">
             </div>
             <div class="form-group">
-                <label>Current Security PIN (4 digits)</label>
+                <label>${t('members.verifyPin')}</label>
                 <input type="password" id="verify-pin" required pattern="\\d{4}" inputmode="numeric" maxlength="4">
             </div>
             <div class="divider"></div>
             <div class="form-group">
-                <label>New Username</label>
+                <label>${t('members.newUsername')}</label>
                 <input type="text" id="edit-username" value="${currentUserData.username}" required>
             </div>
             <div class="form-group">
-                <label>New Phone</label>
+                <label>${t('members.newPhone')}</label>
                 <input type="text" id="edit-phone" value="${currentUserData.phone}" required pattern="0\\d{9}">
             </div>
             <div class="divider"></div>
             <p style="color:#666; font-size:0.9rem; margin-bottom:12px; text-align:center;">
-                Leave New PIN fields empty if you do not want to change the PIN.
+                ${t('members.pinLeaveBlank')}
             </p>
             <div class="form-group">
-                <label>New Security PIN (4 digits, optional)</label>
-                <input type="password" id="edit-new-pin" pattern="\\d{4}" inputmode="numeric" maxlength="4" placeholder="Leave blank to keep current">
+                <label>${t('members.newPin')}</label>
+                <input type="password" id="edit-new-pin" pattern="\\d{4}" inputmode="numeric" maxlength="4" placeholder="${t('members.pinLeaveBlank')}">
             </div>
             <div class="form-group">
-                <label>Confirm New Security PIN</label>
-                <input type="password" id="edit-confirm-pin" pattern="\\d{4}" inputmode="numeric" maxlength="4" placeholder="Leave blank to keep current">
+                <label>${t('members.confirmNewPin')}</label>
+                <input type="password" id="edit-confirm-pin" pattern="\\d{4}" inputmode="numeric" maxlength="4" placeholder="${t('members.pinLeaveBlank')}">
             </div>
-            <button type="submit" class="btn">Verify & Update</button>
-            <button type="button" class="btn btn-secondary" id="cancel-edit" style="margin-top:10px;">Cancel</button>
+            <button type="submit" class="btn">${t('members.verifyAndUpdate')}</button>
+            <button type="button" class="btn btn-secondary" id="cancel-edit" style="margin-top:10px;">${t('common.cancel')}</button>
         </form>
     `;
 
@@ -666,29 +677,30 @@ async function handleEditProtectedProfile(e) {
     const confirmPin = confirmPinEl ? confirmPinEl.value.trim() : '';
 
     if (pin !== currentUserData.securityPin) {
-        showMessage('Security Error: Invalid Security PIN.', 'error', 'dashboard');
+        showMessage(t('error.pinInvalid'), 'error', 'dashboard');
         return;
     }
     if (!/^0\d{9}$/.test(newPhone)) {
-        showMessage('Error: Phone must start with 0 and be 10 digits.', 'error', 'dashboard');
+        showMessage(t('error.phoneInvalid'), 'error', 'dashboard');
         return;
     }
 
     if (newPin || confirmPin) {
         if (!/^\d{4}$/.test(newPin)) {
-            showMessage('Error: New Security PIN must be exactly 4 digits.', 'error', 'dashboard');
+            showMessage(t('error.pinInvalid'), 'error', 'dashboard');
             return;
         }
         if (newPin !== confirmPin) {
-            showMessage('Error: New PIN and confirmation do not match.', 'error', 'dashboard');
+            showMessage(t('error.pinMismatch'), 'error', 'dashboard');
             return;
         }
         if (newPin === pin) {
-            showMessage('Error: New PIN must be different from the current PIN.', 'error', 'dashboard');
+            showMessage(t('error.pinMustDiffer'), 'error', 'dashboard');
             return;
         }
     }
 
+    lockUI();
     try {
         const { reauthenticateWithCredential, EmailAuthProvider } = await import(
             'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js'
@@ -700,7 +712,7 @@ async function handleEditProtectedProfile(e) {
             const q = query(collection(db, 'users'), where('username', '==', newUsername));
             const snapshot = await getDocs(q);
             if (!snapshot.empty) {
-                showMessage('Error: Username already exists.', 'error', 'dashboard');
+                showMessage(t('error.usernameExists'), 'error', 'dashboard');
                 return;
             }
         }
@@ -719,18 +731,20 @@ async function handleEditProtectedProfile(e) {
             targetId: currentUserData.uid,
             targetName: newUsername,
             text: newPin
-                ? 'Super Admin updated own profile and security PIN'
-                : 'Super Admin updated own profile'
+                ? t('members.profileUpdated')
+                : t('members.profileUpdated')
         });
 
-        showMessage('Profile updated. Reloading...', 'success', 'dashboard');
+        showMessage(t('members.profileUpdated'), 'success', 'dashboard');
         setTimeout(() => window.location.reload(), 2000);
     } catch (error) {
         handleFirebaseError(error, 'dashboard');
+    } finally {
+        unlockUI();
     }
 }
 
-// New functions for "My Activity" tab
+// My Personal Activity
 
 export function renderMyPersonalActivity() {
     if (!currentUserData || !currentUserData.uid) {
@@ -740,13 +754,13 @@ export function renderMyPersonalActivity() {
 
     const container = document.getElementById('dashboard-container');
     container.innerHTML = `
-        <h2>My Personal Activity</h2>
+        <h2>${t('dash.myPersonalActivity')}</h2>
         <p style="text-align:center; color:#666; margin-bottom:20px;">
-            Your own activity history and cars you have used.
+            ${t('dash.activityHistory')}
         </p>
         <div class="divider"></div>
         <div id="my-activity-timeline" class="timeline">
-            <p class="loading-text">Loading your activity...</p>
+            <p class="loading-text">${t('common.loading')}</p>
         </div>
     `;
 
@@ -770,7 +784,6 @@ async function loadMyPersonalActivity() {
         actorSnap.forEach(d => logs.push(d.data()));
         assigneeSnap.forEach(d => logs.push(d.data()));
 
-        // إزالة التكرار
         const unique = [];
         const seen = new Set();
         logs.forEach(log => {
@@ -788,7 +801,7 @@ async function loadMyPersonalActivity() {
         });
 
         if (unique.length === 0) {
-            timeline.innerHTML = '<p style="text-align:center; color:#666;">No activity recorded yet.</p>';
+            timeline.innerHTML = `<p style="text-align:center; color:#666;">${t('dash.noActivity')}</p>`;
             return;
         }
 
@@ -800,16 +813,16 @@ async function loadMyPersonalActivity() {
 
             if (log.actionType === 'CAR_ASSIGN' || log.actionType === 'AUTO_LINK' || log.actionType === 'APPROVE_LINK') {
                 itemClass += ' ongoing';
-                text = `Assigned / Linked to car <strong>${log.targetName || log.targetId}</strong>`;
+                text = `${t('cars.assign')} ${t('cars.carLabel', { plateNumber: log.targetName || '', plateCode: '', emirate: '' })}`;
             } else if (log.actionType === 'CAR_UNASSIGN' || log.actionType === 'APPROVE_UNLINK' || log.actionType === 'REQUEST_UNLINK') {
                 itemClass += ' completed';
-                text = `Unassigned / Unlinked from car <strong>${log.targetName || log.targetId}</strong>`;
+                text = `${t('cars.unassign')} ${t('cars.carLabel', { plateNumber: log.targetName || '', plateCode: '', emirate: '' })}`;
             } else if (log.actionType === 'LOGIN') {
-                text = 'Logged into the system';
+                text = t('dash.loggedIn');
             } else if (log.actionType === 'LOGOUT') {
-                text = 'Logged out';
+                text = t('dash.loggedOut');
             } else if (log.actionType === 'REQUEST_LINK') {
-                text = `Requested to link car: <strong>${log.targetName || ''}</strong>`;
+                text = `${t('requests.typeLink')} ${t('cars.carLabel', { plateNumber: log.targetName || '', plateCode: '', emirate: '' })}`;
             }
 
             html += `
@@ -825,6 +838,6 @@ async function loadMyPersonalActivity() {
 
         timeline.innerHTML = html;
     } catch (error) {
-        timeline.innerHTML = `<p class="error">Error loading activity: ${error.message}</p>`;
+        timeline.innerHTML = `<p class="error">${t('error.general')}</p>`;
     }
 }

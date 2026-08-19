@@ -6,7 +6,8 @@
 import { db } from "./firebase.js";
 import { collection, query, where, limit, startAfter, getDocs, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import {
-    isAdmin, renderAccessDenied, formatDateTime, formatCarLabel, daysUntil
+    isAdmin, renderAccessDenied, formatDateTime, formatCarLabel, daysUntil,
+    t
 } from "./utils.js";
 
 let lastVisibleSearch = null;
@@ -24,19 +25,19 @@ export function renderSearchView() {
 
     const container = document.getElementById('dashboard-container');
     container.innerHTML = `
-        <h2>System Search</h2>
+        <h2>${t('search.title')}</h2>
         <div class="divider"></div>
         <div class="search-bar">
-            <input type="text" id="search-input" placeholder="Enter search term...">
+            <input type="text" id="search-input" placeholder="${t('search.placeholder')}">
             <select id="search-category">
-                <option value="users">Users</option>
-                <option value="cars">Cars</option>
-                <option value="logs">Logs</option>
+                <option value="users">${t('search.users')}</option>
+                <option value="cars">${t('search.cars')}</option>
+                <option value="logs">${t('search.logs')}</option>
             </select>
-            <button class="btn" id="search-btn">Search</button>
+            <button class="btn" id="search-btn">${t('common.search')}</button>
         </div>
         <div id="search-results" class="card-list">
-            <p style="text-align:center; color:#666;">Enter a term and click Search.</p>
+            <p style="text-align:center; color:#666;">${t('search.enterTerm')}</p>
         </div>
         <div id="load-more-container" class="load-more-container"></div>
     `;
@@ -57,13 +58,13 @@ async function handleSearch(loadMore = false) {
 
     if (!loadMore) {
         if (!input) {
-            resultsContainer.innerHTML = '<p style="text-align:center; color:#666;">Enter a term and click Search.</p>';
+            resultsContainer.innerHTML = `<p style="text-align:center; color:#666;">${t('search.enterTerm')}</p>`;
             return;
         }
         currentSearchTerm = input.toLowerCase();
         currentSearchCategory = category;
         lastVisibleSearch = null;
-        resultsContainer.innerHTML = '<p class="loading-text">Searching...</p>';
+        resultsContainer.innerHTML = `<p class="loading-text">${t('search.searching')}</p>`;
     }
 
     try {
@@ -134,7 +135,7 @@ async function handleSearch(loadMore = false) {
 
         if (snapshot.empty) {
             if (!loadMore) {
-                resultsContainer.innerHTML = '<p style="text-align:center; color:#666;">No results found.</p>';
+                resultsContainer.innerHTML = `<p style="text-align:center; color:#666;">${t('search.noResults')}</p>`;
             }
             if (loadMoreContainer) loadMoreContainer.innerHTML = '';
             return;
@@ -152,14 +153,14 @@ async function handleSearch(loadMore = false) {
 
         if (loadMoreContainer) {
             if (snapshot.size === 10) {
-                loadMoreContainer.innerHTML = '<button class="load-more-btn" id="load-more-btn">Load More</button>';
+                loadMoreContainer.innerHTML = `<button class="load-more-btn" id="load-more-btn">${t('common.loadMore')}</button>`;
                 document.getElementById('load-more-btn').addEventListener('click', () => handleSearch(true));
             } else {
                 loadMoreContainer.innerHTML = '';
             }
         }
     } catch (error) {
-        resultsContainer.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+        resultsContainer.innerHTML = `<p class="error">${t('search.error')} ${error.message}</p>`;
     }
 }
 
@@ -175,11 +176,11 @@ function renderUserSearchCard(id, data) {
         <div class="card-body">
             <div class="detail-list">
                 <div class="detail-item">
-                    <span class="detail-label">Email</span>
+                    <span class="detail-label">${t('auth.email')}</span>
                     <span class="detail-value">${data.email}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">Phone</span>
+                    <span class="detail-label">${t('auth.phone')}</span>
                     <span class="detail-value">${data.phone}</span>
                 </div>
             </div>
@@ -210,12 +211,12 @@ function renderCarSearchCard(id, data) {
         <div class="card-body">
             <div class="detail-list">
                 <div class="detail-item">
-                    <span class="detail-label">Owner</span>
+                    <span class="detail-label">${t('cars.ownerName')}</span>
                     <span class="detail-value">${data.ownerName}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">Current Assignee</span>
-                    <span class="detail-value">${data.currentUserName || 'Unassigned'}</span>
+                    <span class="detail-label">${t('cars.assign')}</span>
+                    <span class="detail-value">${data.currentUserName || t('cars.unassigned')}</span>
                 </div>
             </div>
         </div>
@@ -238,16 +239,16 @@ function renderLogSearchCard(id, data) {
         <div class="card-body">
             <div class="detail-list">
                 <div class="detail-item">
-                    <span class="detail-label">Actor</span>
+                    <span class="detail-label">${t('logs.actor')}</span>
                     <span class="detail-value">${data.actorName}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">Target</span>
-                    <span class="detail-value">${data.targetName || 'N/A'}</span>
+                    <span class="detail-label">${t('logs.target')}</span>
+                    <span class="detail-value">${data.targetName || t('common.none')}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">Details</span>
-                    <span class="detail-value">${data.details || 'N/A'}</span>
+                    <span class="detail-label">${t('logs.details')}</span>
+                    <span class="detail-value">${data.details || t('common.none')}</span>
                 </div>
             </div>
         </div>
