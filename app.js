@@ -131,6 +131,28 @@ window.addEventListener('DOMContentLoaded', () => {
     updateCopyrightYear();
     setInterval(updateDateTime, 1000);
 
+    // ====== مستمع تغيير اللغة ======
+    const langSelect = document.getElementById('lang-select');
+    if (langSelect) {
+        // تعيين اللغة الافتراضية عند التحميل
+        setLanguage(langSelect.value);
+        
+        langSelect.addEventListener('change', (e) => {
+            setLanguage(e.target.value);
+            // إعادة عرض النموذج الحالي حسب وجود login-form أو setup-form
+            const loginForm = document.getElementById('login-form');
+            const setupForm = document.getElementById('setup-form');
+            if (loginForm) {
+                renderLoginForm();
+            } else if (setupForm) {
+                renderSetupForm();
+            } else {
+                // إذا كان Dashboard ظاهراً، نعيد تحميل الصفحة لتطبيق اللغة
+                window.location.reload();
+            }
+        });
+    }
+
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
         logoutBtn.addEventListener('click', handleLogout);
