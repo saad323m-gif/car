@@ -180,3 +180,20 @@ export function toDateInputValue(ts) {
         return '';
     }
 }
+// ====== الترجمة البسيطة (إنجليزية فقط حالياً) ======
+export function t(key, params = {}) {
+    // ترجمة بسيطة: نعيد المفتاح نفسه مع استبدال المتغيرات
+    return key.replace(/\{(\w+)\}/g, (match, p1) => {
+        return params[p1] !== undefined ? params[p1] : match;
+    });
+}
+
+export function setLanguage(lang) {
+    localStorage.setItem('preferredLanguage', lang);
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+    document.documentElement.lang = lang;
+}
+
+export function getLanguage() {
+    return localStorage.getItem('preferredLanguage') || 'en';
+}
