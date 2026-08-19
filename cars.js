@@ -9,22 +9,17 @@ import {
     query, where, limit, startAfter, orderBy, runTransaction, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { logAction } from "./logs.js";
-import { createLinkRequest as originalCreateLinkRequest, createUnlinkRequest } from "./requests.js";
+import { createLinkRequest, createUnlinkRequest } from "./requests.js";
 import {
     showMessage, handleFirebaseError, formatDateTime, formatDateOnly,
-    formatPeriod, formatCarLabel as baseFormatCarLabel, isAdmin, isActiveUser, renderAccessDenied,
-    daysUntil, expiryClass, toDateInputValue,
-    t, lockUI, unlockUI
+    formatPeriod, formatCarLabel, isAdmin, isActiveUser, renderAccessDenied,
+    daysUntil, expiryClass, toDateInputValue
 } from "./utils.js";
-import { updateRequestsBadge } from "./app.js";
 
 let currentUserData = null;
 let lastVisibleCar = null;
 
 export const setCarsCurrentUser = (data) => { currentUserData = data; };
-
-// استخدام دالة formatCarLabel المعدلة
-const formatCarLabel = baseFormatCarLabel;
 
 export function renderCarsView() {
     const container = document.getElementById('dashboard-container');
@@ -37,30 +32,30 @@ export function renderCarsView() {
 
     if (isAdmin(currentUserData)) {
         container.innerHTML = `
-            <h2>${t('cars.title')}</h2>
+            <h2>Cars Management</h2>
             <div class="divider"></div>
             
             <div class="cars-filters" id="cars-filters">
-                <button class="filter-btn active" data-filter="all">${t('cars.all')}</button>
-                <button class="filter-btn" data-filter="expired">${t('cars.expired')}</button>
-                <button class="filter-btn" data-filter="warning">${t('cars.expiringSoon')}</button>
-                <button class="filter-btn" data-filter="assigned">${t('cars.assigned')}</button>
-                <button class="filter-btn" data-filter="unassigned">${t('cars.unassigned')}</button>
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="expired">Expired</button>
+                <button class="filter-btn" data-filter="warning">Expiring Soon</button>
+                <button class="filter-btn" data-filter="assigned">Assigned</button>
+                <button class="filter-btn" data-filter="unassigned">Unassigned</button>
             </div>
 
-            <button class="btn-add-toggle" id="toggle-add-car">${t('cars.addNew')}</button>
+            <button class="btn-add-toggle" id="toggle-add-car">+ Add New Car</button>
             <div id="add-car-form-wrapper" class="hidden-form" style="margin-bottom: 30px;">
                 <form id="add-car-form">
                     <div class="form-group">
-                        <label>${t('cars.plateNumber')}</label>
+                        <label>Plate Number (Digits)</label>
                         <input type="text" id="car-plate-num" required pattern="\\d+" maxlength="6" placeholder="e.g. 12345">
                     </div>
                     <div class="form-group">
-                        <label>${t('cars.plateCode')}</label>
+                        <label>Plate Code</label>
                         <input type="text" id="car-plate-code" required maxlength="3" placeholder="e.g. A">
                     </div>
                     <div class="form-group">
-                        <label>${t('cars.emirate')}</label>
+                        <label>Emirate</label>
                         <select id="car-emirate" required>
                             <option value="Abu Dhabi">Abu Dhabi</option>
                             <option value="Dubai">Dubai</option>
@@ -73,41 +68,41 @@ export function renderCarsView() {
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>${t('cars.type')}</label>
+                        <label>Type (Make)</label>
                         <input type="text" id="car-type" required placeholder="e.g. Toyota Camry">
                     </div>
                     <div class="form-group">
-                        <label>${t('cars.ownerName')}</label>
+                        <label>Owner Name</label>
                         <input type="text" id="car-owner" required>
                     </div>
                     <div class="form-group">
-                        <label>${t('cars.vin')}</label>
+                        <label>VIN</label>
                         <input type="text" id="car-vin" required placeholder="Vehicle Identification Number">
                     </div>
                     <div class="form-group">
-                        <label>${t('cars.manufactureYear')}</label>
+                        <label>Manufacture Year</label>
                         <input type="number" id="car-year" required min="1900" max="2026" placeholder="e.g. 2020">
                     </div>
                     <div class="form-group">
-                        <label>${t('cars.licenseExpiry')}</label>
+                        <label>License Expiry</label>
                         <input type="date" id="car-license-exp" required>
                     </div>
                     <div class="form-group">
-                        <label>${t('cars.insuranceExpiry')}</label>
+                        <label>Insurance Expiry</label>
                         <input type="date" id="car-insurance-exp" required>
                     </div>
                     <div class="form-group">
-                        <label>${t('cars.notes')}</label>
+                        <label>Notes</label>
                         <input type="text" id="car-notes">
                     </div>
                     <div class="form-group">
-                        <button type="submit" class="btn" id="btn-submit-car">${t('cars.addCar')}</button>
+                        <button type="submit" class="btn" id="btn-submit-car">Add Car</button>
                     </div>
                 </form>
             </div>
-            <h3>${t('cars.title')}</h3>
+            <h3>Cars List (Sorted by License Expiry)</h3>
             <div id="cars-card-list" class="card-list">
-                <p class="loading-text">${t('common.loading')}</p>
+                <p class="loading-text">Loading cars...</p>
             </div>
             <div id="load-more-container" class="load-more-container"></div>
         `;
@@ -124,6 +119,7 @@ export function renderCarsView() {
             addCarForm.addEventListener('submit', handleAddCar);
         }
 
+        // Filters
         document.querySelectorAll('.filter-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -139,21 +135,21 @@ export function renderCarsView() {
         fetchCars(false);
     } else {
         container.innerHTML = `
-            <h2>${t('cars.myCars')}</h2>
+            <h2>My Assigned Cars</h2>
             <div class="divider"></div>
-            <button class="btn-add-toggle" id="toggle-request-car">+ ${t('cars.requestUnlink')}</button>
+            <button class="btn-add-toggle" id="toggle-request-car">+ Request to Use a Car</button>
             <div id="request-car-form-wrapper" class="hidden-form" style="margin-bottom: 30px;">
                 <form id="request-car-form">
                     <div class="form-group">
-                        <label>${t('cars.plateNumber')}</label>
+                        <label>Plate Number</label>
                         <input type="text" id="req-plate-num" required pattern="\\d+" maxlength="6">
                     </div>
                     <div class="form-group">
-                        <label>${t('cars.plateCode')}</label>
+                        <label>Plate Code</label>
                         <input type="text" id="req-plate-code" required maxlength="3">
                     </div>
                     <div class="form-group">
-                        <label>${t('cars.emirate')}</label>
+                        <label>Emirate</label>
                         <select id="req-emirate" required>
                             <option value="Abu Dhabi">Abu Dhabi</option>
                             <option value="Dubai">Dubai</option>
@@ -166,7 +162,7 @@ export function renderCarsView() {
                         </select>
                     </div>
                     <div class="form-group">
-                        <button type="submit" class="btn" id="btn-submit-req">${t('cars.sendRequest')}</button>
+                        <button type="submit" class="btn" id="btn-submit-req">Send Request</button>
                     </div>
                 </form>
             </div>
@@ -182,48 +178,10 @@ export function renderCarsView() {
             });
         }
         if (requestCarForm) {
-            requestCarForm.addEventListener('submit', createLinkRequestWrapper);
+            requestCarForm.addEventListener('submit', createLinkRequest);
         }
         fetchUserCars();
     }
-}
-
-// ====== دوال مساعدة لـ handleAddCar ======
-
-function validateCarFormInputs() {
-    const plateNum = document.getElementById('car-plate-num').value.trim();
-    const plateCode = document.getElementById('car-plate-code').value.trim().toUpperCase();
-    const emirate = document.getElementById('car-emirate').value;
-    const type = document.getElementById('car-type').value.trim();
-    const owner = document.getElementById('car-owner').value.trim();
-    const vin = document.getElementById('car-vin').value.trim().toUpperCase();
-    const year = parseInt(document.getElementById('car-year').value);
-    const licenseExp = document.getElementById('car-license-exp').value;
-    const insuranceExp = document.getElementById('car-insurance-exp').value;
-    const notes = document.getElementById('car-notes').value.trim();
-
-    if (isNaN(year) || year < 1900 || year > 2026) {
-        showMessage(t('error.invalidYear'), 'error', 'dashboard');
-        return null;
-    }
-    if (!/^\d{1,6}$/.test(plateNum) || !/^[A-Z0-9]{1,3}$/.test(plateCode)) {
-        showMessage(t('error.general'), 'error', 'dashboard');
-        return null;
-    }
-    return {
-        plateNum, plateCode, emirate, type, owner, vin, year, licenseExp, insuranceExp, notes,
-        plateIdentifier: `${plateNum}-${plateCode.toLowerCase()}-${emirate.toLowerCase()}`
-    };
-}
-
-async function checkCarUniqueness(plateIdentifier, vin) {
-    const plateQ = query(collection(db, 'cars'), where('plateIdentifier', '==', plateIdentifier));
-    const plateSnap = await getDocs(plateQ);
-    if (!plateSnap.empty) throw new Error(t('error.plateExists'));
-
-    const vinQ = query(collection(db, 'cars'), where('vin', '==', vin));
-    const vinSnap = await getDocs(vinQ);
-    if (!vinSnap.empty) throw new Error(t('error.vinExists'));
 }
 
 async function generateCarId() {
@@ -241,73 +199,110 @@ async function generateCarId() {
     return `UAE-${newCount.toString().padStart(3, '0')}`;
 }
 
-async function saveNewCar(carData, carId) {
-    await setDoc(doc(db, 'cars', carId), {
-        carId,
-        plateNumber: carData.plateNum,
-        plateCode: carData.plateCode,
-        emirate: carData.emirate,
-        plateIdentifier: carData.plateIdentifier,
-        type: carData.type,
-        ownerName: carData.owner,
-        vin: carData.vin,
-        manufactureYear: carData.year,
-        licenseExpiry: new Date(carData.licenseExp),
-        insuranceExpiry: new Date(carData.insuranceExp),
-        notes: carData.notes,
-        currentUserId: null,
-        currentUserName: null,
-        status: 'active',
-        createdAt: serverTimestamp(),
-        lastTransferredAt: null
-    });
-    return carId;
-}
-
-// ====== دالة handleAddCar المُعدلة ======
-
 async function handleAddCar(e) {
     e.preventDefault();
     if (!isAdmin(currentUserData)) return;
 
     const submitBtn = document.getElementById('btn-submit-car');
-    if (!submitBtn || submitBtn.disabled) return;
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Adding...';
+    }
 
-    submitBtn.disabled = true;
-    submitBtn.textContent = t('common.processing');
-    lockUI();
+    const plateNumEl = document.getElementById('car-plate-num');
+    const plateCodeEl = document.getElementById('car-plate-code');
+    const emirateSelect = document.getElementById('car-emirate');
+    const typeEl = document.getElementById('car-type');
+    const ownerEl = document.getElementById('car-owner');
+    const vinEl = document.getElementById('car-vin');
+    const yearEl = document.getElementById('car-year');
+    const licenseExpEl = document.getElementById('car-license-exp');
+    const insuranceExpEl = document.getElementById('car-insurance-exp');
+    const notesEl = document.getElementById('car-notes');
+
+    if (!plateNumEl || !plateCodeEl || !emirateSelect || !typeEl || !ownerEl || !vinEl || !yearEl || !licenseExpEl || !insuranceExpEl) {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Add Car';
+        }
+        showMessage('Error: Form elements not found.', 'error', 'dashboard');
+        return;
+    }
+
+    const plateNum = plateNumEl.value.trim();
+    const plateCode = plateCodeEl.value.trim().toUpperCase();
+    const emirate = emirateSelect.value;
+    const type = typeEl.value.trim();
+    const owner = ownerEl.value.trim();
+    const vin = vinEl.value.trim().toUpperCase();
+    const manufactureYear = parseInt(yearEl.value);
+    const licenseExp = licenseExpEl.value;
+    const insuranceExp = insuranceExpEl.value;
+    const notes = notesEl ? notesEl.value.trim() : '';
+
+    if (isNaN(manufactureYear) || manufactureYear < 1900 || manufactureYear > 2026) {
+        showMessage('Error: Please enter a valid manufacture year (1900-2026).', 'error', 'dashboard');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Add Car';
+        }
+        return;
+    }
+
+    const plateIdentifier = `${plateNum}-${plateCode.toLowerCase()}-${emirate.toLowerCase()}`;
 
     try {
-        const carData = validateCarFormInputs();
-        if (!carData) return;
+        const plateQ = query(collection(db, 'cars'), where('plateIdentifier', '==', plateIdentifier));
+        const plateSnap = await getDocs(plateQ);
+        if (!plateSnap.empty) throw new Error('This plate combination already exists.');
 
-        await checkCarUniqueness(carData.plateIdentifier, carData.vin);
+        const vinQ = query(collection(db, 'cars'), where('vin', '==', vin));
+        const vinSnap = await getDocs(vinQ);
+        if (!vinSnap.empty) throw new Error('This VIN already exists.');
 
         const carId = await generateCarId();
-        await saveNewCar(carData, carId);
 
-        const label = formatCarLabel({ carId, plateNumber: carData.plateNum, plateCode: carData.plateCode, emirate: carData.emirate });
-        await logAction(currentUserData, 'CREATE_CAR', {
-            targetId: carId,
-            targetName: label,
-            text: t('cars.carAdded')
+        await setDoc(doc(db, 'cars', carId), {
+            carId,
+            plateNumber: plateNum,
+            plateCode,
+            emirate,
+            plateIdentifier,
+            type,
+            ownerName: owner,
+            vin,
+            manufactureYear,
+            licenseExpiry: new Date(licenseExp),
+            insuranceExpiry: new Date(insuranceExp),
+            notes,
+            currentUserId: null,
+            currentUserName: null,
+            status: 'active',
+            createdAt: serverTimestamp()
         });
 
-        showMessage(t('cars.carAdded'), 'success', 'dashboard');
-        document.getElementById('add-car-form').reset();
-        document.getElementById('add-car-form-wrapper').classList.add('hidden-form');
+        await logAction(currentUserData, 'CREATE_CAR', {
+            targetId: carId,
+            targetName: formatCarLabel({ carId, plateNumber: plateNum, plateCode, emirate }),
+            text: `Created car ${formatCarLabel({ carId, plateNumber: plateNum, plateCode, emirate })}`
+        });
+
+        showMessage('Success: Car added successfully.', 'success', 'dashboard');
+        const addForm = document.getElementById('add-car-form');
+        if (addForm) addForm.reset();
+        const addWrapper = document.getElementById('add-car-form-wrapper');
+        if (addWrapper) addWrapper.classList.add('hidden-form');
         lastVisibleCar = null;
         fetchCars(false);
     } catch (error) {
-        showMessage(error.message, 'error', 'dashboard');
+        showMessage(`Error: ${error.message}`, 'error', 'dashboard');
     } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = t('cars.addCar');
-        unlockUI();
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Add Car';
+        }
     }
 }
-
-// ====== Fetch Cars ======
 
 async function fetchCars(loadMore = false) {
     if (!isAdmin(currentUserData)) return;
@@ -316,7 +311,7 @@ async function fetchCars(loadMore = false) {
     const loadMoreContainer = document.getElementById('load-more-container');
     if (!listContainer) return;
 
-    if (!loadMore) listContainer.innerHTML = `<p class="loading-text">${t('common.loading')}</p>`;
+    if (!loadMore) listContainer.innerHTML = '<p class="loading-text">Loading cars...</p>';
 
     try {
         let q;
@@ -328,7 +323,7 @@ async function fetchCars(loadMore = false) {
 
         const snapshot = await getDocs(q);
         if (snapshot.empty) {
-            if (!loadMore) listContainer.innerHTML = `<p style="text-align:center; color:#666;">${t('cars.noCars')}</p>`;
+            if (!loadMore) listContainer.innerHTML = '<p style="text-align:center; color:#666;">No cars found.</p>';
             if (loadMoreContainer) loadMoreContainer.innerHTML = '';
             return;
         }
@@ -357,14 +352,14 @@ async function fetchCars(loadMore = false) {
         }
 
         if (docs.length === 0 && !loadMore) {
-            listContainer.innerHTML = `<p style="text-align:center; color:#666;">${t('cars.noCarsMatch')}</p>`;
+            listContainer.innerHTML = '<p style="text-align:center; color:#666;">No cars match the current filter.</p>';
         } else {
             docs.forEach((d) => renderCarCard(d.id, d.data(), false));
         }
 
         if (loadMoreContainer) {
             if (snapshot.size === 10) {
-                loadMoreContainer.innerHTML = `<button class="load-more-btn" id="load-more-btn">${t('common.loadMore')}</button>`;
+                loadMoreContainer.innerHTML = '<button class="load-more-btn" id="load-more-btn">Load More</button>';
                 const loadMoreBtn = document.getElementById('load-more-btn');
                 if (loadMoreBtn) {
                     loadMoreBtn.addEventListener('click', () => fetchCars(true));
@@ -377,7 +372,7 @@ async function fetchCars(loadMore = false) {
         if (filter && filter !== 'all') sessionStorage.removeItem('carsFilter');
     } catch (error) {
         if (listContainer) {
-            listContainer.innerHTML = `<p class="error">${t('error.loadFailed')} ${error.message}</p>`;
+            listContainer.innerHTML = `<p class="error">Error loading cars: ${error.message}</p>`;
         }
     }
 }
@@ -388,25 +383,23 @@ async function fetchUserCars() {
     const listContainer = document.getElementById('cars-card-list');
     if (!listContainer) return;
 
-    listContainer.innerHTML = `<p class="loading-text">${t('common.loading')}</p>`;
+    listContainer.innerHTML = '<p class="loading-text">Loading your cars...</p>';
 
     try {
         const q = query(collection(db, 'cars'), where('currentUserId', '==', currentUserData.uid));
         const snapshot = await getDocs(q);
 
         if (snapshot.empty) {
-            listContainer.innerHTML = `<p style="text-align:center; color:#666;">${t('members.noCarsAssigned')}</p>`;
+            listContainer.innerHTML = '<p style="text-align:center; color:#666;">No cars assigned to you currently.</p>';
             return;
         }
 
         listContainer.innerHTML = '';
         snapshot.forEach((d) => renderCarCard(d.id, d.data(), true));
     } catch (error) {
-        listContainer.innerHTML = `<p class="error">${t('error.loadFailed')} ${error.message}</p>`;
+        listContainer.innerHTML = `<p class="error">Error: ${error.message}</p>`;
     }
 }
-
-// ====== Render Car Card ======
 
 function renderCarCard(id, data, isUserView = false) {
     const listContainer = document.getElementById('cars-card-list');
@@ -442,12 +435,12 @@ function renderCarCard(id, data, isUserView = false) {
     if (!isUserView) {
         actionsHtml = `
             <div class="action-buttons" id="car-actions-${id}">
-                <button type="button" class="action-btn action-btn-edit" data-action="edit">${t('common.edit')}</button>
+                <button type="button" class="action-btn action-btn-edit" data-action="edit">✎ Edit</button>
                 ${data.currentUserId
-                    ? `<button type="button" class="action-btn action-btn-unassign" data-action="unassign">${t('cars.unassign')}</button>`
-                    : `<button type="button" class="action-btn action-btn-assign" data-action="assign">${t('cars.assign')}</button>`}
-                <button type="button" class="action-btn action-btn-print" data-action="print">${t('cars.print')}</button>
-                <button type="button" class="action-btn action-btn-history" data-action="history">${t('cars.history')}</button>
+                    ? '<button type="button" class="action-btn action-btn-unassign" data-action="unassign">👤 Unassign</button>'
+                    : '<button type="button" class="action-btn action-btn-assign" data-action="assign">👤 Assign</button>'}
+                <button type="button" class="action-btn action-btn-print" data-action="print">🖨 Print</button>
+                <button type="button" class="action-btn action-btn-history" data-action="history">📋 History</button>
             </div>
             <div id="assign-area-${id}" style="margin-top: 10px; display:none;"></div>
             <div id="edit-area-${id}" style="margin-top: 10px; display:none;"></div>
@@ -456,8 +449,8 @@ function renderCarCard(id, data, isUserView = false) {
     } else {
         actionsHtml = `
             <div class="action-buttons">
-                <button type="button" class="action-btn action-btn-unlink" id="req-unlink-${id}">${t('cars.requestUnlink')}</button>
-                <button type="button" class="action-btn action-btn-history" id="my-history-${id}">${t('cars.myHistory')}</button>
+                <button type="button" class="action-btn action-btn-unlink" id="req-unlink-${id}">✎ Request Unlink</button>
+                <button type="button" class="action-btn action-btn-history" id="my-history-${id}">📋 My History</button>
             </div>
             <div id="history-area-${id}" style="margin-top: 10px; display:none;"></div>
         `;
@@ -471,7 +464,7 @@ function renderCarCard(id, data, isUserView = false) {
                         <div class="plate-meta-top">
                             <span class="plate-id">${data.carId}</span>
                             <span class="meta-separator"></span>
-                            <span class="plate-owner">${t('cars.carAssignedTo', { userName: data.currentUserName || t('cars.unassigned') })}</span>
+                            <span class="plate-owner">Assignee: ${data.currentUserName || 'Unassigned'}</span>
                         </div>
                         <div class="plate-container">
                             <div style="display:flex; flex-direction:column; align-items:center;">
@@ -488,32 +481,32 @@ function renderCarCard(id, data, isUserView = false) {
         <div class="card-body" id="body-${id}">
             <div class="detail-list">
                 <div class="detail-item">
-                    <span class="detail-label">${t('cars.type')}</span>
+                    <span class="detail-label">Type</span>
                     <span class="detail-value">${data.type}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">${t('cars.ownerName')}</span>
+                    <span class="detail-label">Owner Name</span>
                     <span class="detail-value">${data.ownerName}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">${t('cars.vin')}</span>
+                    <span class="detail-label">VIN</span>
                     <span class="detail-value">${data.vin}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">${t('cars.manufactureYear')}</span>
+                    <span class="detail-label">Manufacture Year</span>
                     <span class="detail-value">${data.manufactureYear || 'N/A'}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">${t('cars.licenseExpiry')}</span>
-                    <span class="detail-value ${licClass}">${formatDateOnly(data.licenseExpiry)} (${licDiff} ${t('common.daysLeft') || 'days left'})</span>
+                    <span class="detail-label">License Expiry</span>
+                    <span class="detail-value ${licClass}">${formatDateOnly(data.licenseExpiry)} (${licDiff} days left)</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">${t('cars.insuranceExpiry')}</span>
-                    <span class="detail-value ${insClass}">${formatDateOnly(data.insuranceExpiry)} (${insDiff} ${t('common.daysLeft') || 'days left'})</span>
+                    <span class="detail-label">Insurance Expiry</span>
+                    <span class="detail-value ${insClass}">${formatDateOnly(data.insuranceExpiry)} (${insDiff} days left)</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">${t('cars.notes')}</span>
-                    <span class="detail-value">${data.notes || t('common.none')}</span>
+                    <span class="detail-label">Notes</span>
+                    <span class="detail-value">${data.notes || 'N/A'}</span>
                 </div>
             </div>
             <div style="margin-top: 15px;">${actionsHtml}</div>
@@ -545,7 +538,7 @@ function renderCarCard(id, data, isUserView = false) {
     if (reqUnlinkBtn) {
         reqUnlinkBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            createUnlinkRequestWrapper(id, data);
+            createUnlinkRequest(id, data);
         });
     }
 
@@ -557,8 +550,6 @@ function renderCarCard(id, data, isUserView = false) {
         });
     }
 }
-
-// ====== Car Actions ======
 
 async function handleCarAction(id, action, data, topBarColor) {
     if (!action || !isAdmin(currentUserData)) return;
@@ -584,26 +575,24 @@ async function handleCarAction(id, action, data, topBarColor) {
     }
 }
 
-// ====== Edit Car Form ======
-
 function renderEditCarForm(carId, data) {
     const editArea = document.getElementById(`edit-area-${carId}`);
     if (!editArea) return;
 
     editArea.style.display = 'block';
     editArea.innerHTML = `
-        <h4>${t('common.edit')}</h4>
+        <h4>Edit Car</h4>
         <form id="edit-car-form-${carId}" class="edit-car-form">
             <div class="form-group">
-                <label>${t('cars.plateNumber')}</label>
+                <label>Plate Number</label>
                 <input type="text" id="edit-plate-num-${carId}" value="${data.plateNumber}" required pattern="\\d+" maxlength="6">
             </div>
             <div class="form-group">
-                <label>${t('cars.plateCode')}</label>
+                <label>Plate Code</label>
                 <input type="text" id="edit-plate-code-${carId}" value="${data.plateCode}" required maxlength="3">
             </div>
             <div class="form-group">
-                <label>${t('cars.emirate')}</label>
+                <label>Emirate</label>
                 <select id="edit-emirate-${carId}" required>
                     <option value="Abu Dhabi" ${data.emirate === 'Abu Dhabi' ? 'selected' : ''}>Abu Dhabi</option>
                     <option value="Dubai" ${data.emirate === 'Dubai' ? 'selected' : ''}>Dubai</option>
@@ -616,36 +605,36 @@ function renderEditCarForm(carId, data) {
                 </select>
             </div>
             <div class="form-group">
-                <label>${t('cars.type')}</label>
+                <label>Type (Make)</label>
                 <input type="text" id="edit-type-${carId}" value="${data.type}" required>
             </div>
             <div class="form-group">
-                <label>${t('cars.ownerName')}</label>
+                <label>Owner Name</label>
                 <input type="text" id="edit-owner-${carId}" value="${data.ownerName}" required>
             </div>
             <div class="form-group">
-                <label>${t('cars.vin')}</label>
+                <label>VIN</label>
                 <input type="text" id="edit-vin-${carId}" value="${data.vin}" required>
             </div>
             <div class="form-group">
-                <label>${t('cars.manufactureYear')}</label>
+                <label>Manufacture Year</label>
                 <input type="number" id="edit-year-${carId}" value="${data.manufactureYear || ''}" required min="1900" max="2026">
             </div>
             <div class="form-group">
-                <label>${t('cars.licenseExpiry')}</label>
+                <label>License Expiry</label>
                 <input type="date" id="edit-lic-${carId}" value="${toDateInputValue(data.licenseExpiry)}" required>
             </div>
             <div class="form-group">
-                <label>${t('cars.insuranceExpiry')}</label>
+                <label>Insurance Expiry</label>
                 <input type="date" id="edit-ins-${carId}" value="${toDateInputValue(data.insuranceExpiry)}" required>
             </div>
             <div class="form-group full-width">
-                <label>${t('cars.notes')}</label>
+                <label>Notes</label>
                 <input type="text" id="edit-notes-${carId}" value="${data.notes || ''}">
             </div>
             <div class="form-group full-width" style="display:flex; gap:10px;">
-                <button type="submit" class="btn btn-sm btn-success">${t('common.save')}</button>
-                <button type="button" class="btn btn-sm btn-secondary" id="cancel-edit-${carId}">${t('common.cancel')}</button>
+                <button type="submit" class="btn btn-sm btn-success">Save Changes</button>
+                <button type="button" class="btn btn-sm btn-secondary" id="cancel-edit-${carId}">Cancel</button>
             </div>
         </form>
     `;
@@ -682,24 +671,23 @@ async function handleSaveEditCar(carId, originalData) {
     const notes = document.getElementById(`edit-notes-${carId}`).value.trim();
 
     if (isNaN(year) || year < 1900 || year > 2026) {
-        showMessage(t('error.invalidYear'), 'error', 'dashboard');
+        showMessage('Error: Please enter a valid manufacture year (1900-2026).', 'error', 'dashboard');
         return;
     }
 
     const plateIdentifier = `${plateNum}-${plateCode.toLowerCase()}-${emirate.toLowerCase()}`;
 
-    lockUI();
     try {
         if (plateIdentifier !== originalData.plateIdentifier) {
             const plateQ = query(collection(db, 'cars'), where('plateIdentifier', '==', plateIdentifier));
             const plateSnap = await getDocs(plateQ);
-            if (!plateSnap.empty) throw new Error(t('error.plateExists'));
+            if (!plateSnap.empty) throw new Error('This plate combination already exists.');
         }
 
         if (vin !== originalData.vin) {
             const vinQ = query(collection(db, 'cars'), where('vin', '==', vin));
             const vinSnap = await getDocs(vinQ);
-            if (!vinSnap.empty) throw new Error(t('error.vinExists'));
+            if (!vinSnap.empty) throw new Error('This VIN already exists.');
         }
 
         await updateDoc(doc(db, 'cars', carId), {
@@ -720,20 +708,16 @@ async function handleSaveEditCar(carId, originalData) {
         await logAction(currentUserData, 'EDIT_CAR', {
             targetId: carId,
             targetName: label,
-            text: t('cars.carUpdated')
+            text: `Edited car ${label}`
         });
 
-        showMessage(t('cars.carUpdated'), 'success', 'dashboard');
+        showMessage('Success: Car updated successfully.', 'success', 'dashboard');
         lastVisibleCar = null;
         fetchCars(false);
     } catch (error) {
-        showMessage(error.message, 'error', 'dashboard');
-    } finally {
-        unlockUI();
+        showMessage(`Error: ${error.message}`, 'error', 'dashboard');
     }
 }
-
-// ====== Print Card ======
 
 function handlePrintCard(data, topBarColor) {
     try {
@@ -770,7 +754,7 @@ function handlePrintCard(data, topBarColor) {
 </head>
 <body>
     <div class="print-header">
-        <h2>${t('cars.title')}</h2>
+        <h2>Car Management System</h2>
     </div>
     <h3>${safe(label)}</h3>
     <div class="plate-container">
@@ -782,33 +766,36 @@ function handlePrintCard(data, topBarColor) {
         <span class="plate-code">${safe(data.plateCode)}</span>
     </div>
     <div class="details">
-        <div class="detail-row"><span class="detail-label">${t('cars.ownerName')}:</span> <span class="detail-value">${safe(data.ownerName)}</span></div>
-        <div class="detail-row"><span class="detail-label">${t('cars.type')}:</span> <span class="detail-value">${safe(data.type)}</span></div>
-        <div class="detail-row"><span class="detail-label">${t('cars.vin')}:</span> <span class="detail-value">${safe(data.vin)}</span></div>
-        <div class="detail-row"><span class="detail-label">${t('cars.manufactureYear')}:</span> <span class="detail-value">${safe(data.manufactureYear || 'N/A')}</span></div>
-        <div class="detail-row"><span class="detail-label">${t('cars.licenseExpiry')}:</span> <span class="detail-value">${safe(licStr)}</span></div>
-        <div class="detail-row"><span class="detail-label">${t('cars.insuranceExpiry')}:</span> <span class="detail-value">${safe(insStr)}</span></div>
-        <div class="detail-row"><span class="detail-label">${t('cars.assign')}:</span> <span class="detail-value">${safe(data.currentUserName || t('cars.unassigned'))}</span></div>
-        <div class="detail-row"><span class="detail-label">${t('cars.notes')}:</span> <span class="detail-value">${safe(data.notes || 'N/A')}</span></div>
+        <div class="detail-row"><span class="detail-label">Owner Name:</span> <span class="detail-value">${safe(data.ownerName)}</span></div>
+        <div class="detail-row"><span class="detail-label">Type:</span> <span class="detail-value">${safe(data.type)}</span></div>
+        <div class="detail-row"><span class="detail-label">VIN:</span> <span class="detail-value">${safe(data.vin)}</span></div>
+        <div class="detail-row"><span class="detail-label">Manufacture Year:</span> <span class="detail-value">${safe(data.manufactureYear || 'N/A')}</span></div>
+        <div class="detail-row"><span class="detail-label">License Expiry:</span> <span class="detail-value">${safe(licStr)}</span></div>
+        <div class="detail-row"><span class="detail-label">Insurance Expiry:</span> <span class="detail-value">${safe(insStr)}</span></div>
+        <div class="detail-row"><span class="detail-label">Current Assignee:</span> <span class="detail-value">${safe(data.currentUserName || 'Unassigned')}</span></div>
+        <div class="detail-row"><span class="detail-label">Notes:</span> <span class="detail-value">${safe(data.notes || 'N/A')}</span></div>
     </div>
 </body>
 </html>`;
 
+        // FIXED PRINT - works in all browsers
         const printWin = window.open('', '_blank', 'width=900,height=700');
         if (!printWin) {
-            showMessage(t('error.general'), 'warning', 'dashboard');
+            showMessage('Please allow popups to print.', 'warning', 'dashboard');
             return;
         }
         printWin.document.open();
         printWin.document.write(html);
         printWin.document.close();
         printWin.focus();
+        // Wait for content to render
         const doPrint = () => {
             try {
                 printWin.print();
             } catch (e) {
-                showMessage(t('error.general'), 'error', 'dashboard');
+                showMessage('Error: Unable to open print dialog.', 'error', 'dashboard');
             }
+            // Don't auto-close immediately, let user close after print
             setTimeout(() => {
                 try { if (!printWin.closed) printWin.close(); } catch(e){}
             }, 1000);
@@ -819,28 +806,26 @@ function handlePrintCard(data, topBarColor) {
             printWin.onload = () => setTimeout(doPrint, 300);
         }
     } catch (error) {
-        showMessage(`${t('error.general')} ${error.message}`, 'error', 'dashboard');
+        showMessage(`Print error: ${error.message}`, 'error', 'dashboard');
     }
 }
-
-// ====== Car History ======
 
 async function renderCarHistory(carId, carData) {
     const historyArea = document.getElementById(`history-area-${carId}`);
     if (!historyArea) return;
 
     historyArea.style.display = 'block';
-    historyArea.innerHTML = `<p class="loading-text" style="font-size: 0.85rem;">${t('common.loading')}</p>`;
+    historyArea.innerHTML = '<p class="loading-text" style="font-size: 0.85rem;">Loading history...</p>';
 
     const carLabel = formatCarLabel(carData);
-    let html = `<div class="history-list"><h4>${t('cars.historyFor', { carLabel })}</h4>`;
+    let html = `<div class="history-list"><h4>History for ${carLabel}</h4>`;
 
     try {
         const logsQuery = query(collection(db, 'logs'), where('targetId', '==', carId), limit(20));
         const logsSnap = await getDocs(logsQuery);
 
         if (logsSnap.empty) {
-            html += `<p class="history-item">${t('cars.noHistory')}</p>`;
+            html += '<p class="history-item">No activity recorded yet.</p>';
         } else {
             const logs = [];
             logsSnap.forEach(doc => logs.push(doc.data()));
@@ -854,7 +839,7 @@ async function renderCarHistory(carId, carData) {
                 const date = formatDateTime(log.timestamp);
                 html += `
                     <div class="history-item">
-                        <span class="action-type">${log.actionType}</span> ${t('common.by')} ${log.actorName}<br>
+                        <span class="action-type">${log.actionType}</span> by ${log.actorName}<br>
                         ${log.details || ''}<br>
                         <span class="timestamp-meta">${date}</span>
                     </div>
@@ -870,7 +855,7 @@ async function renderCarHistory(carId, carData) {
         const assignSnap = await getDocs(assignQuery);
 
         if (!assignSnap.empty) {
-            html += `<h4 style="margin-top: 15px;">${t('cars.assignmentPeriods')}</h4>`;
+            html += '<h4 style="margin-top: 15px;">Assignment Periods</h4>';
             assignSnap.forEach(doc => {
                 const a = doc.data();
                 const period = formatPeriod(a.startTime, a.endTime);
@@ -886,7 +871,7 @@ async function renderCarHistory(carId, carData) {
         html += '</div>';
         historyArea.innerHTML = html;
     } catch (error) {
-        historyArea.innerHTML = `<p class="error" style="font-size:0.85rem;">${t('error.loadFailed')}</p>`;
+        historyArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error loading history: ${error.message}</p>`;
     }
 }
 
@@ -895,12 +880,13 @@ async function renderMyCarHistory(carId, carData) {
     if (!historyArea) return;
 
     historyArea.style.display = 'block';
-    historyArea.innerHTML = `<p class="loading-text" style="font-size: 0.85rem;">${t('common.loading')}</p>`;
+    historyArea.innerHTML = '<p class="loading-text" style="font-size: 0.85rem;">Loading your history...</p>';
 
     const carLabel = formatCarLabel(carData);
-    let html = `<div class="history-list"><h4>${t('cars.myHistory')} ${carLabel}</h4>`;
+    let html = `<div class="history-list"><h4>My History for ${carLabel}</h4>`;
 
     try {
+        // 1. فترات التعيين الخاصة بالمستخدم فقط
         const assignQuery = query(
             collection(db, 'cars', carId, 'assignments'),
             where('userId', '==', currentUserData.uid),
@@ -909,7 +895,7 @@ async function renderMyCarHistory(carId, carData) {
         const assignSnap = await getDocs(assignQuery);
 
         if (assignSnap.empty) {
-            html += `<p class="history-item">${t('cars.noHistory')}</p>`;
+            html += '<p class="history-item">No assignment periods found for you.</p>';
         } else {
             const assignments = [];
             assignSnap.forEach(doc => assignments.push(doc.data()));
@@ -920,18 +906,19 @@ async function renderMyCarHistory(carId, carData) {
                 return tB - tA;
             });
 
-            html += `<h4 style="margin-top: 10px;">${t('cars.myAssignmentPeriods')}</h4>`;
+            html += '<h4 style="margin-top: 10px;">Your Assignment Periods</h4>';
             assignments.slice(0, 10).forEach(a => {
                 const period = formatPeriod(a.startTime, a.endTime);
                 html += `
                     <div class="history-item">
-                        <strong>${t('common.you')}</strong><br>
+                        <strong>You</strong><br>
                         ${period}
                     </div>
                 `;
             });
         }
 
+        // 2. السجلات الخاصة بالمستخدم فقط (استعلامان منفصلان لتجنب مشكلة القواعد)
         const actorLogsQuery = query(
             collection(db, 'logs'),
             where('actorId', '==', currentUserData.uid),
@@ -954,6 +941,7 @@ async function renderMyCarHistory(carId, carData) {
         actorSnap.forEach(doc => myLogs.push(doc.data()));
         assigneeSnap.forEach(doc => myLogs.push(doc.data()));
 
+        // إزالة التكرار
         const uniqueLogs = [];
         const seen = new Set();
         myLogs.forEach(log => {
@@ -971,7 +959,7 @@ async function renderMyCarHistory(carId, carData) {
         });
 
         if (uniqueLogs.length > 0) {
-            html += `<h4 style="margin-top: 15px;">${t('cars.relatedActivity')}</h4>`;
+            html += '<h4 style="margin-top: 15px;">Related Activity</h4>';
             uniqueLogs.slice(0, 8).forEach(log => {
                 const date = formatDateTime(log.timestamp);
                 html += `
@@ -989,24 +977,24 @@ async function renderMyCarHistory(carId, carData) {
 
     } catch (error) {
         console.error(error);
-        historyArea.innerHTML = `<p class="error" style="font-size:0.85rem;">${t('error.loadFailed')}</p>`;
+        historyArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error loading history: ${error.message}</p>`;
     }
-}
-
-// ====== Assign User UI ======
-
+    
+    }
+    
+    
 async function renderAssignUserUI(carId) {
     const assignArea = document.getElementById(`assign-area-${carId}`);
     if (!assignArea) return;
 
     assignArea.style.display = 'block';
-    assignArea.innerHTML = `<p class="loading-text" style="font-size: 0.85rem;">${t('common.loading')}</p>`;
+    assignArea.innerHTML = '<p class="loading-text" style="font-size: 0.85rem;">Loading active users...</p>';
 
     try {
         const q = query(collection(db, 'users'), where('status', '==', 'active'));
         const snapshot = await getDocs(q);
 
-        let options = `<option value="">${t('cars.selectUser')}</option>`;
+        let options = '<option value="">Select Active User</option>';
         snapshot.forEach(d => {
             const u = d.data();
             options += `<option value="${d.id}">${u.username} (${u.role})</option>`;
@@ -1014,7 +1002,7 @@ async function renderAssignUserUI(carId) {
 
         assignArea.innerHTML = `
             <select class="action-select" id="select-user-${carId}">${options}</select>
-            <button class="btn btn-sm btn-success" id="confirm-assign-${carId}" style="margin-top: 10px;">${t('cars.confirmAssign')}</button>
+            <button class="btn btn-sm btn-success" id="confirm-assign-${carId}" style="margin-top: 10px;">Confirm Assign</button>
         `;
 
         const confirmAssignBtn = document.getElementById(`confirm-assign-${carId}`);
@@ -1024,14 +1012,13 @@ async function renderAssignUserUI(carId) {
             const selectUser = document.getElementById(`select-user-${carId}`);
             const userId = selectUser ? selectUser.value : '';
             if (!userId) {
-                showMessage(t('error.selectUser'), 'warning', 'dashboard');
+                showMessage('Please select a user first.', 'warning', 'dashboard');
                 return;
             }
 
-            lockUI();
             try {
                 const userDoc = await getDoc(doc(db, 'users', userId));
-                if (!userDoc.exists()) throw new Error(t('error.userNotFoundFirestore'));
+                if (!userDoc.exists()) throw new Error('User not found.');
                 const userName = userDoc.data().username;
 
                 const carDoc = await getDoc(doc(db, 'cars', carId));
@@ -1040,8 +1027,7 @@ async function renderAssignUserUI(carId) {
 
                 await updateDoc(doc(db, 'cars', carId), {
                     currentUserId: userId,
-                    currentUserName: userName,
-                    lastTransferredAt: serverTimestamp()
+                    currentUserName: userName
                 });
 
                 await addDoc(collection(db, 'cars', carId, 'assignments'), {
@@ -1055,40 +1041,34 @@ async function renderAssignUserUI(carId) {
                     targetId: carId,
                     targetName: label,
                     assigneeId: userId,
-                    text: t('cars.carAssignedTo', { userName })
+                    text: `Assigned ${label} to ${userName}`
                 });
 
-                showMessage(t('cars.assignSuccess'), 'success', 'dashboard');
+                showMessage('User assigned successfully.', 'success', 'dashboard');
                 lastVisibleCar = null;
                 fetchCars(false);
             } catch (err) {
-                showMessage(err.message, 'error', 'dashboard');
-            } finally {
-                unlockUI();
+                showMessage(`Error: ${err.message}`, 'error', 'dashboard');
             }
         });
     } catch (err) {
-        assignArea.innerHTML = `<p class="error" style="font-size:0.85rem;">${t('error.loadFailed')}</p>`;
+        assignArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error: ${err.message}</p>`;
     }
 }
-
-// ====== Unassign User ======
 
 async function handleUnassignUser(carId, data) {
     if (!data.currentUserId || !isAdmin(currentUserData)) return;
 
-    if (!confirm(t('cars.unassignConfirm', { userName: data.currentUserName }))) {
+    if (!confirm(`Are you sure you want to unassign "${data.currentUserName}" from this car?`)) {
         return;
     }
 
-    lockUI();
     try {
         const label = formatCarLabel(data);
 
         await updateDoc(doc(db, 'cars', carId), {
             currentUserId: null,
-            currentUserName: null,
-            lastTransferredAt: serverTimestamp()
+            currentUserName: null
         });
 
         const q = query(
@@ -1108,167 +1088,13 @@ async function handleUnassignUser(carId, data) {
             targetId: carId,
             targetName: label,
             assigneeId: data.currentUserId,
-            text: t('cars.carUnassignedFrom', { userName: data.currentUserName })
+            text: `Unassigned ${label} from ${data.currentUserName}`
         });
 
-        showMessage(t('cars.unassignedSuccess'), 'success', 'dashboard');
+        showMessage('User unassigned successfully.', 'success', 'dashboard');
         lastVisibleCar = null;
         fetchCars(false);
     } catch (err) {
-        showMessage(err.message, 'error', 'dashboard');
-    } finally {
-        unlockUI();
-    }
-}
-
-// ====== createLinkRequest Wrapper (مع رسالة التأكيد والتحسينات) ======
-
-export async function createLinkRequestWrapper(e) {
-    e.preventDefault();
-    if (!isActiveUser(currentUserData)) return;
-
-    const btn = document.getElementById('btn-submit-req');
-    if (!btn || btn.disabled) return;
-
-    btn.disabled = true;
-    btn.textContent = t('common.processing');
-    lockUI();
-
-    try {
-        const plateNum = document.getElementById('req-plate-num').value.trim();
-        const plateCode = document.getElementById('req-plate-code').value.trim().toUpperCase();
-        const emirate = document.getElementById('req-emirate').value.trim();
-
-        const plateIdentifier = `${plateNum}-${plateCode.toLowerCase()}-${emirate.toLowerCase()}`;
-        const carQ = query(collection(db, 'cars'), where('plateIdentifier', '==', plateIdentifier));
-        const carSnap = await getDocs(carQ);
-
-        if (!carSnap.empty) {
-            const carDoc = carSnap.docs[0];
-            const carData = carDoc.data();
-            const label = formatCarLabel(carData);
-
-            // رسالة تأكيد بدون عرض اسم المستخدم الحالي
-            if (!confirm(t('cars.takeoverConfirm'))) {
-                return;
-            }
-
-            const oldUserId = carData.currentUserId;
-            const oldUserName = carData.currentUserName;
-
-            // تنفيذ الاستحواذ
-            await updateDoc(doc(db, 'cars', carDoc.id), {
-                currentUserId: currentUserData.uid,
-                currentUserName: currentUserData.username,
-                lastTransferredAt: serverTimestamp()
-            });
-
-            // إنهاء عهدة المستخدم السابق
-            if (oldUserId) {
-                const prevAssignQ = query(
-                    collection(db, 'cars', carDoc.id, 'assignments'),
-                    where('userId', '==', oldUserId),
-                    where('endTime', '==', null),
-                    limit(1)
-                );
-                const prevSnap = await getDocs(prevAssignQ);
-                if (!prevSnap.empty) {
-                    await updateDoc(doc(db, 'cars', carDoc.id, 'assignments', prevSnap.docs[0].id), {
-                        endTime: serverTimestamp()
-                    });
-                }
-            }
-
-            // إضافة عهدة جديدة
-            await addDoc(collection(db, 'cars', carDoc.id, 'assignments'), {
-                userId: currentUserData.uid,
-                userName: currentUserData.username,
-                startTime: serverTimestamp(),
-                endTime: null
-            });
-
-            // سجل مميز للاستحواذ
-            await logAction(currentUserData, 'CAR_TAKEOVER', {
-                targetId: carDoc.id,
-                targetName: label,
-                assigneeId: currentUserData.uid,
-                text: t('cars.carTakenOver', {
-                    carLabel: label,
-                    newUser: currentUserData.username,
-                    oldUser: oldUserName || 'unknown'
-                })
-            });
-
-            showMessage(t('cars.takeoverSuccess'), 'success', 'dashboard');
-            document.getElementById('request-car-form').reset();
-            document.getElementById('request-car-form-wrapper').classList.add('hidden-form');
-            renderCarsView();
-
-        } else {
-            // السيارة غير موجودة -> إنشاء طلب عادي
-            await addDoc(collection(db, 'requests'), {
-                type: 'LINK',
-                userId: currentUserData.uid,
-                userName: currentUserData.username,
-                plateNumber: plateNum,
-                plateCode: plateCode,
-                emirate: emirate,
-                status: 'PENDING',
-                timestamp: serverTimestamp()
-            });
-
-            await logAction(currentUserData, 'REQUEST_LINK', {
-                targetName: `${plateNum} ${plateCode} (${emirate})`,
-                text: t('cars.requestSent')
-            });
-
-            showMessage(t('cars.requestSent'), 'success', 'dashboard');
-            document.getElementById('request-car-form').reset();
-            document.getElementById('request-car-form-wrapper').classList.add('hidden-form');
-            updateRequestsBadge();
-        }
-    } catch (error) {
-        handleFirebaseError(error, 'dashboard');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = t('cars.sendRequest');
-        unlockUI();
-    }
-}
-
-// ====== createUnlinkRequest Wrapper ======
-
-export async function createUnlinkRequestWrapper(carId, carData) {
-    if (!isActiveUser(currentUserData)) return;
-    if (!confirm(t('cars.unlinkRequestSent'))) return;
-
-    lockUI();
-    try {
-        const label = formatCarLabel(carData);
-
-        await addDoc(collection(db, 'requests'), {
-            type: 'UNLINK',
-            userId: currentUserData.uid,
-            userName: currentUserData.username,
-            carId: carId,
-            plateNumber: carData.plateNumber,
-            plateCode: carData.plateCode,
-            emirate: carData.emirate,
-            status: 'PENDING',
-            timestamp: serverTimestamp()
-        });
-
-        await logAction(currentUserData, 'REQUEST_UNLINK', {
-            targetId: carId,
-            targetName: label,
-            text: t('cars.unlinkRequestSent')
-        });
-
-        showMessage(t('cars.unlinkRequestSent'), 'success', 'dashboard');
-        updateRequestsBadge();
-    } catch (error) {
-        showMessage(error.message, 'error', 'dashboard');
-    } finally {
-        unlockUI();
+        showMessage(`Error: ${err.message}`, 'error', 'dashboard');
     }
 }

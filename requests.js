@@ -11,8 +11,7 @@ import {
 import { logAction } from "./logs.js";
 import {
     showMessage, isAdmin, isActiveUser, renderAccessDenied,
-    formatDateTime, formatCarLabel,
-    t, lockUI, unlockUI
+    formatDateTime, formatCarLabel
 } from "./utils.js";
 import { updateRequestsBadge } from "./app.js";
 
@@ -27,10 +26,10 @@ export function renderRequestsView() {
 
     const container = document.getElementById('dashboard-container');
     container.innerHTML = `
-        <h2>${t('requests.title')}</h2>
+        <h2>Pending User Requests</h2>
         <div class="divider"></div>
         <div id="requests-card-list" class="card-list">
-            <p class="loading-text">${t('common.loading')}</p>
+            <p class="loading-text">Loading requests...</p>
         </div>
     `;
     fetchRequests();
@@ -42,21 +41,21 @@ async function fetchRequests() {
     const listContainer = document.getElementById('requests-card-list');
     if (!listContainer) return;
 
-    listContainer.innerHTML = `<p class="loading-text">${t('common.loading')}</p>`;
+    listContainer.innerHTML = '<p class="loading-text">Loading requests...</p>';
 
     try {
         const q = query(collection(db, 'requests'), where('status', '==', 'PENDING'));
         const snapshot = await getDocs(q);
 
         if (snapshot.empty) {
-            listContainer.innerHTML = `<p style="text-align:center; color:#666;">${t('requests.noPending')}</p>`;
+            listContainer.innerHTML = '<p style="text-align:center; color:#666;">No pending requests.</p>';
             return;
         }
 
         listContainer.innerHTML = '';
         snapshot.forEach(d => renderRequestCard(d.id, d.data()));
     } catch (error) {
-        listContainer.innerHTML = `<p class="error">${t('error.loadFailed')} ${error.message}</p>`;
+        listContainer.innerHTML = `<p class="error">Error: ${error.message}</p>`;
     }
 }
 
@@ -76,25 +75,25 @@ function renderRequestCard(id, data) {
         bodyHtml = `
             <div class="detail-list">
                 <div class="detail-item">
-                    <span class="detail-label">${t('requests.type')}</span>
-                    <span class="detail-value">${t('requests.linkRequest')}</span>
+                    <span class="detail-label">Type</span>
+                    <span class="detail-value">Link Car Request</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">${t('requests.requestedBy')}</span>
+                    <span class="detail-label">Requested By</span>
                     <span class="detail-value">${data.userName}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">${t('requests.plateDetails')}</span>
+                    <span class="detail-label">Plate Details</span>
                     <span class="detail-value">${plateLabel}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">${t('requests.submitted')}</span>
+                    <span class="detail-label">Submitted</span>
                     <span class="detail-value">${dateStr}</span>
                 </div>
             </div>
             <div style="margin-top: 15px; display: flex; gap: 10px;">
-                <button class="btn btn-sm btn-success" id="approve-req-${id}">${t('requests.approve')}</button>
-                <button class="btn btn-sm btn-danger" id="reject-req-${id}">${t('requests.reject')}</button>
+                <button class="btn btn-sm btn-success" id="approve-req-${id}">Approve</button>
+                <button class="btn btn-sm btn-danger" id="reject-req-${id}">Reject</button>
             </div>
             <div id="approve-area-${id}" style="margin-top: 15px; display: none;"></div>
         `;
@@ -111,32 +110,32 @@ function renderRequestCard(id, data) {
         bodyHtml = `
             <div class="detail-list">
                 <div class="detail-item">
-                    <span class="detail-label">${t('requests.type')}</span>
-                    <span class="detail-value">${t('requests.unlinkRequest')}</span>
+                    <span class="detail-label">Type</span>
+                    <span class="detail-value">Unlink Car Request</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">${t('requests.requestedBy')}</span>
+                    <span class="detail-label">Requested By</span>
                     <span class="detail-value">${data.userName}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">${t('cars.carLabel')}</span>
+                    <span class="detail-label">Car</span>
                     <span class="detail-value">${carLabel}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">${t('requests.submitted')}</span>
+                    <span class="detail-label">Submitted</span>
                     <span class="detail-value">${dateStr}</span>
                 </div>
             </div>
             <div style="margin-top: 15px; display: flex; gap: 10px;">
-                <button class="btn btn-sm btn-success" id="approve-req-${id}">${t('requests.approveUnlink')}</button>
-                <button class="btn btn-sm btn-danger" id="reject-req-${id}">${t('requests.reject')}</button>
+                <button class="btn btn-sm btn-success" id="approve-req-${id}">Approve Unlink</button>
+                <button class="btn btn-sm btn-danger" id="reject-req-${id}">Reject</button>
             </div>
         `;
     }
 
     card.innerHTML = `
         <div class="card-header">
-            <span class="card-title">${t('requests.type')} ${data.type === 'LINK' ? t('requests.typeLink') : t('requests.typeUnlink')} - ${data.userName}</span>
+            <span class="card-title">${data.type} Request - ${data.userName}</span>
             <div class="card-meta"><span class="status-pending">${data.status}</span></div>
         </div>
         <div class="card-body" style="display: block;">
@@ -152,7 +151,6 @@ function renderRequestCard(id, data) {
 async function handleApprove(reqId, reqData) {
     if (!isAdmin(currentUserData)) return;
 
-    lockUI();
     try {
         if (reqData.type === 'UNLINK') {
             const carRef = doc(db, 'cars', reqData.carId);
@@ -162,8 +160,7 @@ async function handleApprove(reqId, reqData) {
 
             await updateDoc(carRef, {
                 currentUserId: null,
-                currentUserName: null,
-                lastTransferredAt: serverTimestamp()
+                currentUserName: null
             });
 
             const assignQ = query(
@@ -185,10 +182,10 @@ async function handleApprove(reqId, reqData) {
                 targetId: reqData.carId,
                 targetName: label,
                 assigneeId: reqData.userId,
-                text: t('requests.unlinkApproved')
+                text: `Approved unlink of ${label} for ${reqData.userName}`
             });
 
-            showMessage(t('requests.unlinkApproved'), 'success', 'dashboard');
+            showMessage('Unlink approved successfully.', 'success', 'dashboard');
             fetchRequests();
             updateRequestsBadge();
 
@@ -204,8 +201,7 @@ async function handleApprove(reqId, reqData) {
 
                 await updateDoc(doc(db, 'cars', carDoc.id), {
                     currentUserId: reqData.userId,
-                    currentUserName: reqData.userName,
-                    lastTransferredAt: serverTimestamp()
+                    currentUserName: reqData.userName
                 });
 
                 await addDoc(collection(db, 'cars', carDoc.id, 'assignments'), {
@@ -224,10 +220,10 @@ async function handleApprove(reqId, reqData) {
                     targetId: carDoc.id,
                     targetName: label,
                     assigneeId: reqData.userId,
-                    text: t('requests.linkApproved')
+                    text: `Approved link of ${label} for ${reqData.userName}`
                 });
 
-                showMessage(t('requests.linkApproved'), 'success', 'dashboard');
+                showMessage('Link approved successfully.', 'success', 'dashboard');
                 fetchRequests();
                 updateRequestsBadge();
             } else {
@@ -235,9 +231,7 @@ async function handleApprove(reqId, reqData) {
             }
         }
     } catch (error) {
-        showMessage(error.message, 'error', 'dashboard');
-    } finally {
-        unlockUI();
+        showMessage(`Error: ${error.message}`, 'error', 'dashboard');
     }
 }
 
@@ -247,38 +241,38 @@ function renderCompleteCarForm(reqId, reqData) {
 
     area.style.display = 'block';
     area.innerHTML = `
-        <h4>${t('requests.completeCarDetails')}</h4>
+        <h4>Complete Car Details</h4>
         <form id="complete-car-${reqId}" class="edit-car-form">
             <div class="form-group">
-                <label>${t('cars.type')}</label>
+                <label>Type (Make)</label>
                 <input type="text" id="cc-type-${reqId}" required>
             </div>
             <div class="form-group">
-                <label>${t('cars.ownerName')}</label>
+                <label>Owner Name</label>
                 <input type="text" id="cc-owner-${reqId}" required>
             </div>
             <div class="form-group">
-                <label>${t('cars.vin')}</label>
+                <label>VIN</label>
                 <input type="text" id="cc-vin-${reqId}" required>
             </div>
             <div class="form-group">
-                <label>${t('cars.manufactureYear')}</label>
+                <label>Manufacture Year</label>
                 <input type="number" id="cc-year-${reqId}" required min="1900" max="2026" placeholder="e.g. 2020">
             </div>
             <div class="form-group">
-                <label>${t('cars.licenseExpiry')}</label>
+                <label>License Expiry</label>
                 <input type="date" id="cc-lic-${reqId}" required>
             </div>
             <div class="form-group">
-                <label>${t('cars.insuranceExpiry')}</label>
+                <label>Insurance Expiry</label>
                 <input type="date" id="cc-ins-${reqId}" required>
             </div>
             <div class="form-group full-width">
-                <label>${t('cars.notes')}</label>
+                <label>Notes</label>
                 <input type="text" id="cc-notes-${reqId}">
             </div>
             <div class="form-group full-width">
-                <button type="submit" class="btn btn-sm btn-success">${t('requests.saveAndAssign')}</button>
+                <button type="submit" class="btn btn-sm btn-success">Save & Assign</button>
             </div>
         </form>
     `;
@@ -301,16 +295,15 @@ async function handleCompleteAndAssign(reqId, reqData) {
     const notes = document.getElementById(`cc-notes-${reqId}`).value.trim();
 
     if (isNaN(year) || year < 1900 || year > 2026) {
-        showMessage(t('error.invalidYear'), 'error', 'dashboard');
+        showMessage('Error: Please enter a valid manufacture year (1900-2026).', 'error', 'dashboard');
         return;
     }
 
-    lockUI();
     try {
         const vinQ = query(collection(db, 'cars'), where('vin', '==', vin));
         const vinSnap = await getDocs(vinQ);
         if (!vinSnap.empty) {
-            showMessage(t('error.vinExists'), 'error', 'dashboard');
+            showMessage('Error: This VIN already exists.', 'error', 'dashboard');
             return;
         }
 
@@ -346,8 +339,7 @@ async function handleCompleteAndAssign(reqId, reqData) {
             currentUserId: reqData.userId,
             currentUserName: reqData.userName,
             status: 'active',
-            createdAt: serverTimestamp(),
-            lastTransferredAt: serverTimestamp()
+            createdAt: serverTimestamp()
         });
 
         await addDoc(collection(db, 'cars', carId, 'assignments'), {
@@ -372,62 +364,163 @@ async function handleCompleteAndAssign(reqId, reqData) {
         await logAction(currentUserData, 'CREATE_CAR', {
             targetId: carId,
             targetName: label,
-            text: t('requests.carCreatedAndAssigned')
+            text: `Created car ${label} via request`
         });
 
         await logAction(currentUserData, 'APPROVE_LINK', {
             targetId: carId,
             targetName: label,
             assigneeId: reqData.userId,
-            text: t('requests.linkApproved')
+            text: `Approved link of ${label} for ${reqData.userName}`
         });
 
-        showMessage(t('requests.carCreatedAndAssigned'), 'success', 'dashboard');
+        showMessage('Car created and assigned successfully.', 'success', 'dashboard');
         fetchRequests();
         updateRequestsBadge();
     } catch (error) {
-        showMessage(error.message, 'error', 'dashboard');
-    } finally {
-        unlockUI();
+        showMessage(`Error: ${error.message}`, 'error', 'dashboard');
     }
 }
 
 async function handleReject(reqId, reqData) {
     if (!isAdmin(currentUserData)) return;
 
-    const typeLabel = reqData.type === 'LINK' ? t('requests.typeLink') : t('requests.typeUnlink');
-    if (!confirm(t('requests.rejectConfirm', { type: typeLabel, userName: reqData.userName }))) {
+    if (!confirm(`Are you sure you want to reject the ${reqData.type} request from ${reqData.userName}?`)) {
         return;
     }
 
-    lockUI();
     try {
         await updateDoc(doc(db, 'requests', reqId), { status: 'REJECTED' });
 
         await logAction(currentUserData, 'REJECT_REQUEST', {
             targetId: reqId,
             targetName: reqData.userName,
-            text: t('requests.rejected')
+            text: `Rejected ${reqData.type} request from ${reqData.userName}`
         });
 
-        showMessage(t('requests.rejected'), 'warning', 'dashboard');
+        showMessage('Request rejected.', 'warning', 'dashboard');
         fetchRequests();
         updateRequestsBadge();
     } catch (error) {
-        showMessage(error.message, 'error', 'dashboard');
-    } finally {
-        unlockUI();
+        showMessage(`Error: ${error.message}`, 'error', 'dashboard');
     }
 }
 
-// دالة createLinkRequest تم نقلها إلى cars.js
-// هذه الدالة محفوظة للتوافق مع الكود القديم، لكنها غير مستخدمة حالياً
+export async function createLinkRequest(e) {
+    e.preventDefault();
+    if (!isActiveUser(currentUserData)) return;
+
+    const btn = document.getElementById('btn-submit-req');
+    if (!btn) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Processing...';
+
+    const plateNum = document.getElementById('req-plate-num').value.trim();
+    const plateCodeRaw = document.getElementById('req-plate-code').value.trim();
+    const plateCode = plateCodeRaw.toUpperCase();
+    const emirate = document.getElementById('req-emirate').value.trim();
+
+    const plateIdentifier = `${plateNum}-${plateCode.toLowerCase()}-${emirate.toLowerCase()}`;
+
+    try {
+        const carQ = query(collection(db, 'cars'), where('plateIdentifier', '==', plateIdentifier));
+        const carSnap = await getDocs(carQ);
+
+        if (!carSnap.empty) {
+            const carDoc = carSnap.docs[0];
+            const carData = carDoc.data();
+            const label = formatCarLabel(carData);
+
+            if (carData.currentUserId === currentUserData.uid) {
+                showMessage('This car is already assigned to you.', 'warning', 'dashboard');
+                return;
+            }
+
+            if (carData.currentUserId) {
+                const prevAssignQ = query(
+                    collection(db, 'cars', carDoc.id, 'assignments'),
+                    where('userId', '==', carData.currentUserId),
+                    where('endTime', '==', null),
+                    limit(1)
+                );
+                const prevSnap = await getDocs(prevAssignQ);
+                if (!prevSnap.empty) {
+                    await updateDoc(doc(db, 'cars', carDoc.id, 'assignments', prevSnap.docs[0].id), {
+                        endTime: serverTimestamp()
+                    });
+                }
+
+                await logAction(currentUserData, 'FORCE_UNASSIGN', {
+                    targetId: carDoc.id,
+                    targetName: label,
+                    assigneeId: carData.currentUserId,
+                    text: `Force unassigned ${label} from ${carData.currentUserName} (requested by ${currentUserData.username})`
+                });
+            }
+
+            await updateDoc(doc(db, 'cars', carDoc.id), {
+                currentUserId: currentUserData.uid,
+                currentUserName: currentUserData.username
+            });
+
+            await addDoc(collection(db, 'cars', carDoc.id, 'assignments'), {
+                userId: currentUserData.uid,
+                userName: currentUserData.username,
+                startTime: serverTimestamp(),
+                endTime: null
+            });
+
+            await logAction(currentUserData, 'AUTO_LINK', {
+                targetId: carDoc.id,
+                targetName: label,
+                assigneeId: currentUserData.uid,
+                text: `Auto-linked ${label} to ${currentUserData.username}`
+            });
+
+            showMessage(`Success: Car ${label} has been linked to you automatically.`, 'success', 'dashboard');
+
+            document.getElementById('request-car-form').reset();
+            document.getElementById('request-car-form-wrapper').classList.add('hidden-form');
+
+            const { renderCarsView } = await import('./cars.js');
+            renderCarsView();
+
+        } else {
+            await addDoc(collection(db, 'requests'), {
+                type: 'LINK',
+                userId: currentUserData.uid,
+                userName: currentUserData.username,
+                plateNumber: plateNum,
+                plateCode: plateCode,
+                emirate: emirate,
+                status: 'PENDING',
+                timestamp: serverTimestamp()
+            });
+
+            await logAction(currentUserData, 'REQUEST_LINK', {
+                targetName: `${plateNum} ${plateCode} (${emirate})`,
+                text: `Requested link for plate ${plateNum} ${plateCode} (${emirate})`
+            });
+
+            showMessage('Request sent to admin successfully. The car was not found in the system.', 'success', 'dashboard');
+
+            document.getElementById('request-car-form').reset();
+            document.getElementById('request-car-form-wrapper').classList.add('hidden-form');
+            updateRequestsBadge();
+        }
+    } catch (error) {
+        showMessage(`Error: ${error.message}`, 'error', 'dashboard');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send Request';
+    }
+}
 
 export async function createUnlinkRequest(carId, carData) {
     if (!isActiveUser(currentUserData)) return;
-    if (!confirm(t('cars.unlinkRequestSent'))) return;
+    if (!confirm('Send request to admin to unlink this car?')) return;
 
-    lockUI();
     try {
         const label = formatCarLabel(carData);
 
@@ -446,14 +539,12 @@ export async function createUnlinkRequest(carId, carData) {
         await logAction(currentUserData, 'REQUEST_UNLINK', {
             targetId: carId,
             targetName: label,
-            text: t('cars.unlinkRequestSent')
+            text: `Requested unlink of ${label}`
         });
 
-        showMessage(t('cars.unlinkRequestSent'), 'success', 'dashboard');
+        showMessage('Unlink request sent to admin.', 'success', 'dashboard');
         updateRequestsBadge();
     } catch (error) {
-        showMessage(error.message, 'error', 'dashboard');
-    } finally {
-        unlockUI();
+        showMessage(`Error: ${error.message}`, 'error', 'dashboard');
     }
 }

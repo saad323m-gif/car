@@ -20,10 +20,7 @@ import { renderCarsView, setCarsCurrentUser } from "./cars.js";
 import { renderRequestsView, setRequestsCurrentUser } from "./requests.js";
 import { renderSearchView, setSearchCurrentUser } from "./search.js";
 import { renderStatsView, setStatsCurrentUser } from "./stats.js";
-import { 
-    showMessage, handleFirebaseError, clearMessage, 
-    t, setLanguage, getLanguage, lockUI, unlockUI 
-} from "./utils.js";
+import { showMessage, handleFirebaseError, clearMessage } from "./utils.js";
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000;
@@ -175,10 +172,6 @@ window.addEventListener('DOMContentLoaded', () => {
                 const userData = userDoc.data();
                 userData.uid = user.uid;
 
-                // تطبيق اللغة المفضلة من المستخدم
-                const preferredLang = userData.preferredLanguage || getLanguage();
-                setLanguage(preferredLang);
-
                 setCurrentUser(userData);
                 setCarsCurrentUser(userData);
                 setRequestsCurrentUser(userData);
@@ -257,6 +250,7 @@ function showDashboard() {
 
 async function checkSystemState() {
     try {
+        // الطريقة الآمنة الجديدة - تقرأ مستند عام لا يحتوي بيانات حساسة
         const statusRef = doc(db, 'system', 'status');
         const statusSnap = await getDoc(statusRef);
         
@@ -268,6 +262,7 @@ async function checkSystemState() {
                 renderSetupForm();
             }
         } else {
+            // هجرة أول مرة - إذا لم يوجد المستند العام
             try {
                 const q = query(collection(db, 'users'), limit(1));
                 const snapshot = await getDocs(q);
@@ -277,120 +272,73 @@ async function checkSystemState() {
                     renderLoginForm();
                 }
             } catch (e) {
+                // إذا فشل بسبب الصلاحيات الجديدة، اعرض تسجيل الدخول مباشرة ولا تكسر الفورم
                 console.warn('Fallback to login form:', e.message);
                 renderLoginForm();
             }
         }
     } catch (error) {
+        // أهم حماية: حتى لو فشل كل شيء، اعرض فورم الدخول
         console.error('checkSystemState error:', error);
         renderLoginForm();
     }
 }
 
-export function renderLoginForm() {
-    const container = document.getElementById('form-container');
-    container.innerHTML = `
-        <div id="language-selector" style="text-align: center; margin-bottom: 20px;">
-            <label style="font-weight:600; color:#1565c0; margin-right:10px;">${t('common.selectLanguage')}:</label>
-            <select id="lang-select" style="padding:6px 12px; border-radius:4px; border:1px solid #90caf9;">
-                <option value="en" ${getLanguage() === 'en' ? 'selected' : ''}>English</option>
-                <option value="ar" ${getLanguage() === 'ar' ? 'selected' : ''}>العربية</option>
-            </select>
-        </div>
-        <h2>${t('auth.login')}</h2>
-        <form id="login-form">
-            <div class="form-group">
-                <label>${t('auth.email')}</label>
-                <input type="email" id="login-email" required>
-            </div>
-            <div class="form-group">
-                <label>${t('auth.password')}</label>
-                <input type="password" id="login-password" required>
-            </div>
-            <div class="form-group checkbox-group">
-                <input type="checkbox" id="remember-me">
-                <label for="remember-me" style="margin-bottom:0">${t('auth.rememberMe')}</label>
-            </div>
-            <button type="submit" class="btn">${t('auth.login')}</button>
-        </form>
-    `;
-    document.getElementById('login-form').addEventListener('submit', handleLogin);
-
-    document.getElementById('lang-select').addEventListener('change', (e) => {
-        setLanguage(e.target.value);
-        renderLoginForm();
-    });
-}
-
-export function renderSetupForm() {
-    const container = document.getElementById('form-container');
-    container.innerHTML = `
-        <div id="language-selector" style="text-align: center; margin-bottom: 20px;">
-            <label style="font-weight:600; color:#1565c0; margin-right:10px;">${t('common.selectLanguage')}:</label>
-            <select id="lang-select" style="padding:6px 12px; border-radius:4px; border:1px solid #90caf9;">
-                <option value="en" ${getLanguage() === 'en' ? 'selected' : ''}>English</option>
-                <option value="ar" ${getLanguage() === 'ar' ? 'selected' : ''}>العربية</option>
-            </select>
-        </div>
-        <h2>${t('auth.setupTitle')}</h2>
+function renderSetupForm() {
+    document.getElementById('form-container').innerHTML = `
+        <h2>System Setup</h2>
         <p style="margin-bottom: 20px; font-size: 0.9rem; color: #666; text-align:center;">
-            ${t('auth.setupDesc')}
+            Create the protected Super Admin account.
         </p>
         <form id="setup-form">
             <div class="form-group">
-                <label>${t('auth.username')}</label>
+                <label>Username</label>
                 <input type="text" id="username" required>
             </div>
             <div class="form-group">
-                <label>${t('auth.email')}</label>
+                <label>Email</label>
                 <input type="email" id="email" required>
             </div>
             <div class="form-group">
-                <label>${t('auth.password')}</label>
+                <label>Password</label>
                 <input type="password" id="password" required minlength="6">
             </div>
             <div class="form-group">
-                <label>${t('auth.phone')}</label>
+                <label>Phone (Starts with 0, 10 digits)</label>
                 <input type="text" id="phone" required pattern="0\\d{9}" placeholder="0XXXXXXXXX">
             </div>
             <div class="form-group">
-                <label>${t('auth.securityPin')}</label>
+                <label>Security PIN (4 digits)</label>
                 <input type="password" id="securityPin" required pattern="\\d{4}">
             </div>
-            <button type="submit" class="btn">${t('auth.createSuperAdmin')}</button>
+            <button type="submit" class="btn">Create Super Admin</button>
         </form>
     `;
     document.getElementById('setup-form').addEventListener('submit', handleSetup);
-
-    document.getElementById('lang-select').addEventListener('change', (e) => {
-        setLanguage(e.target.value);
-        renderSetupForm();
-    });
 }
 
 async function handleSetup(e) {
     e.preventDefault();
-    lockUI();
+    const username = document.getElementById('username').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    const phone = document.getElementById('phone').value.trim();
+    const securityPin = document.getElementById('securityPin').value;
+
+    if (!/^0\d{9}$/.test(phone)) {
+        showMessage('Error: Phone must start with 0 and be exactly 10 digits.', 'error');
+        return;
+    }
+    if (!/^\d{4}$/.test(securityPin)) {
+        showMessage('Error: Security PIN must be exactly 4 digits.', 'error');
+        return;
+    }
+
     try {
-        const username = document.getElementById('username').value.trim();
-        const email = document.getElementById('email').value.trim();
-        const password = document.getElementById('password').value;
-        const phone = document.getElementById('phone').value.trim();
-        const securityPin = document.getElementById('securityPin').value;
-
-        if (!/^0\d{9}$/.test(phone)) {
-            showMessage(t('error.phoneInvalid'), 'error');
-            return;
-        }
-        if (!/^\d{4}$/.test(securityPin)) {
-            showMessage(t('error.pinInvalid'), 'error');
-            return;
-        }
-
         const q = query(collection(db, 'users'), where('username', '==', username));
         const usernameSnapshot = await getDocs(q);
         if (!usernameSnapshot.empty) {
-            showMessage(t('error.usernameExists'), 'error');
+            showMessage('Error: Username already exists.', 'error');
             return;
         }
 
@@ -406,20 +354,39 @@ async function handleSetup(e) {
             notes: '',
             isProtected: true,
             securityPin,
-            rememberSession: false,
-            preferredLanguage: getLanguage()
+            rememberSession: false
         });
 
         await logAction({ uid, username }, 'SYSTEM_SETUP', {
             text: 'System initialized with Super Admin'
         });
 
-        showMessage(t('auth.passwordUpdated'), 'success');
+        showMessage('Success: Super Admin created successfully.', 'success');
     } catch (error) {
         handleFirebaseError(error);
-    } finally {
-        unlockUI();
     }
+}
+
+function renderLoginForm() {
+    document.getElementById('form-container').innerHTML = `
+        <h2>Login</h2>
+        <form id="login-form">
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="login-email" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="login-password" required>
+            </div>
+            <div class="form-group checkbox-group">
+                <input type="checkbox" id="remember-me">
+                <label for="remember-me" style="margin-bottom:0">Remember Me</label>
+            </div>
+            <button type="submit" class="btn">Login</button>
+        </form>
+    `;
+    document.getElementById('login-form').addEventListener('submit', handleLogin);
 }
 
 async function handleLogin(e) {
@@ -434,11 +401,10 @@ async function handleLogin(e) {
     const rememberMe = rememberEl ? rememberEl.checked : false;
 
     if (!email || !password) {
-        showMessage(t('error.general'), 'error');
+        showMessage('Error: Email and password are required.', 'error');
         return;
     }
 
-    lockUI();
     try {
         const lockStatus = await isLoginLocked(email);
         if (lockStatus.locked) {
@@ -458,7 +424,7 @@ async function handleLogin(e) {
 
         const userDoc = await getDoc(doc(db, 'users', uid));
         if (!userDoc.exists()) {
-            showMessage(t('error.userNotFound'), 'error');
+            showMessage('Error: User data not found.', 'error');
             await signOut(auth);
             return;
         }
@@ -469,18 +435,13 @@ async function handleLogin(e) {
             await logAction({ username: email }, 'LOGIN_FAILED', {
                 text: `Suspended account attempt: ${email}`
             });
-            showMessage(t('error.userDisabled'), 'error');
+            showMessage('Access Denied: Your account is suspended.', 'error');
             return;
         }
 
         await clearLoginAttempts(email);
         await updateDoc(doc(db, 'users', uid), { rememberSession: rememberMe });
-        await logAction(userData, 'LOGIN', { text: t('dash.loggedIn') });
-
-        // تطبيق اللغة المفضلة من المستخدم
-        const preferredLang = userData.preferredLanguage || getLanguage();
-        setLanguage(preferredLang);
-
+        await logAction(userData, 'LOGIN', { text: 'User logged in' });
     } catch (error) {
         let failInfo = null;
         try {
@@ -494,7 +455,7 @@ async function handleLogin(e) {
         });
 
         if (failInfo && failInfo.locked) {
-            showMessage(t('error.tooManyRequests'), 'error');
+            showMessage(`Too many failed attempts. Account locked for 15 minutes.`, 'error');
         } else if (failInfo && failInfo.failCount) {
             const left = MAX_LOGIN_ATTEMPTS - failInfo.failCount;
             handleFirebaseError(error);
@@ -507,8 +468,6 @@ async function handleLogin(e) {
         } else {
             handleFirebaseError(error);
         }
-    } finally {
-        unlockUI();
     }
 }
 
@@ -518,7 +477,7 @@ async function handleLogout() {
         if (currentUser) {
             const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
             if (userDoc.exists()) {
-                await logAction(userDoc.data(), 'LOGOUT', { text: t('dash.loggedOut') });
+                await logAction(userDoc.data(), 'LOGOUT', { text: 'User logged out' });
             }
         }
         await signOut(auth);
@@ -529,10 +488,10 @@ async function handleLogout() {
     }
 }
 
-export function renderChangePasswordForm() {
+function renderChangePasswordForm() {
     const userData = getCurrentUser();
     if (!userData || !auth.currentUser) {
-        showMessage(t('error.general'), 'error', 'dashboard');
+        showMessage('You must be logged in to change password.', 'error', 'dashboard');
         return;
     }
 
@@ -542,25 +501,25 @@ export function renderChangePasswordForm() {
     clearMessage('dashboard');
 
     container.innerHTML = `
-        <h2>${t('auth.changePassword')}</h2>
+        <h2>Change Password</h2>
         <p style="color:#666; margin-bottom:20px; text-align:center;">
-            ${t('auth.reauthenticateError')}
+            Enter your current password, then choose a new one.
         </p>
         <form id="change-password-form" style="max-width:500px; margin:0 auto;">
             <div class="form-group">
-                <label>${t('auth.currentPassword')}</label>
+                <label>Current Password</label>
                 <input type="password" id="cp-current" required minlength="6" autocomplete="current-password">
             </div>
             <div class="form-group">
-                <label>${t('auth.newPassword')}</label>
+                <label>New Password</label>
                 <input type="password" id="cp-new" required minlength="6" autocomplete="new-password">
             </div>
             <div class="form-group">
-                <label>${t('auth.confirmNewPassword')}</label>
+                <label>Confirm New Password</label>
                 <input type="password" id="cp-confirm" required minlength="6" autocomplete="new-password">
             </div>
-            <button type="submit" class="btn" id="cp-submit">${t('auth.updatePassword')}</button>
-            <button type="button" class="btn btn-secondary" id="cp-cancel" style="margin-top:10px;">${t('common.cancel')}</button>
+            <button type="submit" class="btn" id="cp-submit">Update Password</button>
+            <button type="button" class="btn btn-secondary" id="cp-cancel" style="margin-top:10px;">Cancel</button>
         </form>
     `;
 
@@ -593,24 +552,23 @@ async function handleChangePassword(e) {
     const confirmPassword = confirmEl.value;
 
     if (newPassword.length < 6) {
-        showMessage(t('auth.passwordMinLength'), 'error', 'dashboard');
+        showMessage('Error: New password must be at least 6 characters.', 'error', 'dashboard');
         return;
     }
     if (newPassword !== confirmPassword) {
-        showMessage(t('auth.passwordsDoNotMatch'), 'error', 'dashboard');
+        showMessage('Error: New password and confirmation do not match.', 'error', 'dashboard');
         return;
     }
     if (currentPassword === newPassword) {
-        showMessage(t('auth.passwordSameAsCurrent'), 'error', 'dashboard');
+        showMessage('Error: New password must be different from the current password.', 'error', 'dashboard');
         return;
     }
 
     if (submitBtn) {
         submitBtn.disabled = true;
-        submitBtn.textContent = t('common.processing');
+        submitBtn.textContent = 'Updating...';
     }
 
-    lockUI();
     try {
         const credential = EmailAuthProvider.credential(userData.email, currentPassword);
         await reauthenticateWithCredential(auth.currentUser, credential);
@@ -619,10 +577,10 @@ async function handleChangePassword(e) {
         await logAction(userData, 'CHANGE_PASSWORD', {
             targetId: userData.uid,
             targetName: userData.username,
-            text: t('auth.passwordUpdated')
+            text: `Password changed by ${userData.username}`
         });
 
-        showMessage(t('auth.passwordUpdated'), 'success', 'dashboard');
+        showMessage('Password updated successfully.', 'success', 'dashboard');
         currentEl.value = '';
         newEl.value = '';
         confirmEl.value = '';
@@ -638,9 +596,8 @@ async function handleChangePassword(e) {
     } finally {
         if (submitBtn) {
             submitBtn.disabled = false;
-            submitBtn.textContent = t('auth.updatePassword');
+            submitBtn.textContent = 'Update Password';
         }
-        unlockUI();
     }
 }
 
@@ -664,6 +621,7 @@ export async function updateRequestsBadge() {
     }
 }
 
+// New function for My Activity tab
 async function renderMyActivityView() {
     const { renderMyPersonalActivity } = await import('./members.js');
     renderMyPersonalActivity();
