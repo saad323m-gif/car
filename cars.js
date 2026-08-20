@@ -52,7 +52,7 @@ export function renderCarsView() {
                     </div>
                     <div class="form-group">
                         <label>Plate Code</label>
-                        <input type="text" id="car-plate-code" required maxlength="3" placeholder="e.g. A">
+                        <input type="text" id="car-plate-code" required maxlength="5" size="3" placeholder="e.g. A">
                     </div>
                     <div class="form-group">
                         <label>Emirate</label>
@@ -119,7 +119,6 @@ export function renderCarsView() {
             addCarForm.addEventListener('submit', handleAddCar);
         }
 
-        // Filters
         document.querySelectorAll('.filter-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -146,7 +145,7 @@ export function renderCarsView() {
                     </div>
                     <div class="form-group">
                         <label>Plate Code</label>
-                        <input type="text" id="req-plate-code" required maxlength="3">
+                        <input type="text" id="req-plate-code" required maxlength="5" size="3">
                     </div>
                     <div class="form-group">
                         <label>Emirate</label>
@@ -589,7 +588,7 @@ function renderEditCarForm(carId, data) {
             </div>
             <div class="form-group">
                 <label>Plate Code</label>
-                <input type="text" id="edit-plate-code-${carId}" value="${data.plateCode}" required maxlength="3">
+                <input type="text" id="edit-plate-code-${carId}" value="${data.plateCode}" required maxlength="5" size="3">
             </div>
             <div class="form-group">
                 <label>Emirate</label>
@@ -778,7 +777,6 @@ function handlePrintCard(data, topBarColor) {
 </body>
 </html>`;
 
-        // FIXED PRINT - works in all browsers
         const printWin = window.open('', '_blank', 'width=900,height=700');
         if (!printWin) {
             showMessage('Please allow popups to print.', 'warning', 'dashboard');
@@ -788,14 +786,12 @@ function handlePrintCard(data, topBarColor) {
         printWin.document.write(html);
         printWin.document.close();
         printWin.focus();
-        // Wait for content to render
         const doPrint = () => {
             try {
                 printWin.print();
             } catch (e) {
                 showMessage('Error: Unable to open print dialog.', 'error', 'dashboard');
             }
-            // Don't auto-close immediately, let user close after print
             setTimeout(() => {
                 try { if (!printWin.closed) printWin.close(); } catch(e){}
             }, 1000);
@@ -886,7 +882,6 @@ async function renderMyCarHistory(carId, carData) {
     let html = `<div class="history-list"><h4>My History for ${carLabel}</h4>`;
 
     try {
-        // 1. فترات التعيين الخاصة بالمستخدم فقط
         const assignQuery = query(
             collection(db, 'cars', carId, 'assignments'),
             where('userId', '==', currentUserData.uid),
@@ -918,7 +913,6 @@ async function renderMyCarHistory(carId, carData) {
             });
         }
 
-        // 2. السجلات الخاصة بالمستخدم فقط (استعلامان منفصلان لتجنب مشكلة القواعد)
         const actorLogsQuery = query(
             collection(db, 'logs'),
             where('actorId', '==', currentUserData.uid),
@@ -941,7 +935,6 @@ async function renderMyCarHistory(carId, carData) {
         actorSnap.forEach(doc => myLogs.push(doc.data()));
         assigneeSnap.forEach(doc => myLogs.push(doc.data()));
 
-        // إزالة التكرار
         const uniqueLogs = [];
         const seen = new Set();
         myLogs.forEach(log => {
@@ -979,10 +972,8 @@ async function renderMyCarHistory(carId, carData) {
         console.error(error);
         historyArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error loading history: ${error.message}</p>`;
     }
-    
-    }
-    
-    
+}
+
 async function renderAssignUserUI(carId) {
     const assignArea = document.getElementById(`assign-area-${carId}`);
     if (!assignArea) return;
