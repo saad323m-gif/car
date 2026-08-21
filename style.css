@@ -905,3 +905,38 @@ h4 {
     color: #ffffff;
     border-color: #1976d2;
 }
+/* ===== تعديل ترتيب عناصر البطاقة المغلقة ===== */
+.card-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.card-header-top {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    gap: 4px;
+}
+
+.card-title {
+    text-align: center;
+    align-items: center;
+    width: 100%;
+}
+
+.card-meta {
+    justify-content: center;
+    width: 100%;
+}
+
+.card-header-plates {
+    justify-content: center;
+    width: 100%;
+}
+
+.mini-plates-container {
+    justify-content: center;
+}
