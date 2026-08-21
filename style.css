@@ -905,38 +905,43 @@ h4 {
     color: #ffffff;
     border-color: #1976d2;
 }
-/* ===== تعديل ترتيب عناصر البطاقة المغلقة ===== */
-.card-header {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
+/* ===== إعادة ترتيب البطاقة المغلقة - نسخة قوية ===== */
+.card .card-header {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
 }
 
-.card-header-top {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 100%;
-    gap: 4px;
+.card .card-header-top {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    width: 100% !important;
 }
 
-.card-title {
-    text-align: center;
-    align-items: center;
-    width: 100%;
+.card .card-title {
+    text-align: center !important;
+    align-items: center !important;
+    width: 100% !important;
+    flex: 0 0 auto !important;
 }
 
-.card-meta {
-    justify-content: center;
-    width: 100%;
+.card .card-meta {
+    justify-content: center !important;
+    width: 100% !important;
+    text-align: center !important;
 }
 
-.card-header-plates {
-    justify-content: center;
-    width: 100%;
+.card .card-header-plates {
+    justify-content: center !important;
+    width: 100% !important;
 }
 
-.mini-plates-container {
-    justify-content: center;
+.card .mini-plates-container {
+    justify-content: center !important;
+}
+
+.card .plate-wrapper {
+    align-items: center !important;
+    width: 100% !important;
 }
