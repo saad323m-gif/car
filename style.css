@@ -905,43 +905,41 @@ h4 {
     color: #ffffff;
     border-color: #1976d2;
 }
-/* ===== إعادة ترتيب البطاقة المغلقة - نسخة قوية ===== */
-.card .card-header {
+/* ===== إعادة الترتيب بالقوة باستخدام order ===== */
+.card-header {
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
 }
 
-.card .card-header-top {
+/* نجعل كل عنصر من أبناء .card-header يتم التحكم بترتيبه */
+.card-header > * {
+    width: 100% !important;
     display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    width: 100% !important;
+    justify-content: center !important;
 }
 
-.card .card-title {
+/* 1- العنوان الفريد في الأعلى (الرقم 0) */
+.card-title {
+    order: 0 !important;
     text-align: center !important;
-    align-items: center !important;
-    width: 100% !important;
-    flex: 0 0 auto !important;
+    display: block !important;
 }
 
-.card .card-meta {
+/* 2- حالة التعهد والميتا في المنتصف (الرقم 1) */
+.card-meta {
+    order: 1 !important;
     justify-content: center !important;
-    width: 100% !important;
     text-align: center !important;
 }
 
-.card .card-header-plates {
+/* 3- اللوحة المصغرة في الأسفل (الرقم 2) */
+.card-header-plates,
+.mini-plates-container,
+.plate-wrapper,
+.card-header > div:has(.plate-container) /* محاولة للقبض على أي حاوية للوحة */ {
+    order: 2 !important;
     justify-content: center !important;
-    width: 100% !important;
-}
-
-.card .mini-plates-container {
-    justify-content: center !important;
-}
-
-.card .plate-wrapper {
-    align-items: center !important;
-    width: 100% !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
 }
