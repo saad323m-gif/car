@@ -299,7 +299,7 @@ h4 {
     width: 100%;
 }
 .card {
-    border: 5px solid #388e3c;
+    border: 4px solid #388e3c;
     border-radius: 8px;
     overflow: hidden;
     transition: box-shadow 0.3s;
