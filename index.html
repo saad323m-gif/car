@@ -5,57 +5,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>System Management</title>
     <link rel="stylesheet" href="style.css">
-    
+
+    <!-- Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://*.googleapis.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src https://*.firebaseio.com https://*.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; img-src 'self' data: blob:; font-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self';">
+
     <!-- PWA Settings -->
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon.png">
     <meta name="theme-color" content="#1b2a4a">
 </head>
 <body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
 
-    <header>
+    <header role="banner">
         <div class="header-left">
-            <img src="icon.png" alt="Logo" class="header-logo" id="header-logo" style="display: none;">
+            <img src="icon.png" alt="Car Management System Logo" class="header-logo" id="header-logo" style="display: none;" loading="lazy">
         </div>
-        <div id="datetime" class="header-center"></div>
+        <div id="datetime" class="header-center" aria-live="polite" aria-atomic="true"></div>
         <div class="header-right">
-            <button id="refresh-btn" class="btn-refresh" title="Refresh Page" style="display: none;">↻</button>
+            <button id="refresh-btn" class="btn-refresh" title="Refresh Page" style="display: none;" aria-label="Refresh page">↻</button>
             <button id="change-password-btn" class="btn-change-password" style="display: none;">Change Password</button>
             <button id="logout-btn" class="btn-logout" style="display: none;">Logout</button>
         </div>
     </header>
 
-    <main>
-        <div id="auth-view" class="view-container">
-            <img src="icon.png" alt="Logo" class="logo-main" id="main-logo">
+    <main id="main-content">
+        <div id="auth-view" class="view-container" role="region" aria-label="Authentication">
+            <img src="icon.png" alt="Car Management System Logo" class="logo-main" id="main-logo" loading="lazy">
             <div id="form-container" class="form-box">
                 <p class="loading-text">Loading system...</p>
             </div>
-            <div id="message-box" class="message-box"></div>
+            <div id="message-box" class="message-box" role="status" aria-live="polite"></div>
         </div>
 
-        <div id="dashboard-view" class="view-container" style="display: none;">
-            <div class="tabs-nav">
-                <button class="tab-btn active" data-tab="cars">Cars</button>
-                <button class="tab-btn" data-tab="my-activity" id="my-activity-tab" style="display: none;">My Activity</button>
-                <button class="tab-btn" data-tab="members">Members</button>
-                <button class="tab-btn" data-tab="requests">
+        <div id="dashboard-view" class="view-container" style="display: none;" role="region" aria-label="Dashboard">
+            <nav class="tabs-nav" role="tablist" aria-label="Dashboard sections">
+                <button class="tab-btn active" data-tab="cars" role="tab" aria-selected="true" aria-controls="dashboard-container" id="tab-cars">Cars</button>
+                <button class="tab-btn" data-tab="my-activity" id="my-activity-tab" style="display: none;" role="tab" aria-selected="false" aria-controls="dashboard-container" id="tab-my-activity">My Activity</button>
+                <button class="tab-btn" data-tab="members" role="tab" aria-selected="false" aria-controls="dashboard-container" id="tab-members">Members</button>
+                <button class="tab-btn" data-tab="requests" role="tab" aria-selected="false" aria-controls="dashboard-container" id="tab-requests">
                     Requests
-                    <span id="requests-badge" class="tab-badge" style="display: none;">0</span>
+                    <span id="requests-badge" class="tab-badge" style="display: none;" aria-label="pending requests">0</span>
                 </button>
-                <button class="tab-btn" data-tab="logs">Logs</button>
-                <button class="tab-btn" data-tab="search">Search</button>
-                <button class="tab-btn" data-tab="stats">Stats</button>
-            </div>
+                <button class="tab-btn" data-tab="logs" role="tab" aria-selected="false" aria-controls="dashboard-container" id="tab-logs">Logs</button>
+                <button class="tab-btn" data-tab="search" role="tab" aria-selected="false" aria-controls="dashboard-container" id="tab-search">Search</button>
+                <button class="tab-btn" data-tab="stats" role="tab" aria-selected="false" aria-controls="dashboard-container" id="tab-stats">Stats</button>
+            </nav>
 
-            <div id="dashboard-container" class="dashboard-box">
+            <div id="dashboard-container" class="dashboard-box" role="tabpanel" aria-labelledby="tab-cars">
                 <p class="loading-text">Loading dashboard...</p>
             </div>
-            <div id="dashboard-message-box" class="message-box"></div>
+            <div id="dashboard-message-box" class="message-box" role="status" aria-live="polite"></div>
         </div>
     </main>
 
-    <footer id="app-footer">
+    <footer id="app-footer" role="contentinfo">
         <p>© <span id="copyright-year"></span> Car Management System — All Rights Reserved</p>
         <p class="footer-dev">Developed By MOHAMED SAAD</p>
     </footer>

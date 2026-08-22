@@ -2,6 +2,7 @@
  * Logs Module - Car Management System
  * English only | Latin digits only | Production-ready
  * Logs are immutable - no edit or delete functionality exists.
+ * Updated: Loading states, ARIA, empty states
  */
 
 import { db } from "./firebase.js";
@@ -9,7 +10,7 @@ import {
     collection, addDoc, query, orderBy, limit, startAfter, getDocs, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import {
-    showMessage, isAdmin, renderAccessDenied, formatDateTime
+    showMessage, isAdmin, renderAccessDenied, formatDateTime, escapeHtml
 } from "./utils.js";
 
 let lastVisibleLog = null;
@@ -47,7 +48,7 @@ export function renderLogsView() {
             Immutable audit trail of all system activities.
         </p>
         <div class="divider"></div>
-        <div id="logs-timeline" class="timeline">
+        <div id="logs-timeline" class="timeline" role="log" aria-live="polite" aria-label="System logs timeline">
             <p class="loading-text">Loading logs...</p>
         </div>
         <div id="load-more-container" class="load-more-container"></div>
@@ -86,7 +87,12 @@ async function fetchLogs(loadMore = false) {
 
         if (snapshot.empty) {
             if (!loadMore) {
-                listContainer.innerHTML = '<p style="text-align:center; color:#666;">No logs found.</p>';
+                listContainer.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📋</div>
+                        <p>No logs found.</p>
+                    </div>
+                `;
             }
             if (loadMoreContainer) loadMoreContainer.innerHTML = '';
             return;
@@ -112,7 +118,7 @@ async function fetchLogs(loadMore = false) {
         }
     } catch (error) {
         if (listContainer) {
-            listContainer.innerHTML = `<p class="error">Error loading logs: ${error.message}</p>`;
+            listContainer.innerHTML = `<p class="error">Error loading logs: ${escapeHtml(error.message)}</p>`;
         }
     }
 }
@@ -120,15 +126,16 @@ async function fetchLogs(loadMore = false) {
 function renderLogTimelineItem(container, data) {
     const item = document.createElement('div');
     item.className = 'timeline-item';
+    item.setAttribute('role', 'listitem');
 
     const dateStr = formatDateTime(data.timestamp);
 
     let extra = '';
     if (data.targetName) {
-        extra = `<br><strong>Target:</strong> ${data.targetName}`;
+        extra = `<br><strong>Target:</strong> ${escapeHtml(data.targetName)}`;
     }
     if (data.details) {
-        extra += `<br>${data.details}`;
+        extra += `<br>${escapeHtml(data.details)}`;
     }
 
     item.innerHTML = `
@@ -136,7 +143,7 @@ function renderLogTimelineItem(container, data) {
         <div class="timeline-content">
             <div class="timeline-date">${dateStr}</div>
             <div class="timeline-text">
-                <strong>${data.actionType}</strong> by ${data.actorName}
+                <strong>${escapeHtml(data.actionType)}</strong> by ${escapeHtml(data.actorName)}
                 ${extra}
             </div>
         </div>

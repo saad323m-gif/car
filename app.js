@@ -1,6 +1,7 @@
 /**
  * Main Application Entry - Car Management System
  * English only | Latin digits only | Production-ready
+ * Updated: Keyboard nav, real-time badge, confirm dialogs, ARIA, loading states
  */
 
 import { auth, db } from "./firebase.js";
@@ -11,7 +12,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import {
     collection, doc, setDoc, getDoc, getDocs, updateDoc, query, where, limit,
-    serverTimestamp, Timestamp
+    serverTimestamp, Timestamp, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 import { renderDashboard, setCurrentUser, getCurrentUser } from "./members.js";
@@ -20,10 +21,13 @@ import { renderCarsView, setCarsCurrentUser } from "./cars.js";
 import { renderRequestsView, setRequestsCurrentUser } from "./requests.js";
 import { renderSearchView, setSearchCurrentUser } from "./search.js";
 import { renderStatsView, setStatsCurrentUser } from "./stats.js";
-import { showMessage, handleFirebaseError, clearMessage } from "./utils.js";
+import { showMessage, handleFirebaseError, clearMessage, renderConfirmDialog, setButtonLoading, resetButtonLoading, sanitizeInput, containsNonEnglishDigits } from "./utils.js";
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000;
+
+let requestsUnsubscribe = null;
+let currentTab = 'cars';
 
 function emailToDocId(email) {
     return String(email || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
@@ -123,10 +127,98 @@ function updateCopyrightYear() {
     }
 }
 
+/* ═══════════════════════════════════════════
+   KEYBOARD NAVIGATION
+   ═══════════════════════════════════════════ */
+function setupKeyboardNav() {
+    document.addEventListener('keydown', (e) => {
+        // Escape closes any open card
+        if (e.key === 'Escape') {
+            const openCards = document.querySelectorAll('.card.open');
+            if (openCards.length > 0) {
+                openCards.forEach(c => c.classList.remove('open'));
+                // Return focus to header
+                const header = openCards[0].querySelector('.card-header');
+                if (header) header.focus();
+            }
+            // Close confirm dialog if open
+            const confirmOverlay = document.getElementById('confirm-dialog-overlay');
+            if (confirmOverlay) {
+                confirmOverlay.remove();
+            }
+        }
+    });
+}
+
+/* ═══════════════════════════════════════════
+   REAL-TIME REQUESTS BADGE (with unsubscribe)
+   ═══════════════════════════════════════════ */
+function startRequestsBadgeRealtime() {
+    if (requestsUnsubscribe) return;
+    try {
+        const q = query(collection(db, 'requests'), where('status', '==', 'PENDING'));
+        requestsUnsubscribe = onSnapshot(q, (snap) => {
+            updateRequestsBadgeUI(snap.size);
+        }, (err) => {
+            console.warn('Badge realtime error:', err.message);
+        });
+    } catch (e) {
+        console.warn('Badge init error:', e);
+    }
+}
+
+function stopRequestsBadgeRealtime() {
+    if (requestsUnsubscribe) {
+        requestsUnsubscribe();
+        requestsUnsubscribe = null;
+    }
+}
+
+function updateRequestsBadgeUI(count) {
+    const badge = document.getElementById('requests-badge');
+    if (!badge) return;
+    if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : count;
+        badge.style.display = 'inline-block';
+        badge.setAttribute('aria-label', `${count} pending requests`);
+    } else {
+        badge.style.display = 'none';
+        badge.setAttribute('aria-label', 'No pending requests');
+    }
+}
+
+/* ═══════════════════════════════════════════
+   TAB SWITCHING (with ARIA)
+   ═══════════════════════════════════════════ */
+function switchTab(tabName) {
+    currentTab = tabName;
+    clearMessage('dashboard');
+
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.remove('active');
+        b.setAttribute('aria-selected', 'false');
+    });
+
+    const activeBtn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
+    if (activeBtn) {
+        activeBtn.classList.add('active');
+        activeBtn.setAttribute('aria-selected', 'true');
+    }
+
+    if (tabName === 'members') renderDashboard();
+    else if (tabName === 'logs') renderLogsView();
+    else if (tabName === 'cars') renderCarsView();
+    else if (tabName === 'requests') renderRequestsView();
+    else if (tabName === 'search') renderSearchView();
+    else if (tabName === 'stats') renderStatsView();
+    else if (tabName === 'my-activity') renderMyActivityView();
+}
+
 window.addEventListener('DOMContentLoaded', () => {
     updateDateTime();
     updateCopyrightYear();
     setInterval(updateDateTime, 1000);
+    setupKeyboardNav();
 
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
@@ -148,20 +240,7 @@ window.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             if (btn.disabled || btn.style.display === 'none') return;
-
-            clearMessage('dashboard');
-
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-
-            const tab = btn.dataset.tab;
-            if (tab === 'members') renderDashboard();
-            else if (tab === 'logs') renderLogsView();
-            else if (tab === 'cars') renderCarsView();
-            else if (tab === 'requests') renderRequestsView();
-            else if (tab === 'search') renderSearchView();
-            else if (tab === 'stats') renderStatsView();
-            else if (tab === 'my-activity') renderMyActivityView();
+            switchTab(btn.dataset.tab);
         });
     });
 
@@ -187,20 +266,20 @@ window.addEventListener('DOMContentLoaded', () => {
                     }
                 });
 
-                // Show My Activity tab for all active users
                 const myActivityTab = document.getElementById('my-activity-tab');
                 if (myActivityTab) {
                     myActivityTab.style.display = userData.status === 'active' ? 'block' : 'none';
                 }
 
                 showDashboard();
-                updateRequestsBadge();
+                startRequestsBadgeRealtime();
             } else {
                 await signOut(auth);
                 showAuthView();
             }
         } else {
             setCurrentUser(null);
+            stopRequestsBadgeRealtime();
             showAuthView();
             await checkSystemState();
         }
@@ -250,10 +329,9 @@ function showDashboard() {
 
 async function checkSystemState() {
     try {
-        // الطريقة الآمنة الجديدة - تقرأ مستند عام لا يحتوي بيانات حساسة
         const statusRef = doc(db, 'system', 'status');
         const statusSnap = await getDoc(statusRef);
-        
+
         if (statusSnap.exists()) {
             const data = statusSnap.data();
             if (data.usersCount > 0 || data.initialized === true) {
@@ -262,7 +340,6 @@ async function checkSystemState() {
                 renderSetupForm();
             }
         } else {
-            // هجرة أول مرة - إذا لم يوجد المستند العام
             try {
                 const q = query(collection(db, 'users'), limit(1));
                 const snapshot = await getDocs(q);
@@ -272,13 +349,11 @@ async function checkSystemState() {
                     renderLoginForm();
                 }
             } catch (e) {
-                // إذا فشل بسبب الصلاحيات الجديدة، اعرض تسجيل الدخول مباشرة ولا تكسر الفورم
                 console.warn('Fallback to login form:', e.message);
                 renderLoginForm();
             }
         }
     } catch (error) {
-        // أهم حماية: حتى لو فشل كل شيء، اعرض فورم الدخول
         console.error('checkSystemState error:', error);
         renderLoginForm();
     }
@@ -292,26 +367,26 @@ function renderSetupForm() {
         </p>
         <form id="setup-form">
             <div class="form-group">
-                <label>Username</label>
-                <input type="text" id="username" required>
+                <label for="username">Username</label>
+                <input type="text" id="username" required autocomplete="username">
             </div>
             <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="email" required>
+                <label for="email">Email</label>
+                <input type="email" id="email" required autocomplete="email">
             </div>
             <div class="form-group">
-                <label>Password</label>
-                <input type="password" id="password" required minlength="6">
+                <label for="password">Password</label>
+                <input type="password" id="password" required minlength="6" autocomplete="new-password">
             </div>
             <div class="form-group">
-                <label>Phone (Starts with 0, 10 digits)</label>
-                <input type="text" id="phone" required pattern="0\\d{9}" placeholder="0XXXXXXXXX">
+                <label for="phone">Phone (Starts with 0, 10 digits)</label>
+                <input type="text" id="phone" required pattern="0\d{9}" placeholder="0XXXXXXXXX" autocomplete="tel">
             </div>
             <div class="form-group">
-                <label>Security PIN (4 digits)</label>
-                <input type="password" id="securityPin" required pattern="\\d{4}">
+                <label for="securityPin">Security PIN (4 digits)</label>
+                <input type="password" id="securityPin" required pattern="\d{4}" inputmode="numeric" maxlength="4" autocomplete="off">
             </div>
-            <button type="submit" class="btn">Create Super Admin</button>
+            <button type="submit" class="btn" id="setup-submit">Create Super Admin</button>
         </form>
     `;
     document.getElementById('setup-form').addEventListener('submit', handleSetup);
@@ -322,11 +397,21 @@ async function handleSetup(e) {
     const username = document.getElementById('username').value.trim();
     const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
-    const phone = document.getElementById('phone').value.trim();
-    const securityPin = document.getElementById('securityPin').value;
+    const phone = sanitizeInput('phone');
+    const securityPin = sanitizeInput('securityPin');
 
+    if (containsNonEnglishDigits(phone)) {
+        showMessage('Error: Only English digits (0-9) are allowed. Arabic digits are not accepted.', 'error');
+        resetButtonLoading('setup-submit');
+        return;
+    }
     if (!/^0\d{9}$/.test(phone)) {
         showMessage('Error: Phone must start with 0 and be exactly 10 digits.', 'error');
+        return;
+    }
+    if (containsNonEnglishDigits(securityPin)) {
+        showMessage('Error: PIN must use English digits (0-9) only.', 'error');
+        resetButtonLoading('setup-submit');
         return;
     }
     if (!/^\d{4}$/.test(securityPin)) {
@@ -334,11 +419,14 @@ async function handleSetup(e) {
         return;
     }
 
+    setButtonLoading('setup-submit', 'Creating...');
+
     try {
         const q = query(collection(db, 'users'), where('username', '==', username));
         const usernameSnapshot = await getDocs(q);
         if (!usernameSnapshot.empty) {
             showMessage('Error: Username already exists.', 'error');
+            resetButtonLoading('setup-submit');
             return;
         }
 
@@ -364,6 +452,8 @@ async function handleSetup(e) {
         showMessage('Success: Super Admin created successfully.', 'success');
     } catch (error) {
         handleFirebaseError(error);
+    } finally {
+        resetButtonLoading('setup-submit');
     }
 }
 
@@ -372,18 +462,18 @@ function renderLoginForm() {
         <h2>Login</h2>
         <form id="login-form">
             <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="login-email" required>
+                <label for="login-email">Email</label>
+                <input type="email" id="login-email" required autocomplete="email">
             </div>
             <div class="form-group">
-                <label>Password</label>
-                <input type="password" id="login-password" required>
+                <label for="login-password">Password</label>
+                <input type="password" id="login-password" required autocomplete="current-password">
             </div>
             <div class="form-group checkbox-group">
                 <input type="checkbox" id="remember-me">
                 <label for="remember-me" style="margin-bottom:0">Remember Me</label>
             </div>
-            <button type="submit" class="btn">Login</button>
+            <button type="submit" class="btn" id="login-submit">Login</button>
         </form>
     `;
     document.getElementById('login-form').addEventListener('submit', handleLogin);
@@ -405,6 +495,8 @@ async function handleLogin(e) {
         return;
     }
 
+    setButtonLoading('login-submit', 'Logging in...');
+
     try {
         const lockStatus = await isLoginLocked(email);
         if (lockStatus.locked) {
@@ -415,6 +507,7 @@ async function handleLogin(e) {
             await logAction({ username: email }, 'LOGIN_FAILED', {
                 text: `Locked account login attempt for ${email}`
             });
+            resetButtonLoading('login-submit');
             return;
         }
 
@@ -426,6 +519,7 @@ async function handleLogin(e) {
         if (!userDoc.exists()) {
             showMessage('Error: User data not found.', 'error');
             await signOut(auth);
+            resetButtonLoading('login-submit');
             return;
         }
 
@@ -436,6 +530,7 @@ async function handleLogin(e) {
                 text: `Suspended account attempt: ${email}`
             });
             showMessage('Access Denied: Your account is suspended.', 'error');
+            resetButtonLoading('login-submit');
             return;
         }
 
@@ -468,6 +563,8 @@ async function handleLogin(e) {
         } else {
             handleFirebaseError(error);
         }
+    } finally {
+        resetButtonLoading('login-submit');
     }
 }
 
@@ -480,6 +577,7 @@ async function handleLogout() {
                 await logAction(userDoc.data(), 'LOGOUT', { text: 'User logged out' });
             }
         }
+        stopRequestsBadgeRealtime();
         await signOut(auth);
         showAuthView();
         await checkSystemState();
@@ -507,15 +605,15 @@ function renderChangePasswordForm() {
         </p>
         <form id="change-password-form" style="max-width:500px; margin:0 auto;">
             <div class="form-group">
-                <label>Current Password</label>
+                <label for="cp-current">Current Password</label>
                 <input type="password" id="cp-current" required minlength="6" autocomplete="current-password">
             </div>
             <div class="form-group">
-                <label>New Password</label>
+                <label for="cp-new">New Password</label>
                 <input type="password" id="cp-new" required minlength="6" autocomplete="new-password">
             </div>
             <div class="form-group">
-                <label>Confirm New Password</label>
+                <label for="cp-confirm">Confirm New Password</label>
                 <input type="password" id="cp-confirm" required minlength="6" autocomplete="new-password">
             </div>
             <button type="submit" class="btn" id="cp-submit">Update Password</button>
@@ -528,10 +626,7 @@ function renderChangePasswordForm() {
     if (form) form.addEventListener('submit', handleChangePassword);
     if (cancelBtn) {
         cancelBtn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            const carsTab = document.querySelector('.tab-btn[data-tab="cars"]');
-            if (carsTab) carsTab.classList.add('active');
-            renderCarsView();
+            switchTab('cars');
         });
     }
 }
@@ -544,7 +639,6 @@ async function handleChangePassword(e) {
     const currentEl = document.getElementById('cp-current');
     const newEl = document.getElementById('cp-new');
     const confirmEl = document.getElementById('cp-confirm');
-    const submitBtn = document.getElementById('cp-submit');
     if (!currentEl || !newEl || !confirmEl) return;
 
     const currentPassword = currentEl.value;
@@ -564,10 +658,7 @@ async function handleChangePassword(e) {
         return;
     }
 
-    if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Updating...';
-    }
+    setButtonLoading('cp-submit', 'Updating...');
 
     try {
         const credential = EmailAuthProvider.credential(userData.email, currentPassword);
@@ -586,38 +677,12 @@ async function handleChangePassword(e) {
         confirmEl.value = '';
 
         setTimeout(() => {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            const carsTab = document.querySelector('.tab-btn[data-tab="cars"]');
-            if (carsTab) carsTab.classList.add('active');
-            renderCarsView();
+            switchTab('cars');
         }, 1500);
     } catch (error) {
         handleFirebaseError(error, 'dashboard');
     } finally {
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Update Password';
-        }
-    }
-}
-
-export async function updateRequestsBadge() {
-    const badge = document.getElementById('requests-badge');
-    if (!badge) return;
-
-    try {
-        const q = query(collection(db, 'requests'), where('status', '==', 'PENDING'));
-        const snap = await getDocs(q);
-        const count = snap.size;
-
-        if (count > 0) {
-            badge.textContent = count > 99 ? '99+' : count;
-            badge.style.display = 'inline-block';
-        } else {
-            badge.style.display = 'none';
-        }
-    } catch (err) {
-        badge.style.display = 'none';
+        resetButtonLoading('cp-submit');
     }
 }
 

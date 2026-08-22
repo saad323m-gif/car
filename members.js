@@ -1,6 +1,7 @@
 /**
  * Members Module - Car Management System
  * English only | Latin digits only | Production-ready
+ * Updated: Validators, loading states, confirm dialogs, ARIA, keyboard nav
  */
 
 import { auth, db, firebaseConfig } from "./firebase.js";
@@ -13,7 +14,8 @@ import {
 import { logAction } from "./logs.js";
 import {
     showMessage, handleFirebaseError, isAdmin, isActiveUser,
-    renderAccessDenied, formatDateTime, formatPeriod
+    renderAccessDenied, formatDateTime, formatPeriod,
+    validators, renderConfirmDialog, sanitizeInput, containsNonEnglishDigits, setButtonLoading, resetButtonLoading, escapeHtml
 } from "./utils.js";
 
 let currentUserData = null;
@@ -32,38 +34,38 @@ export function renderDashboard() {
     container.innerHTML = `
         <div class="dashboard-header">
             <h2>Admin Dashboard</h2>
-            <p style="text-align:center;">Welcome, <strong>${currentUserData.username}</strong></p>
+            <p style="text-align:center;">Welcome, <strong>${escapeHtml(currentUserData.username)}</strong></p>
             <button class="btn btn-sm btn-warning" id="edit-profile-btn" style="margin-top: 10px;">Edit My Profile</button>
         </div>
         <div class="divider"></div>
-        <button class="btn-add-toggle" id="toggle-add-member">+ Add New Member</button>
+        <button class="btn-add-toggle" id="toggle-add-member" aria-expanded="false" aria-controls="add-member-form-wrapper">+ Add New Member</button>
         <div id="add-member-form-wrapper" class="hidden-form" style="margin-bottom: 30px;">
             <form id="add-user-form" style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                 <div class="form-group">
-                    <label>Username</label>
-                    <input type="text" id="new-username" required>
+                    <label for="new-username">Username</label>
+                    <input type="text" id="new-username" required autocomplete="off">
                 </div>
                 <div class="form-group">
-                    <label>Email</label>
-                    <input type="email" id="new-email" required>
+                    <label for="new-email">Email</label>
+                    <input type="email" id="new-email" required autocomplete="off">
                 </div>
                 <div class="form-group">
-                    <label>Password</label>
-                    <input type="password" id="new-password" required minlength="6">
+                    <label for="new-password">Password</label>
+                    <input type="password" id="new-password" required minlength="6" autocomplete="new-password">
                 </div>
                 <div class="form-group">
-                    <label>Phone</label>
-                    <input type="text" id="new-phone" required pattern="0\\d{9}" placeholder="0XXXXXXXXX">
+                    <label for="new-phone">Phone</label>
+                    <input type="text" id="new-phone" required pattern="0\d{9}" placeholder="0XXXXXXXXX" autocomplete="off">
                 </div>
                 <div class="form-group" style="grid-column: 1 / -1;">
-                    <label>Role</label>
+                    <label for="new-role">Role</label>
                     <select id="new-role">
                         <option value="user">User</option>
                         <option value="admin">Admin</option>
                     </select>
                 </div>
                 <div class="form-group" style="grid-column: 1 / -1;">
-                    <button type="submit" class="btn">Add Member</button>
+                    <button type="submit" class="btn" id="btn-add-member">Add Member</button>
                 </div>
             </form>
         </div>
@@ -80,7 +82,11 @@ export function renderDashboard() {
     if (toggleAddMember) {
         toggleAddMember.addEventListener('click', () => {
             const wrapper = document.getElementById('add-member-form-wrapper');
-            if (wrapper) wrapper.classList.toggle('hidden-form');
+            if (wrapper) {
+                wrapper.classList.toggle('hidden-form');
+                const expanded = !wrapper.classList.contains('hidden-form');
+                toggleAddMember.setAttribute('aria-expanded', expanded);
+            }
         });
     }
     if (addUserForm) {
@@ -111,19 +117,30 @@ async function handleAddUser(e) {
     const username = usernameEl.value.trim();
     const email = emailEl.value.trim();
     const password = passwordEl.value;
-    const phone = phoneEl.value.trim();
+    const phone = sanitizeInput('new-phone');
     const role = roleEl.value;
 
-    if (!/^0\d{9}$/.test(phone)) {
+    if (containsNonEnglishDigits(phone)) {
+        showMessage('Error: Only English digits (0-9) are allowed. Arabic digits are not accepted.', 'error', 'dashboard');
+        return;
+    }
+    if (!validators.phone(phone)) {
         showMessage('Error: Phone must start with 0 and be exactly 10 digits.', 'error', 'dashboard');
         return;
     }
+    if (!validators.password(password)) {
+        showMessage('Error: Password must be at least 6 characters.', 'error', 'dashboard');
+        return;
+    }
+
+    setButtonLoading('btn-add-member', 'Adding...');
 
     try {
         const q = query(collection(db, 'users'), where('username', '==', username));
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
             showMessage('Error: Username already exists.', 'error', 'dashboard');
+            resetButtonLoading('btn-add-member');
             return;
         }
 
@@ -156,11 +173,17 @@ async function handleAddUser(e) {
         const addForm = document.getElementById('add-user-form');
         if (addForm) addForm.reset();
         const addWrapper = document.getElementById('add-member-form-wrapper');
-        if (addWrapper) addWrapper.classList.add('hidden-form');
+        if (addWrapper) {
+            addWrapper.classList.add('hidden-form');
+            const toggle = document.getElementById('toggle-add-member');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        }
         lastVisibleUser = null;
         fetchUsersForAdmin(false);
     } catch (error) {
         handleFirebaseError(error, 'dashboard');
+    } finally {
+        resetButtonLoading('btn-add-member');
     }
 }
 
@@ -185,7 +208,12 @@ async function fetchUsersForAdmin(loadMore = false) {
 
         if (snapshot.empty) {
             if (!loadMore) {
-                listContainer.innerHTML = '<p style="text-align:center; color:#666;">No members found.</p>';
+                listContainer.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">👥</div>
+                        <p>No members found.</p>
+                    </div>
+                `;
             }
             if (loadMoreContainer) loadMoreContainer.innerHTML = '';
             return;
@@ -219,35 +247,37 @@ function renderUserCard(uid, data) {
     const card = document.createElement('div');
     card.className = 'card border-blue';
     card.id = `card-${uid}`;
+    card.setAttribute('role', 'region');
+    card.setAttribute('aria-labelledby', `member-title-${uid}`);
 
     let actionsHtml = '';
     if (!data.isProtected) {
         actionsHtml = `
             <div class="action-buttons" id="member-actions-${uid}">
-                <button type="button" class="action-btn action-btn-edit" data-action="edit">✎ Edit</button>
-                <button type="button" class="action-btn action-btn-activity" data-action="activity">📋 Activity</button>
+                <button type="button" class="action-btn action-btn-edit" data-action="edit" aria-label="Edit member ${escapeHtml(data.username)}">✎ Edit</button>
+                <button type="button" class="action-btn action-btn-activity" data-action="activity" aria-label="View activity for ${escapeHtml(data.username)}">📋 Activity</button>
                 ${data.role === 'user'
-                    ? '<button type="button" class="action-btn action-btn-promote" data-action="promote">↑ Promote</button>'
-                    : '<button type="button" class="action-btn action-btn-demote" data-action="demote">↓ Demote</button>'}
+                    ? '<button type="button" class="action-btn action-btn-promote" data-action="promote" aria-label="Promote to admin">↑ Promote</button>'
+                    : '<button type="button" class="action-btn action-btn-demote" data-action="demote" aria-label="Demote to user">↓ Demote</button>'}
                 ${data.status === 'active'
-                    ? '<button type="button" class="action-btn action-btn-suspend" data-action="suspend">⏸ Suspend</button>'
-                    : '<button type="button" class="action-btn action-btn-activate" data-action="activate">▶ Activate</button>'}
+                    ? '<button type="button" class="action-btn action-btn-suspend" data-action="suspend" aria-label="Suspend member">⏸ Suspend</button>'
+                    : '<button type="button" class="action-btn action-btn-activate" data-action="activate" aria-label="Activate member">▶ Activate</button>'}
             </div>
             <div id="activity-area-${uid}" style="margin-top: 15px; display: none;"></div>
         `;
     } else {
         actionsHtml = `
             <div class="action-buttons" id="member-actions-${uid}">
-                <button type="button" class="action-btn action-btn-activity" data-action="activity">📋 Activity</button>
+                <button type="button" class="action-btn action-btn-activity" data-action="activity" aria-label="View activity for ${escapeHtml(data.username)}">📋 Activity</button>
             </div>
             <div id="activity-area-${uid}" style="margin-top: 15px; display: none;"></div>
         `;
     }
 
     card.innerHTML = `
-        <div class="card-header" id="header-${uid}">
+        <div class="card-header" id="header-${uid}" tabindex="0" role="button" aria-expanded="false" aria-controls="body-${uid}">
             <div class="card-header-top">
-                <span class="card-title">${data.username}</span>
+                <span class="card-title" id="member-title-${uid}">${escapeHtml(data.username)}</span>
                 <div class="card-meta">
                     <span class="role-${data.role}">${data.role}</span>
                     <span class="status-${data.status}">${data.status}</span>
@@ -262,15 +292,15 @@ function renderUserCard(uid, data) {
                 <div class="detail-list">
                     <div class="detail-item">
                         <span class="detail-label">Email</span>
-                        <span class="detail-value">${data.email}</span>
+                        <span class="detail-value">${escapeHtml(data.email)}</span>
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">Phone</span>
-                        <span class="detail-value">${data.phone}</span>
+                        <span class="detail-value">${escapeHtml(data.phone)}</span>
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">Notes</span>
-                        <span class="detail-value">${data.notes || 'N/A'}</span>
+                        <span class="detail-value">${escapeHtml(data.notes) || 'N/A'}</span>
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">Assigned Cars</span>
@@ -286,13 +316,20 @@ function renderUserCard(uid, data) {
 
     const headerEl = card.querySelector(`#header-${uid}`);
     if (headerEl) {
-        headerEl.addEventListener('click', async (e) => {
-            if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
-                const wasOpen = card.classList.contains('open');
-                card.classList.toggle('open');
-                if (!wasOpen) {
-                    await loadUserCars(uid);
-                }
+        const toggleCard = async (e) => {
+            if (e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+            const wasOpen = card.classList.contains('open');
+            card.classList.toggle('open');
+            headerEl.setAttribute('aria-expanded', !wasOpen);
+            if (!wasOpen) {
+                await loadUserCars(uid);
+            }
+        };
+        headerEl.addEventListener('click', toggleCard);
+        headerEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleCard(e);
             }
         });
     }
@@ -302,7 +339,7 @@ function renderUserCard(uid, data) {
         actionsWrap.querySelectorAll('[data-action]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                handleMemberAction(uid, btn.getAttribute('data-action'), data.username);
+                handleMemberAction(uid, btn.getAttribute('data-action'), data.username, data);
             });
         });
     }
@@ -328,10 +365,10 @@ async function loadUserCars(uid) {
             carsSnap.forEach(d => {
                 const c = d.data();
                 plateItems.push(`
-                    <div class="mini-plate" title="${c.carId || ''}">
-                        <span class="mini-plate-emirate">${c.emirate || ''}</span>
-                        <span class="mini-plate-number">${c.plateNumber || ''}</span>
-                        <span class="mini-plate-code">${c.plateCode || ''}</span>
+                    <div class="mini-plate" title="${escapeHtml(c.carId || '')}">
+                        <span class="mini-plate-emirate">${escapeHtml(c.emirate || '')}</span>
+                        <span class="mini-plate-number">${escapeHtml(c.plateNumber || '')}</span>
+                        <span class="mini-plate-code">${escapeHtml(c.plateCode || '')}</span>
                     </div>
                 `);
             });
@@ -380,57 +417,75 @@ async function loadUserCars(uid) {
     }
 }
 
-async function handleMemberAction(uid, action, username) {
+async function handleMemberAction(uid, action, username, fullData) {
     if (!isAdmin(currentUserData) || !action) return;
 
     const activityArea = document.getElementById(`activity-area-${uid}`);
     if (activityArea) activityArea.style.display = 'none';
 
-    try {
-        if (action === 'promote') {
-            await updateDoc(doc(db, 'users', uid), { role: 'admin' });
-            await logAction(currentUserData, 'PROMOTE_USER', {
-                targetId: uid,
-                targetName: username,
-                text: `Promoted ${username}`
-            });
-        } else if (action === 'demote') {
-            await updateDoc(doc(db, 'users', uid), { role: 'user' });
-            await logAction(currentUserData, 'DEMOTE_USER', {
-                targetId: uid,
-                targetName: username,
-                text: `Demoted ${username}`
-            });
-        } else if (action === 'suspend') {
-            if (!confirm(`Are you sure you want to suspend the user "${username}"?`)) {
+    const executeAction = async () => {
+        try {
+            if (action === 'promote') {
+                await updateDoc(doc(db, 'users', uid), { role: 'admin' });
+                await logAction(currentUserData, 'PROMOTE_USER', {
+                    targetId: uid,
+                    targetName: username,
+                    text: `Promoted ${username}`
+                });
+            } else if (action === 'demote') {
+                await updateDoc(doc(db, 'users', uid), { role: 'user' });
+                await logAction(currentUserData, 'DEMOTE_USER', {
+                    targetId: uid,
+                    targetName: username,
+                    text: `Demoted ${username}`
+                });
+            } else if (action === 'suspend') {
+                await updateDoc(doc(db, 'users', uid), { status: 'suspended' });
+                await logAction(currentUserData, 'SUSPEND_USER', {
+                    targetId: uid,
+                    targetName: username,
+                    text: `Suspended ${username}`
+                });
+            } else if (action === 'activate') {
+                await updateDoc(doc(db, 'users', uid), { status: 'active' });
+                await logAction(currentUserData, 'ACTIVATE_USER', {
+                    targetId: uid,
+                    targetName: username,
+                    text: `Activated ${username}`
+                });
+            } else if (action === 'edit') {
+                renderInlineEditForm(uid);
+                return;
+            } else if (action === 'activity') {
+                await renderUserActivity(uid);
                 return;
             }
-            await updateDoc(doc(db, 'users', uid), { status: 'suspended' });
-            await logAction(currentUserData, 'SUSPEND_USER', {
-                targetId: uid,
-                targetName: username,
-                text: `Suspended ${username}`
-            });
-        } else if (action === 'activate') {
-            await updateDoc(doc(db, 'users', uid), { status: 'active' });
-            await logAction(currentUserData, 'ACTIVATE_USER', {
-                targetId: uid,
-                targetName: username,
-                text: `Activated ${username}`
-            });
-        } else if (action === 'edit') {
-            renderInlineEditForm(uid);
-            return;
-        } else if (action === 'activity') {
-            await renderUserActivity(uid);
-            return;
-        }
 
-        showMessage(`Action completed for ${username}.`, 'success', 'dashboard');
-        lastVisibleUser = null;
-        fetchUsersForAdmin(false);
-    } catch (error) {
-        handleFirebaseError(error, 'dashboard');
+            showMessage(`Action completed for ${username}.`, 'success', 'dashboard');
+            lastVisibleUser = null;
+            fetchUsersForAdmin(false);
+        } catch (error) {
+            handleFirebaseError(error, 'dashboard');
+        }
+    };
+
+    if (['promote', 'demote', 'suspend', 'activate'].includes(action)) {
+        const actionLabels = {
+            promote: { title: 'Confirm Promote', msg: `Promote "${escapeHtml(username)}" to admin?`, confirm: 'Promote' },
+            demote: { title: 'Confirm Demote', msg: `Demote "${escapeHtml(username)}" to user?`, confirm: 'Demote' },
+            suspend: { title: 'Confirm Suspend', msg: `Suspend "${escapeHtml(username)}"? They will lose access immediately.`, confirm: 'Suspend', danger: true },
+            activate: { title: 'Confirm Activate', msg: `Activate "${escapeHtml(username)}"?`, confirm: 'Activate' }
+        };
+        const cfg = actionLabels[action];
+        renderConfirmDialog({
+            title: cfg.title,
+            message: cfg.msg,
+            confirmText: cfg.confirm,
+            danger: cfg.danger || false,
+            onConfirm: executeAction
+        });
+    } else {
+        await executeAction();
     }
 }
 
@@ -471,10 +526,10 @@ async function renderUserActivity(uid) {
 
             if (log.actionType === 'CAR_ASSIGN' || log.actionType === 'AUTO_LINK') {
                 itemClass += ' ongoing';
-                text = `Assigned car <strong>${log.targetName || log.targetId}</strong>`;
+                text = `Assigned car <strong>${escapeHtml(log.targetName || log.targetId)}</strong>`;
             } else if (log.actionType === 'CAR_UNASSIGN' || log.actionType === 'APPROVE_UNLINK') {
                 itemClass += ' completed';
-                text = `Unassigned car <strong>${log.targetName || log.targetId}</strong>`;
+                text = `Unassigned car <strong>${escapeHtml(log.targetName || log.targetId)}</strong>`;
             } else if (log.actionType === 'LOGIN') {
                 text = 'Logged into the system';
             } else if (log.actionType === 'LOGOUT') {
@@ -494,7 +549,7 @@ async function renderUserActivity(uid) {
         html += '</div>';
         activityArea.innerHTML = html;
     } catch (error) {
-        activityArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error: ${error.message}</p>`;
+        activityArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error: ${escapeHtml(error.message)}</p>`;
     }
 }
 
@@ -513,23 +568,23 @@ async function renderInlineEditForm(uid) {
     editArea.innerHTML = `
         <form id="form-edit-${uid}" class="inline-edit-form">
             <div class="form-group">
-                <label>Username</label>
-                <input type="text" id="edit-un-${uid}" value="${data.username}" required>
+                <label for="edit-un-${uid}">Username</label>
+                <input type="text" id="edit-un-${uid}" value="${escapeHtml(data.username)}" required>
             </div>
             <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="edit-em-${uid}" value="${data.email}" required>
+                <label for="edit-em-${uid}">Email</label>
+                <input type="email" id="edit-em-${uid}" value="${escapeHtml(data.email)}" required>
             </div>
             <div class="form-group">
-                <label>Phone</label>
-                <input type="text" id="edit-ph-${uid}" value="${data.phone}" required pattern="0\\d{9}">
+                <label for="edit-ph-${uid}">Phone</label>
+                <input type="text" id="edit-ph-${uid}" value="${escapeHtml(data.phone)}" required pattern="0\d{9}" lang="en" dir="ltr">
             </div>
             <div class="form-group">
-                <label>Notes (Admin only)</label>
-                <input type="text" id="edit-nt-${uid}" value="${data.notes || ''}">
+                <label for="edit-nt-${uid}">Notes (Admin only)</label>
+                <input type="text" id="edit-nt-${uid}" value="${escapeHtml(data.notes || '')}">
             </div>
             <div class="form-group full-width" style="display:flex; gap:10px;">
-                <button type="submit" class="btn btn-sm">Save Changes</button>
+                <button type="submit" class="btn btn-sm" id="edit-save-${uid}">Save Changes</button>
                 <button type="button" class="btn btn-sm btn-secondary" id="cancel-edit-${uid}">Cancel</button>
             </div>
         </form>
@@ -539,6 +594,9 @@ async function renderInlineEditForm(uid) {
     if (formEdit) {
         formEdit.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const saveBtn = document.getElementById(`edit-save-${uid}`);
+            setButtonLoading(saveBtn, 'Saving...');
+
             const unEl = document.getElementById(`edit-un-${uid}`);
             const emEl = document.getElementById(`edit-em-${uid}`);
             const phEl = document.getElementById(`edit-ph-${uid}`);
@@ -547,11 +605,12 @@ async function renderInlineEditForm(uid) {
 
             const newUsername = unEl.value.trim();
             const newEmail = emEl.value.trim();
-            const newPhone = phEl.value.trim();
+            const newPhone = sanitizeInput(`edit-ph-${uid}`);
             const newNotes = ntEl ? ntEl.value.trim() : '';
 
-            if (!/^0\d{9}$/.test(newPhone)) {
+            if (!validators.phone(newPhone)) {
                 showMessage('Error: Phone must be 10 digits starting with 0.', 'error', 'dashboard');
+                resetButtonLoading(saveBtn);
                 return;
             }
 
@@ -574,6 +633,8 @@ async function renderInlineEditForm(uid) {
                 fetchUsersForAdmin(false);
             } catch (err) {
                 handleFirebaseError(err, 'dashboard');
+            } finally {
+                resetButtonLoading(saveBtn);
             }
         });
     }
@@ -602,35 +663,35 @@ function renderEditProfileForm() {
         <p style="color: #666; margin-bottom: 20px; text-align:center;">Two-step verification required.</p>
         <form id="edit-profile-form" style="max-width: 500px; margin: 0 auto;">
             <div class="form-group">
-                <label>Current Password</label>
+                <label for="verify-password">Current Password</label>
                 <input type="password" id="verify-password" required autocomplete="current-password">
             </div>
             <div class="form-group">
-                <label>Current Security PIN (4 digits)</label>
-                <input type="password" id="verify-pin" required pattern="\\d{4}" inputmode="numeric" maxlength="4">
+                <label for="verify-pin">Current Security PIN (4 digits)</label>
+                <input type="password" id="verify-pin" required pattern="\d{4}" inputmode="numeric" maxlength="4" lang="en" dir="ltr">
             </div>
             <div class="divider"></div>
             <div class="form-group">
-                <label>New Username</label>
-                <input type="text" id="edit-username" value="${currentUserData.username}" required>
+                <label for="edit-username">New Username</label>
+                <input type="text" id="edit-username" value="${escapeHtml(currentUserData.username)}" required>
             </div>
             <div class="form-group">
-                <label>New Phone</label>
-                <input type="text" id="edit-phone" value="${currentUserData.phone}" required pattern="0\\d{9}">
+                <label for="edit-phone">New Phone</label>
+                <input type="text" id="edit-phone" value="${escapeHtml(currentUserData.phone)}" required pattern="0\d{9}" lang="en" dir="ltr">
             </div>
             <div class="divider"></div>
             <p style="color:#666; font-size:0.9rem; margin-bottom:12px; text-align:center;">
                 Leave New PIN fields empty if you do not want to change the PIN.
             </p>
             <div class="form-group">
-                <label>New Security PIN (4 digits, optional)</label>
-                <input type="password" id="edit-new-pin" pattern="\\d{4}" inputmode="numeric" maxlength="4" placeholder="Leave blank to keep current">
+                <label for="edit-new-pin">New Security PIN (4 digits, optional)</label>
+                <input type="password" id="edit-new-pin" pattern="\d{4}" inputmode="numeric" maxlength="4" lang="en" dir="ltr" placeholder="Leave blank to keep current">
             </div>
             <div class="form-group">
-                <label>Confirm New Security PIN</label>
-                <input type="password" id="edit-confirm-pin" pattern="\\d{4}" inputmode="numeric" maxlength="4" placeholder="Leave blank to keep current">
+                <label for="edit-confirm-pin">Confirm New Security PIN</label>
+                <input type="password" id="edit-confirm-pin" pattern="\d{4}" inputmode="numeric" maxlength="4" lang="en" dir="ltr" placeholder="Leave blank to keep current">
             </div>
-            <button type="submit" class="btn">Verify & Update</button>
+            <button type="submit" class="btn" id="profile-submit">Verify & Update</button>
             <button type="button" class="btn btn-secondary" id="cancel-edit" style="margin-top:10px;">Cancel</button>
         </form>
     `;
@@ -649,6 +710,9 @@ async function handleEditProtectedProfile(e) {
     e.preventDefault();
     if (!currentUserData.isProtected) return;
 
+    const submitBtn = document.getElementById('profile-submit');
+    setButtonLoading(submitBtn, 'Verifying...');
+
     const passwordEl = document.getElementById('verify-password');
     const pinEl = document.getElementById('verify-pin');
     const usernameEl = document.getElementById('edit-username');
@@ -661,30 +725,40 @@ async function handleEditProtectedProfile(e) {
     const password = passwordEl.value;
     const pin = pinEl.value;
     const newUsername = usernameEl.value.trim();
-    const newPhone = phoneEl.value.trim();
-    const newPin = newPinEl ? newPinEl.value.trim() : '';
-    const confirmPin = confirmPinEl ? confirmPinEl.value.trim() : '';
+    const newPhone = sanitizeInput('edit-phone');
+    const newPin = newPinEl ? sanitizeInput('edit-new-pin') : '';
+    const confirmPin = confirmPinEl ? sanitizeInput('edit-confirm-pin') : '';
 
-    if (pin !== currentUserData.securityPin) {
-        showMessage('Security Error: Invalid Security PIN.', 'error', 'dashboard');
+    if (containsNonEnglishDigits(pin)) {
+        showMessage('Error: PIN must use English digits (0-9) only.', 'error', 'dashboard');
+        resetButtonLoading(submitBtn);
         return;
     }
-    if (!/^0\d{9}$/.test(newPhone)) {
+    if (pin !== currentUserData.securityPin) {
+        showMessage('Security Error: Invalid Security PIN.', 'error', 'dashboard');
+        resetButtonLoading(submitBtn);
+        return;
+    }
+    if (!validators.phone(newPhone)) {
         showMessage('Error: Phone must start with 0 and be 10 digits.', 'error', 'dashboard');
+        resetButtonLoading(submitBtn);
         return;
     }
 
     if (newPin || confirmPin) {
-        if (!/^\d{4}$/.test(newPin)) {
+        if (!validators.pin(newPin)) {
             showMessage('Error: New Security PIN must be exactly 4 digits.', 'error', 'dashboard');
+            resetButtonLoading(submitBtn);
             return;
         }
         if (newPin !== confirmPin) {
             showMessage('Error: New PIN and confirmation do not match.', 'error', 'dashboard');
+            resetButtonLoading(submitBtn);
             return;
         }
         if (newPin === pin) {
             showMessage('Error: New PIN must be different from the current PIN.', 'error', 'dashboard');
+            resetButtonLoading(submitBtn);
             return;
         }
     }
@@ -701,6 +775,7 @@ async function handleEditProtectedProfile(e) {
             const snapshot = await getDocs(q);
             if (!snapshot.empty) {
                 showMessage('Error: Username already exists.', 'error', 'dashboard');
+                resetButtonLoading(submitBtn);
                 return;
             }
         }
@@ -727,33 +802,26 @@ async function handleEditProtectedProfile(e) {
         setTimeout(() => window.location.reload(), 2000);
     } catch (error) {
         handleFirebaseError(error, 'dashboard');
+    } finally {
+        resetButtonLoading(submitBtn);
     }
 }
 
-// New functions for "My Activity" tab
-
-export function renderMyPersonalActivity() {
-    if (!currentUserData || !currentUserData.uid) {
-        renderAccessDenied();
-        return;
-    }
-
+/* ═══════════════════════════════════════════
+   MY PERSONAL ACTIVITY (for My Activity tab)
+   ═══════════════════════════════════════════ */
+export async function renderMyPersonalActivity() {
     const container = document.getElementById('dashboard-container');
+    if (!container || !currentUserData) return;
+
     container.innerHTML = `
-        <h2>My Personal Activity</h2>
-        <p style="text-align:center; color:#666; margin-bottom:20px;">
-            Your own activity history and cars you have used.
-        </p>
+        <h2>My Activity</h2>
         <div class="divider"></div>
         <div id="my-activity-timeline" class="timeline">
             <p class="loading-text">Loading your activity...</p>
         </div>
     `;
 
-    loadMyPersonalActivity();
-}
-
-async function loadMyPersonalActivity() {
     const timeline = document.getElementById('my-activity-timeline');
     if (!timeline) return;
 
@@ -770,46 +838,42 @@ async function loadMyPersonalActivity() {
         actorSnap.forEach(d => logs.push(d.data()));
         assigneeSnap.forEach(d => logs.push(d.data()));
 
-        // إزالة التكرار
-        const unique = [];
-        const seen = new Set();
-        logs.forEach(log => {
-            const key = `${log.timestamp?.seconds || 0}-${log.actionType}-${log.details || ''}`;
-            if (!seen.has(key)) {
-                seen.add(key);
-                unique.push(log);
-            }
-        });
-
-        unique.sort((a, b) => {
+        logs.sort((a, b) => {
             const tA = a.timestamp ? a.timestamp.toDate().getTime() : 0;
             const tB = b.timestamp ? b.timestamp.toDate().getTime() : 0;
             return tB - tA;
         });
 
-        if (unique.length === 0) {
-            timeline.innerHTML = '<p style="text-align:center; color:#666;">No activity recorded yet.</p>';
+        if (logs.length === 0) {
+            timeline.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">📋</div>
+                    <p>No activity recorded yet.</p>
+                </div>
+            `;
             return;
         }
 
         let html = '';
-        unique.slice(0, 25).forEach(log => {
+        logs.slice(0, 25).forEach(log => {
             const dateStr = formatDateTime(log.timestamp);
             let itemClass = 'timeline-item';
-            let text = log.details || log.actionType;
+            let text = log.details || '';
 
-            if (log.actionType === 'CAR_ASSIGN' || log.actionType === 'AUTO_LINK' || log.actionType === 'APPROVE_LINK') {
+            if (log.actionType === 'CAR_ASSIGN' || log.actionType === 'AUTO_LINK') {
                 itemClass += ' ongoing';
-                text = `Assigned / Linked to car <strong>${log.targetName || log.targetId}</strong>`;
-            } else if (log.actionType === 'CAR_UNASSIGN' || log.actionType === 'APPROVE_UNLINK' || log.actionType === 'REQUEST_UNLINK') {
+                text = `Assigned car <strong>${escapeHtml(log.targetName || log.targetId)}</strong>`;
+            } else if (log.actionType === 'CAR_UNASSIGN' || log.actionType === 'APPROVE_UNLINK') {
                 itemClass += ' completed';
-                text = `Unassigned / Unlinked from car <strong>${log.targetName || log.targetId}</strong>`;
+                text = `Unassigned car <strong>${escapeHtml(log.targetName || log.targetId)}</strong>`;
             } else if (log.actionType === 'LOGIN') {
                 text = 'Logged into the system';
             } else if (log.actionType === 'LOGOUT') {
                 text = 'Logged out';
             } else if (log.actionType === 'REQUEST_LINK') {
-                text = `Requested to link car: <strong>${log.targetName || ''}</strong>`;
+                text = `Requested link: ${escapeHtml(log.targetName || '')}`;
+            } else if (log.actionType === 'REQUEST_UNLINK') {
+                text = `Requested unlink: ${escapeHtml(log.targetName || '')}`;
             }
 
             html += `
@@ -822,9 +886,8 @@ async function loadMyPersonalActivity() {
                 </div>
             `;
         });
-
         timeline.innerHTML = html;
     } catch (error) {
-        timeline.innerHTML = `<p class="error">Error loading activity: ${error.message}</p>`;
+        timeline.innerHTML = `<p class="error">Error: ${escapeHtml(error.message)}</p>`;
     }
 }
