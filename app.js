@@ -1,7 +1,7 @@
 /**
  * Main Application Entry - Car Management System
  * English only | Latin digits only | Production-ready
- * Updated: Robust checkSystemState with fallback
+ * Updated: Robust checkSystemState with fallback, guaranteed login form display
  */
 
 import { auth, db } from "./firebase.js";
@@ -181,136 +181,40 @@ function switchTab(tabName) {
     else if (tabName === 'my-activity') renderMyActivityView();
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-    updateDateTime();
-    updateCopyrightYear();
-    setInterval(updateDateTime, 1000);
-    setupKeyboardNav();
-
-    const logoutBtn = document.getElementById('logout-btn');
-    if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
-
-    const changePasswordBtn = document.getElementById('change-password-btn');
-    if (changePasswordBtn) changePasswordBtn.addEventListener('click', renderChangePasswordForm);
-
-    const refreshBtn = document.getElementById('refresh-btn');
-    if (refreshBtn) refreshBtn.addEventListener('click', () => window.location.reload());
-
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (btn.disabled || btn.style.display === 'none') return;
-            switchTab(btn.dataset.tab);
-        });
-    });
-
-    onAuthStateChanged(auth, async (user) => {
-        if (user) {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
-                userData.uid = user.uid;
-                setCurrentUser(userData);
-                setCarsCurrentUser(userData);
-                setRequestsCurrentUser(userData);
-                setLogsCurrentUser(userData);
-                setSearchCurrentUser(userData);
-                setStatsCurrentUser(userData);
-
-                document.querySelectorAll('.tab-btn').forEach(tab => {
-                    if (userData.role === 'admin' && userData.status === 'active') {
-                        tab.style.display = 'block';
-                    } else {
-                        tab.style.display = tab.dataset.tab === 'cars' ? 'block' : 'none';
-                    }
-                });
-
-                const myActivityTab = document.getElementById('my-activity-tab');
-                if (myActivityTab) myActivityTab.style.display = userData.status === 'active' ? 'block' : 'none';
-
-                showDashboard();
-                startRequestsBadgeRealtime();
-            } else {
-                await signOut(auth);
-                showAuthView();
-            }
-        } else {
-            setCurrentUser(null);
-            stopRequestsBadgeRealtime();
-            showAuthView();
-            await checkSystemState();
-        }
-    });
-});
-
-function showAuthView() {
-    const authView = document.getElementById('auth-view');
-    const dashView = document.getElementById('dashboard-view');
-    const logoutBtn = document.getElementById('logout-btn');
-    const changePassBtn = document.getElementById('change-password-btn');
-    const headerLogo = document.getElementById('header-logo');
-    const mainLogo = document.getElementById('main-logo');
-    const refreshBtn = document.getElementById('refresh-btn');
-    if (authView) authView.style.display = 'flex';
-    if (dashView) dashView.style.display = 'none';
-    if (logoutBtn) logoutBtn.style.display = 'none';
-    if (changePassBtn) changePassBtn.style.display = 'none';
-    if (headerLogo) headerLogo.style.display = 'none';
-    if (mainLogo) mainLogo.style.display = 'block';
-    if (refreshBtn) refreshBtn.style.display = 'none';
+// ============================================================
+//  RENDER LOGIN FORM (يتم استدعاؤها فوراً عند تحميل الصفحة)
+// ============================================================
+function renderLoginForm() {
+    const container = document.getElementById('form-container');
+    if (!container) return;
+    container.innerHTML = `
+        <h2>Login</h2>
+        <form id="login-form">
+            <div class="form-group">
+                <label for="login-email">Email</label>
+                <input type="email" id="login-email" required autocomplete="email">
+            </div>
+            <div class="form-group">
+                <label for="login-password">Password</label>
+                <input type="password" id="login-password" required autocomplete="current-password">
+            </div>
+            <div class="form-group checkbox-group">
+                <input type="checkbox" id="remember-me">
+                <label for="remember-me" style="margin-bottom:0">Remember Me</label>
+            </div>
+            <button type="submit" class="btn" id="login-submit">Login</button>
+        </form>
+    `;
+    document.getElementById('login-form').addEventListener('submit', handleLogin);
 }
 
-function showDashboard() {
-    const authView = document.getElementById('auth-view');
-    const dashView = document.getElementById('dashboard-view');
-    const logoutBtn = document.getElementById('logout-btn');
-    const changePassBtn = document.getElementById('change-password-btn');
-    const headerLogo = document.getElementById('header-logo');
-    const mainLogo = document.getElementById('main-logo');
-    const refreshBtn = document.getElementById('refresh-btn');
-    if (authView) authView.style.display = 'none';
-    if (dashView) dashView.style.display = 'flex';
-    if (logoutBtn) logoutBtn.style.display = 'block';
-    if (changePassBtn) changePassBtn.style.display = 'block';
-    if (headerLogo) headerLogo.style.display = 'block';
-    if (mainLogo) mainLogo.style.display = 'none';
-    if (refreshBtn) refreshBtn.style.display = 'block';
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    const carsTab = document.querySelector('.tab-btn[data-tab="cars"]');
-    if (carsTab) carsTab.classList.add('active');
-    renderCarsView();
-}
-
-// ====== CHECK SYSTEM STATE (ROBUST VERSION) ======
-async function checkSystemState() {
-    try {
-        const statusRef = doc(db, 'system', 'status');
-        const statusSnap = await getDoc(statusRef);
-        if (statusSnap.exists()) {
-            const data = statusSnap.data();
-            if (data.usersCount > 0 || data.initialized === true) {
-                renderLoginForm();
-            } else {
-                renderSetupForm();
-            }
-        } else {
-            try {
-                const q = query(collection(db, 'users'), limit(1));
-                const snapshot = await getDocs(q);
-                if (snapshot.empty) renderSetupForm();
-                else renderLoginForm();
-            } catch (e) {
-                console.warn('Fallback to login form:', e.message);
-                renderLoginForm();
-            }
-        }
-    } catch (error) {
-        console.error('checkSystemState error:', error);
-        renderLoginForm();
-    }
-}
-
+// ============================================================
+//  RENDER SETUP FORM (للمرة الأولى)
+// ============================================================
 function renderSetupForm() {
-    document.getElementById('form-container').innerHTML = `
+    const container = document.getElementById('form-container');
+    if (!container) return;
+    container.innerHTML = `
         <h2>System Setup</h2>
         <p style="margin-bottom: 20px; font-size: 0.9rem; color: #666; text-align:center;">
             Create the protected Super Admin account.
@@ -342,6 +246,45 @@ function renderSetupForm() {
     document.getElementById('setup-form').addEventListener('submit', handleSetup);
 }
 
+// ============================================================
+//  CHECK SYSTEM STATE (تحدد إذا كان النظام جديداً أم لا)
+// ============================================================
+async function checkSystemState() {
+    try {
+        const statusRef = doc(db, 'system', 'status');
+        const statusSnap = await getDoc(statusRef);
+        if (statusSnap.exists()) {
+            const data = statusSnap.data();
+            if (data.usersCount > 0 || data.initialized === true) {
+                // يوجد مستخدمون، الفورم الحالي (دخول) مناسب
+                return;
+            } else {
+                renderSetupForm();
+                return;
+            }
+        } else {
+            // مستند system/status غير موجود، حاول معرفة إذا كان هناك مستخدمون
+            try {
+                const q = query(collection(db, 'users'), limit(1));
+                const snapshot = await getDocs(q);
+                if (snapshot.empty) {
+                    renderSetupForm();
+                }
+                // else: يوجد مستخدمون، ابق على فورم الدخول
+            } catch (e) {
+                // فشل قراءة users (غالباً بسبب الصلاحيات)، ابق على فورم الدخول
+                console.warn('Could not read users, keeping login form:', e.message);
+            }
+        }
+    } catch (error) {
+        console.error('checkSystemState error:', error);
+        // في حالة أي خطأ، ابق على فورم الدخول
+    }
+}
+
+// ============================================================
+//  HANDLE SETUP (إنشاء السوبر أدمن)
+// ============================================================
 async function handleSetup(e) {
     e.preventDefault();
     const username = document.getElementById('username').value.trim();
@@ -406,28 +349,9 @@ async function handleSetup(e) {
     }
 }
 
-function renderLoginForm() {
-    document.getElementById('form-container').innerHTML = `
-        <h2>Login</h2>
-        <form id="login-form">
-            <div class="form-group">
-                <label for="login-email">Email</label>
-                <input type="email" id="login-email" required autocomplete="email">
-            </div>
-            <div class="form-group">
-                <label for="login-password">Password</label>
-                <input type="password" id="login-password" required autocomplete="current-password">
-            </div>
-            <div class="form-group checkbox-group">
-                <input type="checkbox" id="remember-me">
-                <label for="remember-me" style="margin-bottom:0">Remember Me</label>
-            </div>
-            <button type="submit" class="btn" id="login-submit">Login</button>
-        </form>
-    `;
-    document.getElementById('login-form').addEventListener('submit', handleLogin);
-}
-
+// ============================================================
+//  HANDLE LOGIN
+// ============================================================
 async function handleLogin(e) {
     e.preventDefault();
     const emailEl = document.getElementById('login-email');
@@ -497,6 +421,9 @@ async function handleLogin(e) {
     }
 }
 
+// ============================================================
+//  HANDLE LOGOUT
+// ============================================================
 async function handleLogout() {
     try {
         const currentUser = auth.currentUser;
@@ -507,12 +434,17 @@ async function handleLogout() {
         stopRequestsBadgeRealtime();
         await signOut(auth);
         showAuthView();
+        // بعد الخروج، تأكد من ظهور فورم الدخول
+        renderLoginForm();
         await checkSystemState();
     } catch (error) {
         handleFirebaseError(error);
     }
 }
 
+// ============================================================
+//  RENDER CHANGE PASSWORD FORM
+// ============================================================
 function renderChangePasswordForm() {
     const userData = getCurrentUser();
     if (!userData || !auth.currentUser) {
@@ -554,6 +486,9 @@ function renderChangePasswordForm() {
     if (cancelBtn) cancelBtn.addEventListener('click', () => switchTab('cars'));
 }
 
+// ============================================================
+//  HANDLE CHANGE PASSWORD
+// ============================================================
 async function handleChangePassword(e) {
     e.preventDefault();
     const userData = getCurrentUser();
@@ -607,8 +542,125 @@ async function handleChangePassword(e) {
     }
 }
 
-// My Activity
+// ============================================================
+//  SHOW / HIDE VIEWS
+// ============================================================
+function showAuthView() {
+    const authView = document.getElementById('auth-view');
+    const dashView = document.getElementById('dashboard-view');
+    const logoutBtn = document.getElementById('logout-btn');
+    const changePassBtn = document.getElementById('change-password-btn');
+    const headerLogo = document.getElementById('header-logo');
+    const mainLogo = document.getElementById('main-logo');
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (authView) authView.style.display = 'flex';
+    if (dashView) dashView.style.display = 'none';
+    if (logoutBtn) logoutBtn.style.display = 'none';
+    if (changePassBtn) changePassBtn.style.display = 'none';
+    if (headerLogo) headerLogo.style.display = 'none';
+    if (mainLogo) mainLogo.style.display = 'block';
+    if (refreshBtn) refreshBtn.style.display = 'none';
+}
+
+function showDashboard() {
+    const authView = document.getElementById('auth-view');
+    const dashView = document.getElementById('dashboard-view');
+    const logoutBtn = document.getElementById('logout-btn');
+    const changePassBtn = document.getElementById('change-password-btn');
+    const headerLogo = document.getElementById('header-logo');
+    const mainLogo = document.getElementById('main-logo');
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (authView) authView.style.display = 'none';
+    if (dashView) dashView.style.display = 'flex';
+    if (logoutBtn) logoutBtn.style.display = 'block';
+    if (changePassBtn) changePassBtn.style.display = 'block';
+    if (headerLogo) headerLogo.style.display = 'block';
+    if (mainLogo) mainLogo.style.display = 'none';
+    if (refreshBtn) refreshBtn.style.display = 'block';
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    const carsTab = document.querySelector('.tab-btn[data-tab="cars"]');
+    if (carsTab) carsTab.classList.add('active');
+    renderCarsView();
+}
+
+// ============================================================
+//  MY ACTIVITY
+// ============================================================
 async function renderMyActivityView() {
     const { renderMyPersonalActivity } = await import('./members.js');
     renderMyPersonalActivity();
 }
+
+// ============================================================
+//  DOM CONTENT LOADED - نقطة البداية
+// ============================================================
+window.addEventListener('DOMContentLoaded', () => {
+    updateDateTime();
+    updateCopyrightYear();
+    setInterval(updateDateTime, 1000);
+    setupKeyboardNav();
+
+    // ✅ عرض فورم الدخول فوراً (حل احتياطي مضمون)
+    renderLoginForm();
+
+    // الأزرار
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+
+    const changePasswordBtn = document.getElementById('change-password-btn');
+    if (changePasswordBtn) changePasswordBtn.addEventListener('click', renderChangePasswordForm);
+
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) refreshBtn.addEventListener('click', () => window.location.reload());
+
+    // التبويبات
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.disabled || btn.style.display === 'none') return;
+            switchTab(btn.dataset.tab);
+        });
+    });
+
+    // مراقبة حالة المصادقة
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            // مستخدم مسجل دخوله
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                userData.uid = user.uid;
+                setCurrentUser(userData);
+                setCarsCurrentUser(userData);
+                setRequestsCurrentUser(userData);
+                setLogsCurrentUser(userData);
+                setSearchCurrentUser(userData);
+                setStatsCurrentUser(userData);
+
+                document.querySelectorAll('.tab-btn').forEach(tab => {
+                    if (userData.role === 'admin' && userData.status === 'active') {
+                        tab.style.display = 'block';
+                    } else {
+                        tab.style.display = tab.dataset.tab === 'cars' ? 'block' : 'none';
+                    }
+                });
+
+                const myActivityTab = document.getElementById('my-activity-tab');
+                if (myActivityTab) myActivityTab.style.display = userData.status === 'active' ? 'block' : 'none';
+
+                showDashboard();
+                startRequestsBadgeRealtime();
+            } else {
+                await signOut(auth);
+                showAuthView();
+                renderLoginForm();
+            }
+        } else {
+            // لا يوجد مستخدم مسجل
+            setCurrentUser(null);
+            stopRequestsBadgeRealtime();
+            showAuthView();
+            // تحقق من حالة النظام (جديد أم لا) لتحديد الفورم المناسب
+            await checkSystemState();
+        }
+    });
+});
