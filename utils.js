@@ -1,17 +1,17 @@
 /**
  * Shared Utilities - Car Management System
  * English only | Latin digits only | Production-ready
- * Updated: Full validators, debounce, confirm dialog, search merge helpers
+ * Updated: Added hashPin function for security
  */
 
 import { auth } from "./firebase.js";
+import { doc, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { db } from "./firebase.js";
 
 let messageTimeout = null;
 let activeSearchAbort = null;
 
-/* ═══════════════════════════════════════════
-   VALIDATORS
-   ═══════════════════════════════════════════ */
+// ========== VALIDATORS ==========
 export const validators = {
     phone: (v) => /^0\d{9}$/.test(String(v || '').trim()),
     pin: (v) => /^\d{4}$/.test(String(v || '').trim()),
@@ -26,27 +26,17 @@ export const validators = {
     password: (v) => String(v || '').length >= 6,
 };
 
-export function validateField(id, validatorFn, errorMsg, target = 'dashboard') {
-    const el = document.getElementById(id);
-    if (!el) return { valid: false, value: '' };
-    const value = el.value.trim();
-    if (!validatorFn(value)) {
-        showMessage(errorMsg, 'error', target);
-        el.focus();
-        return { valid: false, value };
-    }
-    return { valid: true, value };
+// ========== SECURITY: HASH PIN ==========
+export async function hashPin(pin) {
+    if (!pin) return null;
+    const encoder = new TextEncoder();
+    const data = encoder.encode(pin);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-
-/* ═══════════════════════════════════════════
-   ENGLISH DIGITS VALIDATOR & CONVERTER
-   Prevents Arabic-Indic digits (٠١٢٣٤٥٦٧٨٩) 
-   and Eastern Arabic digits (٠١٢٣٤٥٦٧٨٩)
-   ═══════════════════════════════════════════ */
-
-const ARABIC_INDIC_DIGITS = /[٠١٢٣٤٥٦٧٨٩]/g;
-const EASTERN_ARABIC_DIGITS = /[۰۱۲۳۴۵۶۷۸۹]/g;
+// ========== ENGLISH DIGITS ==========
 const ALL_NON_ENGLISH_DIGITS = /[٠١٢٣٤٥٦٧٨۹۰۱۲۳۴۵۶۷۸۹]/g;
 
 export function toEnglishDigits(str) {
@@ -70,32 +60,23 @@ export function sanitizeInput(elId, options = {}) {
     let value = toEnglishDigits(el.value.trim());
     if (options.uppercase) value = value.toUpperCase();
     if (options.lowercase) value = value.toLowerCase();
-    // Update the input visually if it had non-English digits
     if (el.value.trim() !== value) {
         el.value = value;
     }
     return value;
 }
 
-/* ═══════════════════════════════════════════
-   MESSAGES
-   ═══════════════════════════════════════════ */
+// ========== MESSAGES ==========
 export function showMessage(text, type = 'error', target = 'auth') {
     const boxId = target === 'dashboard' ? 'dashboard-message-box' : 'message-box';
     const box = document.getElementById(boxId);
     if (!box) return;
-
-    if (messageTimeout) {
-        clearTimeout(messageTimeout);
-        messageTimeout = null;
-    }
-
+    if (messageTimeout) clearTimeout(messageTimeout);
     box.textContent = text;
     box.className = `message-box ${type}`;
     box.style.opacity = '1';
     box.setAttribute('role', 'status');
     box.setAttribute('aria-live', 'polite');
-
     messageTimeout = setTimeout(() => {
         box.classList.add('fade-out');
         setTimeout(() => {
@@ -111,19 +92,14 @@ export function clearMessage(target = 'dashboard') {
     const boxId = target === 'dashboard' ? 'dashboard-message-box' : 'message-box';
     const box = document.getElementById(boxId);
     if (box) {
-        if (messageTimeout) {
-            clearTimeout(messageTimeout);
-            messageTimeout = null;
-        }
+        if (messageTimeout) clearTimeout(messageTimeout);
         box.textContent = '';
         box.className = 'message-box';
         box.style.opacity = '1';
     }
 }
 
-/* ═══════════════════════════════════════════
-   DEBOUNCE & SEARCH HELPERS
-   ═══════════════════════════════════════════ */
+// ========== DEBOUNCE & ABORT ==========
 export function debounce(fn, ms = 400) {
     let t;
     return (...args) => {
@@ -136,29 +112,19 @@ export function setActiveSearchAbort(controller) {
     if (activeSearchAbort) activeSearchAbort.abort();
     activeSearchAbort = controller;
 }
+export function getActiveSearchAbort() { return activeSearchAbort; }
+export function clearActiveSearchAbort() { activeSearchAbort = null; }
 
-export function getActiveSearchAbort() {
-    return activeSearchAbort;
-}
-
-export function clearActiveSearchAbort() {
-    activeSearchAbort = null;
-}
-
-/* ═══════════════════════════════════════════
-   CONFIRM DIALOG (Accessible replacement for native confirm)
-   ═══════════════════════════════════════════ */
+// ========== CONFIRM DIALOG ==========
 export function renderConfirmDialog({ title, message, confirmText = 'Confirm', cancelText = 'Cancel', danger = false, onConfirm, onCancel }) {
     const existing = document.getElementById('confirm-dialog-overlay');
     if (existing) existing.remove();
-
     const overlay = document.createElement('div');
     overlay.id = 'confirm-dialog-overlay';
     overlay.className = 'confirm-overlay';
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-labelledby', 'confirm-dialog-title');
-
     overlay.innerHTML = `
         <div class="confirm-box">
             <h3 id="confirm-dialog-title">${escapeHtml(title)}</h3>
@@ -169,34 +135,24 @@ export function renderConfirmDialog({ title, message, confirmText = 'Confirm', c
             </div>
         </div>
     `;
-
     document.body.appendChild(overlay);
-
     const okBtn = document.getElementById('confirm-ok');
     const cancelBtn = document.getElementById('confirm-cancel');
-
     const close = () => {
         overlay.classList.add('fade-out');
         setTimeout(() => overlay.remove(), 300);
         document.removeEventListener('keydown', onKey);
     };
-
     const onKey = (e) => {
-        if (e.key === 'Escape') {
-            close();
-            if (onCancel) onCancel();
-        }
+        if (e.key === 'Escape') { close(); if (onCancel) onCancel(); }
     };
-
     okBtn.addEventListener('click', () => { close(); if (onConfirm) onConfirm(); });
     cancelBtn.addEventListener('click', () => { close(); if (onCancel) onCancel(); });
     document.addEventListener('keydown', onKey);
     okBtn.focus();
 }
 
-/* ═══════════════════════════════════════════
-   LOADING STATE HELPERS
-   ═══════════════════════════════════════════ */
+// ========== LOADING STATES ==========
 export function setButtonLoading(btnId, loadingText = 'Processing...') {
     const btn = typeof btnId === 'string' ? document.getElementById(btnId) : btnId;
     if (!btn) return;
@@ -215,63 +171,33 @@ export function resetButtonLoading(btnId) {
     btn.removeAttribute('aria-busy');
 }
 
-/* ═══════════════════════════════════════════
-   ERROR HANDLER
-   ═══════════════════════════════════════════ */
+// ========== ERROR HANDLER ==========
 export function handleFirebaseError(error, target = 'auth') {
     let message = '';
     switch (error.code) {
-        case 'auth/invalid-email':
-            message = 'Error: The email address is badly formatted.';
-            break;
-        case 'auth/user-disabled':
-            message = 'Error: This user has been disabled.';
-            break;
-        case 'auth/user-not-found':
-            message = 'Error: No user found with this email.';
-            break;
-        case 'auth/wrong-password':
-            message = 'Error: Incorrect password. Please try again.';
-            break;
-        case 'auth/email-already-in-use':
-            message = 'Error: The email is already in use.';
-            break;
-        case 'auth/weak-password':
-            message = 'Error: Password should be at least 6 characters.';
-            break;
-        case 'auth/too-many-requests':
-            message = 'Warning: Too many failed login attempts. Please try again later.';
-            break;
-        case 'auth/network-request-failed':
-            message = 'Error: Network error. Check your connection.';
-            break;
-        case 'auth/requires-recent-login':
-            message = 'Error: Please logout and login again to perform this action.';
-            break;
-        case 'permission-denied':
-            message = 'Security Error: You do not have permission to perform this action.';
-            break;
-        default:
-            message = `System Error: ${error.message || 'Unknown error occurred.'}`;
+        case 'auth/invalid-email': message = 'Error: The email address is badly formatted.'; break;
+        case 'auth/user-disabled': message = 'Error: This user has been disabled.'; break;
+        case 'auth/user-not-found': message = 'Error: No user found with this email.'; break;
+        case 'auth/wrong-password': message = 'Error: Incorrect password. Please try again.'; break;
+        case 'auth/email-already-in-use': message = 'Error: The email is already in use.'; break;
+        case 'auth/weak-password': message = 'Error: Password should be at least 6 characters.'; break;
+        case 'auth/too-many-requests': message = 'Warning: Too many failed login attempts. Please try again later.'; break;
+        case 'auth/network-request-failed': message = 'Error: Network error. Check your connection.'; break;
+        case 'auth/requires-recent-login': message = 'Error: Please logout and login again to perform this action.'; break;
+        case 'permission-denied': message = 'Security Error: You do not have permission to perform this action.'; break;
+        default: message = `System Error: ${error.message || 'Unknown error occurred.'}`;
     }
     showMessage(message, 'error', target);
 }
 
-/* ═══════════════════════════════════════════
-   FORMATTERS
-   ═══════════════════════════════════════════ */
+// ========== FORMATTERS ==========
 export function formatDateTime(ts) {
     if (!ts) return 'N/A';
     const date = ts.toDate ? ts.toDate() : new Date(ts);
     return date.toLocaleString('en-GB', {
         timeZone: 'Asia/Dubai',
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
     });
 }
 
@@ -280,9 +206,7 @@ export function formatDateOnly(ts) {
     const date = ts.toDate ? ts.toDate() : new Date(ts);
     return date.toLocaleDateString('en-GB', {
         timeZone: 'Asia/Dubai',
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
+        day: '2-digit', month: 'short', year: 'numeric'
     });
 }
 
@@ -301,9 +225,7 @@ export function formatCarLabel(carData) {
     return `${id} | ${num} ${code} (${emirate})`;
 }
 
-/* ═══════════════════════════════════════════
-   AUTH HELPERS
-   ═══════════════════════════════════════════ */
+// ========== AUTH HELPERS ==========
 export function isAdmin(userData) {
     return !!(userData && userData.role === 'admin' && userData.status === 'active');
 }
@@ -325,9 +247,7 @@ export function renderAccessDenied() {
     }
 }
 
-/* ═══════════════════════════════════════════
-   DATE HELPERS
-   ═══════════════════════════════════════════ */
+// ========== DATE HELPERS ==========
 export function daysUntil(expiry) {
     if (!expiry) return 0;
     const today = new Date();
@@ -348,14 +268,10 @@ export function toDateInputValue(ts) {
         const d = ts.toDate ? ts.toDate() : new Date(ts);
         if (isNaN(d.getTime())) return '';
         return d.toISOString().split('T')[0];
-    } catch {
-        return '';
-    }
+    } catch { return ''; }
 }
 
-/* ═══════════════════════════════════════════
-   HTML ESCAPE
-   ═══════════════════════════════════════════ */
+// ========== HTML ESCAPE ==========
 export function escapeHtml(str) {
     if (str == null) return '';
     return String(str)
@@ -366,12 +282,7 @@ export function escapeHtml(str) {
         .replace(/'/g, '&#039;');
 }
 
-/* ═══════════════════════════════════════════
-   CAR ID GENERATOR (extracted from cars.js + requests.js)
-   ═══════════════════════════════════════════ */
-import { doc, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { db } from "./firebase.js";
-
+// ========== CAR ID GENERATOR ==========
 export async function generateCarId() {
     const counterRef = doc(db, 'counters', 'carId');
     const newCount = await runTransaction(db, async (transaction) => {

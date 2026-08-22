@@ -1,11 +1,11 @@
 /**
  * Stats Module - Car Management System
  * English only | Latin digits only | Production-ready
- * Updated: getCountFromServer (free on Spark), limit(100) for detail counts
+ * Updated: Fixed missing 'limit' import, increased sample to 500
  */
 
 import { db } from "./firebase.js";
-import { collection, query, where, getDocs, getCountFromServer } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, query, where, getDocs, getCountFromServer, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { isAdmin, renderAccessDenied, daysUntil, escapeHtml } from "./utils.js";
 import { renderCarsView } from "./cars.js";
 import { renderDashboard } from "./members.js";
@@ -33,7 +33,7 @@ export async function renderStatsView() {
     const grid = document.getElementById('stats-grid');
 
     try {
-        // getCountFromServer is FREE on Spark plan (does not count as reads)
+        // Free counts (no reads consumed on Spark)
         const usersCountSnap = await getCountFromServer(collection(db, 'users'));
         const carsCountSnap = await getCountFromServer(collection(db, 'cars'));
         const logsCountSnap = await getCountFromServer(collection(db, 'logs'));
@@ -41,18 +41,17 @@ export async function renderStatsView() {
         const activeUsersCountSnap = await getCountFromServer(query(collection(db, 'users'), where('status', '==', 'active')));
         const suspendedUsersCountSnap = await getCountFromServer(query(collection(db, 'users'), where('status', '==', 'suspended')));
 
-        // For car detail stats, use limit(100) to stay within Spark limits
-        const carsQ = query(collection(db, 'cars'), limit(100));
+        // Sample up to 500 cars for detailed stats (instead of fetching all)
+        const carsQ = query(collection(db, 'cars'), limit(500));
         const carsSnap = await getDocs(carsQ);
 
         let expiredCars = 0;
         let warningCars = 0;
         let assignedCars = 0;
-        let totalCarsInSample = 0;
+        let totalCarsInSample = carsSnap.size;
 
         carsSnap.forEach(doc => {
             const data = doc.data();
-            totalCarsInSample++;
             const licDiff = daysUntil(data.licenseExpiry);
             const insDiff = daysUntil(data.insuranceExpiry);
             const minDiff = Math.min(licDiff, insDiff);
@@ -61,12 +60,11 @@ export async function renderStatsView() {
             if (data.currentUserId) assignedCars++;
         });
 
-        // Scale estimates if we hit the limit
         const totalCars = carsCountSnap.data().count;
         const scaleFactor = totalCars > 0 ? totalCars / Math.max(totalCarsInSample, 1) : 1;
-        const estimatedExpired = totalCars > 100 ? Math.round(expiredCars * scaleFactor) : expiredCars;
-        const estimatedWarning = totalCars > 100 ? Math.round(warningCars * scaleFactor) : warningCars;
-        const estimatedAssigned = totalCars > 100 ? Math.round(assignedCars * scaleFactor) : assignedCars;
+        const estimatedExpired = totalCars > 500 ? Math.round(expiredCars * scaleFactor) : expiredCars;
+        const estimatedWarning = totalCars > 500 ? Math.round(warningCars * scaleFactor) : warningCars;
+        const estimatedAssigned = totalCars > 500 ? Math.round(assignedCars * scaleFactor) : assignedCars;
 
         grid.innerHTML = `
             <div class="stat-card clickable" data-nav="members" title="View all members">
@@ -86,15 +84,15 @@ export async function renderStatsView() {
                 <div class="stat-label">Total Cars</div>
             </div>
             <div class="stat-card success clickable" data-nav="cars" data-filter="all" title="View assigned cars">
-                <div class="stat-value">${estimatedAssigned}${totalCars > 100 ? '+' : ''}</div>
+                <div class="stat-value">${estimatedAssigned}${totalCars > 500 ? '+' : ''}</div>
                 <div class="stat-label">Assigned Cars</div>
             </div>
             <div class="stat-card danger clickable" data-nav="cars" data-filter="expired" title="View expired cars">
-                <div class="stat-value">${estimatedExpired}${totalCars > 100 ? '+' : ''}</div>
+                <div class="stat-value">${estimatedExpired}${totalCars > 500 ? '+' : ''}</div>
                 <div class="stat-label">Expired Cars</div>
             </div>
             <div class="stat-card warning clickable" data-nav="cars" data-filter="warning" title="View cars expiring soon">
-                <div class="stat-value">${estimatedWarning}${totalCars > 100 ? '+' : ''}</div>
+                <div class="stat-value">${estimatedWarning}${totalCars > 500 ? '+' : ''}</div>
                 <div class="stat-label">Expiring Soon</div>
             </div>
             <div class="stat-card warning clickable" data-nav="requests" title="View pending requests">
@@ -112,22 +110,16 @@ export async function renderStatsView() {
             card.addEventListener('click', () => {
                 const nav = card.dataset.nav;
                 const filter = card.dataset.filter || null;
-
                 document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
                 const tabBtn = document.querySelector('.tab-btn[data-tab="' + nav + '"]');
                 if (tabBtn) tabBtn.classList.add('active');
-
                 if (nav === 'cars') {
                     if (filter) sessionStorage.setItem('carsFilter', filter);
                     else sessionStorage.removeItem('carsFilter');
                     renderCarsView();
-                } else if (nav === 'members') {
-                    renderDashboard();
-                } else if (nav === 'requests') {
-                    renderRequestsView();
-                } else if (nav === 'logs') {
-                    renderLogsView();
-                }
+                } else if (nav === 'members') renderDashboard();
+                else if (nav === 'requests') renderRequestsView();
+                else if (nav === 'logs') renderLogsView();
             });
         });
 

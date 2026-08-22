@@ -1,7 +1,7 @@
 /**
  * Members Module - Car Management System
  * English only | Latin digits only | Production-ready
- * Updated: Validators, loading states, confirm dialogs, ARIA, keyboard nav
+ * Updated: Security PIN hashing via SHA-256
  */
 
 import { auth, db, firebaseConfig } from "./firebase.js";
@@ -15,7 +15,8 @@ import { logAction } from "./logs.js";
 import {
     showMessage, handleFirebaseError, isAdmin, isActiveUser,
     renderAccessDenied, formatDateTime, formatPeriod,
-    validators, renderConfirmDialog, sanitizeInput, containsNonEnglishDigits, setButtonLoading, resetButtonLoading, escapeHtml
+    validators, renderConfirmDialog, sanitizeInput, containsNonEnglishDigits,
+    setButtonLoading, resetButtonLoading, escapeHtml, hashPin
 } from "./utils.js";
 
 let currentUserData = null;
@@ -55,7 +56,7 @@ export function renderDashboard() {
                 </div>
                 <div class="form-group">
                     <label for="new-phone">Phone</label>
-                    <input type="text" id="new-phone" required pattern="0\d{9}" placeholder="0XXXXXXXXX" autocomplete="off">
+                    <input type="text" id="new-phone" required pattern="0\\d{9}" placeholder="0XXXXXXXXX" autocomplete="off">
                 </div>
                 <div class="form-group" style="grid-column: 1 / -1;">
                     <label for="new-role">Role</label>
@@ -157,7 +158,7 @@ async function handleAddUser(e) {
             status: 'active',
             notes: '',
             isProtected: false,
-            securityPin: null,
+            securityPin: null, // المستخدمين العاديين لا يحتاجون PIN
             rememberSession: false
         });
 
@@ -577,7 +578,7 @@ async function renderInlineEditForm(uid) {
             </div>
             <div class="form-group">
                 <label for="edit-ph-${uid}">Phone</label>
-                <input type="text" id="edit-ph-${uid}" value="${escapeHtml(data.phone)}" required pattern="0\d{9}" lang="en" dir="ltr">
+                <input type="text" id="edit-ph-${uid}" value="${escapeHtml(data.phone)}" required pattern="0\\d{9}" lang="en" dir="ltr">
             </div>
             <div class="form-group">
                 <label for="edit-nt-${uid}">Notes (Admin only)</label>
@@ -668,7 +669,7 @@ function renderEditProfileForm() {
             </div>
             <div class="form-group">
                 <label for="verify-pin">Current Security PIN (4 digits)</label>
-                <input type="password" id="verify-pin" required pattern="\d{4}" inputmode="numeric" maxlength="4" lang="en" dir="ltr">
+                <input type="password" id="verify-pin" required pattern="\\d{4}" inputmode="numeric" maxlength="4" lang="en" dir="ltr">
             </div>
             <div class="divider"></div>
             <div class="form-group">
@@ -677,7 +678,7 @@ function renderEditProfileForm() {
             </div>
             <div class="form-group">
                 <label for="edit-phone">New Phone</label>
-                <input type="text" id="edit-phone" value="${escapeHtml(currentUserData.phone)}" required pattern="0\d{9}" lang="en" dir="ltr">
+                <input type="text" id="edit-phone" value="${escapeHtml(currentUserData.phone)}" required pattern="0\\d{9}" lang="en" dir="ltr">
             </div>
             <div class="divider"></div>
             <p style="color:#666; font-size:0.9rem; margin-bottom:12px; text-align:center;">
@@ -685,11 +686,11 @@ function renderEditProfileForm() {
             </p>
             <div class="form-group">
                 <label for="edit-new-pin">New Security PIN (4 digits, optional)</label>
-                <input type="password" id="edit-new-pin" pattern="\d{4}" inputmode="numeric" maxlength="4" lang="en" dir="ltr" placeholder="Leave blank to keep current">
+                <input type="password" id="edit-new-pin" pattern="\\d{4}" inputmode="numeric" maxlength="4" lang="en" dir="ltr" placeholder="Leave blank to keep current">
             </div>
             <div class="form-group">
                 <label for="edit-confirm-pin">Confirm New Security PIN</label>
-                <input type="password" id="edit-confirm-pin" pattern="\d{4}" inputmode="numeric" maxlength="4" lang="en" dir="ltr" placeholder="Leave blank to keep current">
+                <input type="password" id="edit-confirm-pin" pattern="\\d{4}" inputmode="numeric" maxlength="4" lang="en" dir="ltr" placeholder="Leave blank to keep current">
             </div>
             <button type="submit" class="btn" id="profile-submit">Verify & Update</button>
             <button type="button" class="btn btn-secondary" id="cancel-edit" style="margin-top:10px;">Cancel</button>
@@ -723,22 +724,20 @@ async function handleEditProtectedProfile(e) {
     if (!passwordEl || !pinEl || !usernameEl || !phoneEl) return;
 
     const password = passwordEl.value;
-    const pin = pinEl.value;
+    const pin = sanitizeInput(pinEl);
     const newUsername = usernameEl.value.trim();
     const newPhone = sanitizeInput('edit-phone');
-    const newPin = newPinEl ? sanitizeInput('edit-new-pin') : '';
-    const confirmPin = confirmPinEl ? sanitizeInput('edit-confirm-pin') : '';
+    const newPin = newPinEl ? sanitizeInput(newPinEl) : '';
+    const confirmPin = confirmPinEl ? sanitizeInput(confirmPinEl) : '';
 
-    if (containsNonEnglishDigits(pin)) {
-        showMessage('Error: PIN must use English digits (0-9) only.', 'error', 'dashboard');
-        resetButtonLoading(submitBtn);
-        return;
-    }
-    if (pin !== currentUserData.securityPin) {
+    // === التحقق من PIN باستخدام التشفير ===
+    const hashedEnteredPin = await hashPin(pin);
+    if (hashedEnteredPin !== currentUserData.securityPin) {
         showMessage('Security Error: Invalid Security PIN.', 'error', 'dashboard');
         resetButtonLoading(submitBtn);
         return;
     }
+
     if (!validators.phone(newPhone)) {
         showMessage('Error: Phone must start with 0 and be 10 digits.', 'error', 'dashboard');
         resetButtonLoading(submitBtn);
@@ -785,7 +784,8 @@ async function handleEditProtectedProfile(e) {
             phone: newPhone
         };
         if (newPin) {
-            updates.securityPin = newPin;
+            // تخزين PIN الجديد مشفراً
+            updates.securityPin = await hashPin(newPin);
         }
 
         await updateDoc(doc(db, 'users', currentUserData.uid), updates);
@@ -807,9 +807,9 @@ async function handleEditProtectedProfile(e) {
     }
 }
 
-/* ═══════════════════════════════════════════
-   MY PERSONAL ACTIVITY (for My Activity tab)
-   ═══════════════════════════════════════════ */
+// ==========================================
+// MY PERSONAL ACTIVITY (لتبويب My Activity)
+// ==========================================
 export async function renderMyPersonalActivity() {
     const container = document.getElementById('dashboard-container');
     if (!container || !currentUserData) return;

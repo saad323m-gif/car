@@ -25,7 +25,7 @@
     outline-offset: 0;
 }
 
-/* ========== Focus Visible (Keyboard) ========== */
+/* ========== Focus Visible ========== */
 *:focus-visible {
     outline: 3px solid #1976d2;
     outline-offset: 2px;
@@ -98,15 +98,17 @@ header {
 
 .btn-refresh {
     padding: 8px 14px;
-    font-size: 1rem;
-    background: transparent;
-    border: 1px solid #90caf9;
+    font-size: 1.15rem;
+    background-color: #455a64;
+    color: #ffffff;
+    border: none;
     border-radius: 4px;
     cursor: pointer;
-    color: #1976d2;
-    transition: all 0.3s;
+    font-weight: bold;
+    transition: background-color 0.3s;
+    line-height: 1;
 }
-.btn-refresh:hover { background: #e3f2fd; }
+.btn-refresh:hover { background-color: #37474f; }
 
 /* ========== Layout ========== */
 main {
@@ -189,6 +191,38 @@ main {
     min-width: 18px;
     display: inline-block;
     text-align: center;
+}
+
+/* ========== Cars Filters ========== */
+.cars-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+    justify-content: center;
+}
+
+.filter-btn {
+    padding: 8px 16px;
+    border: 1px solid #90caf9;
+    background: #ffffff;
+    color: #1976d2;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.filter-btn:hover {
+    background: #e3f2fd;
+    border-color: #1976d2;
+}
+
+.filter-btn.active {
+    background: #1976d2;
+    color: #ffffff;
+    border-color: #1976d2;
 }
 
 /* ========== Forms ========== */
@@ -521,7 +555,6 @@ h4 {
     outline: 2px solid #1976d2;
 }
 
-/* Action buttons row */
 .action-buttons {
     display: flex;
     flex-wrap: wrap;
@@ -643,7 +676,7 @@ h4 {
 .date-warning { color: #f57c00; font-weight: bold; }
 .date-expired { color: #d32f2f; font-weight: bold; }
 
-/* ========== UAE Plate - FIXED SIZE ========== */
+/* ========== UAE Plate ========== */
 .plate-wrapper {
     display: flex;
     flex-direction: column;
@@ -813,7 +846,7 @@ h4 {
     color: #1565c0;
 }
 
-/* ========== History list inside cards ========== */
+/* ========== History list ========== */
 .history-list {
     margin-top: 10px;
 }
@@ -844,7 +877,7 @@ h4 {
 .load-more-btn:hover { background: #e3f2fd; }
 .load-more-btn:focus-visible { outline: 3px solid #1976d2; outline-offset: 2px; }
 
-/* ========== Edit form inside card ========== */
+/* ========== Edit forms ========== */
 .edit-car-form,
 .inline-edit-form {
     display: grid;
@@ -861,7 +894,7 @@ h4 {
     grid-column: 1 / -1;
 }
 
-/* ========== Mini Plate (for Member Cards) ========== */
+/* ========== Mini Plate ========== */
 .mini-plates-container {
     display: flex;
     flex-wrap: wrap;
@@ -1070,28 +1103,4 @@ h4 {
         min-width: 3ch;
         max-width: 3ch;
     }
-}
-
-
-/* ========== English Digits Enforcement ========== */
-input[lang="en"][dir="ltr"],
-select[lang="en"][dir="ltr"] {
-    font-family: 'Courier New', Courier, monospace;
-    letter-spacing: 1px;
-}
-
-input[lang="en"][dir="ltr"]::placeholder {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    letter-spacing: normal;
-}
-
-/* Visual indicator for digit-only fields */
-input[pattern="\d+"],
-input[pattern="0\d{9}"],
-input[pattern="\d{4}"] {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2390caf9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 7 4 4 20 4 20 7'%3E%3C/polyline%3E%3Cline x1='9' y1='20' x2='15' y2='20'%3E%3C/line%3E%3Cline x1='12' y1='17' x2='12' y2='20'%3E%3C/line%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 10px center;
-    background-size: 16px;
-    padding-right: 36px;
 }

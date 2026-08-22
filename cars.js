@@ -34,17 +34,21 @@ export function renderCarsView() {
     }
 
     if (isAdmin(currentUserData)) {
-        container.innerHTML = `
-            <h2>Cars Management</h2>
-            <div class="divider"></div>
+        // داخل renderCarsView، استبدال قسم أزرار التصفية بـ:
+container.innerHTML = `
+    <h2>Cars Management</h2>
+    <div class="divider"></div>
 
-            <div class="cars-filters" id="cars-filters" role="group" aria-label="Car filters">
-                <button class="filter-btn active" data-filter="all" aria-pressed="true">All</button>
-                <button class="filter-btn" data-filter="expired" aria-pressed="false">Expired</button>
-                <button class="filter-btn" data-filter="warning" aria-pressed="false">Expiring Soon</button>
-                <button class="filter-btn" data-filter="assigned" aria-pressed="false">Assigned</button>
-                <button class="filter-btn" data-filter="unassigned" aria-pressed="false">Unassigned</button>
-            </div>
+    <div class="cars-filters" id="cars-filters" role="group" aria-label="Car filters">
+        <button class="filter-btn active" data-filter="all" aria-pressed="true">All</button>
+        <button class="filter-btn" data-filter="expired" aria-pressed="false">Expired</button>
+        <button class="filter-btn" data-filter="warning" aria-pressed="false">Expiring Soon</button>
+        <button class="filter-btn" data-filter="assigned" aria-pressed="false">Assigned</button>
+        <button class="filter-btn" data-filter="unassigned" aria-pressed="false">Unassigned</button>
+    </div>
+
+    <!-- باقي الكود كما هو -->
+`;
 
             <button class="btn-add-toggle" id="toggle-add-car" aria-expanded="false" aria-controls="add-car-form-wrapper">+ Add New Car</button>
             <div id="add-car-form-wrapper" class="hidden-form" style="margin-bottom: 30px;">

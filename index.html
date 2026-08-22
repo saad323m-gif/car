@@ -40,19 +40,19 @@
 
         <div id="dashboard-view" class="view-container" style="display: none;" role="region" aria-label="Dashboard">
             <nav class="tabs-nav" role="tablist" aria-label="Dashboard sections">
-                <button class="tab-btn active" data-tab="cars" role="tab" aria-selected="true" aria-controls="dashboard-container" id="tab-cars">Cars</button>
-                <button class="tab-btn" data-tab="my-activity" id="my-activity-tab" style="display: none;" role="tab" aria-selected="false" aria-controls="dashboard-container" id="tab-my-activity">My Activity</button>
-                <button class="tab-btn" data-tab="members" role="tab" aria-selected="false" aria-controls="dashboard-container" id="tab-members">Members</button>
-                <button class="tab-btn" data-tab="requests" role="tab" aria-selected="false" aria-controls="dashboard-container" id="tab-requests">
+                <button class="tab-btn active" data-tab="cars" role="tab" aria-selected="true" aria-controls="dashboard-container">Cars</button>
+                <button class="tab-btn" data-tab="my-activity" id="my-activity-tab" style="display: none;" role="tab" aria-selected="false">My Activity</button>
+                <button class="tab-btn" data-tab="members" role="tab" aria-selected="false">Members</button>
+                <button class="tab-btn" data-tab="requests" role="tab" aria-selected="false">
                     Requests
                     <span id="requests-badge" class="tab-badge" style="display: none;" aria-label="pending requests">0</span>
                 </button>
-                <button class="tab-btn" data-tab="logs" role="tab" aria-selected="false" aria-controls="dashboard-container" id="tab-logs">Logs</button>
-                <button class="tab-btn" data-tab="search" role="tab" aria-selected="false" aria-controls="dashboard-container" id="tab-search">Search</button>
-                <button class="tab-btn" data-tab="stats" role="tab" aria-selected="false" aria-controls="dashboard-container" id="tab-stats">Stats</button>
+                <button class="tab-btn" data-tab="logs" role="tab" aria-selected="false">Logs</button>
+                <button class="tab-btn" data-tab="search" role="tab" aria-selected="false">Search</button>
+                <button class="tab-btn" data-tab="stats" role="tab" aria-selected="false">Stats</button>
             </nav>
 
-            <div id="dashboard-container" class="dashboard-box" role="tabpanel" aria-labelledby="tab-cars">
+            <div id="dashboard-container" class="dashboard-box" role="tabpanel">
                 <p class="loading-text">Loading dashboard...</p>
             </div>
             <div id="dashboard-message-box" class="message-box" role="status" aria-live="polite"></div>
