@@ -13,7 +13,8 @@ import {
 import { logAction } from "./logs.js";
 import {
     showMessage, handleFirebaseError, isAdmin, isActiveUser,
-    renderAccessDenied, formatDateTime, formatPeriod
+    renderAccessDenied, formatDateTime, formatPeriod,
+    hashPin, verifyPin, emptyStateHtml, loadingHtml
 } from "./utils.js";
 
 let currentUserData = null;
@@ -115,7 +116,7 @@ async function handleAddUser(e) {
     const role = roleEl.value;
 
     if (!/^0\d{9}$/.test(phone)) {
-        showMessage('Error: Phone must start with 0 and be exactly 10 digits.', 'error', 'dashboard');
+        showMessage('Phone number must start with 0 and contain exactly 10 digits (e.g. 0501234567).', 'error', 'dashboard');
         return;
     }
 
@@ -123,7 +124,7 @@ async function handleAddUser(e) {
         const q = query(collection(db, 'users'), where('username', '==', username));
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
-            showMessage('Error: Username already exists.', 'error', 'dashboard');
+            showMessage('This username is already taken. Please choose a different one.', 'error', 'dashboard');
             return;
         }
 
@@ -152,7 +153,7 @@ async function handleAddUser(e) {
             text: `Created new ${role}: ${username}`
         });
 
-        showMessage('Success: Member added successfully.', 'success', 'dashboard');
+        showMessage(`Member “${username}” has been added successfully as ${role}.`, 'success', 'dashboard');
         const addForm = document.getElementById('add-user-form');
         if (addForm) addForm.reset();
         const addWrapper = document.getElementById('add-member-form-wrapper');
@@ -426,7 +427,14 @@ async function handleMemberAction(uid, action, username) {
             return;
         }
 
-        showMessage(`Action completed for ${username}.`, 'success', 'dashboard');
+        const actionLabels = {
+            promote: 'promoted to admin',
+            demote: 'demoted to user',
+            suspend: 'suspended',
+            activate: 'activated'
+        };
+        const label = actionLabels[action] || 'updated';
+        showMessage(`User “${username}” has been ${label} successfully.`, 'success', 'dashboard');
         lastVisibleUser = null;
         fetchUsersForAdmin(false);
     } catch (error) {
@@ -665,26 +673,28 @@ async function handleEditProtectedProfile(e) {
     const newPin = newPinEl ? newPinEl.value.trim() : '';
     const confirmPin = confirmPinEl ? confirmPinEl.value.trim() : '';
 
-    if (pin !== currentUserData.securityPin) {
-        showMessage('Security Error: Invalid Security PIN.', 'error', 'dashboard');
+    // Verify PIN against stored hash (supports legacy plain-text for migration)
+    const pinValid = await verifyPin(pin, currentUserData.securityPin);
+    if (!pinValid) {
+        showMessage('Security error: The Security PIN you entered is incorrect.', 'error', 'dashboard');
         return;
     }
     if (!/^0\d{9}$/.test(newPhone)) {
-        showMessage('Error: Phone must start with 0 and be 10 digits.', 'error', 'dashboard');
+        showMessage('Phone number must start with 0 and contain exactly 10 digits.', 'error', 'dashboard');
         return;
     }
 
     if (newPin || confirmPin) {
         if (!/^\d{4}$/.test(newPin)) {
-            showMessage('Error: New Security PIN must be exactly 4 digits.', 'error', 'dashboard');
+            showMessage('New Security PIN must be exactly 4 numeric digits.', 'error', 'dashboard');
             return;
         }
         if (newPin !== confirmPin) {
-            showMessage('Error: New PIN and confirmation do not match.', 'error', 'dashboard');
+            showMessage('New PIN and confirmation do not match. Please re-enter them carefully.', 'error', 'dashboard');
             return;
         }
         if (newPin === pin) {
-            showMessage('Error: New PIN must be different from the current PIN.', 'error', 'dashboard');
+            showMessage('New PIN must be different from your current PIN.', 'error', 'dashboard');
             return;
         }
     }
@@ -700,7 +710,7 @@ async function handleEditProtectedProfile(e) {
             const q = query(collection(db, 'users'), where('username', '==', newUsername));
             const snapshot = await getDocs(q);
             if (!snapshot.empty) {
-                showMessage('Error: Username already exists.', 'error', 'dashboard');
+                showMessage('This username is already taken. Please choose another.', 'error', 'dashboard');
                 return;
             }
         }
@@ -710,7 +720,8 @@ async function handleEditProtectedProfile(e) {
             phone: newPhone
         };
         if (newPin) {
-            updates.securityPin = newPin;
+            // Always store the new PIN as a hash
+            updates.securityPin = await hashPin(newPin);
         }
 
         await updateDoc(doc(db, 'users', currentUserData.uid), updates);
@@ -723,7 +734,7 @@ async function handleEditProtectedProfile(e) {
                 : 'Super Admin updated own profile'
         });
 
-        showMessage('Profile updated. Reloading...', 'success', 'dashboard');
+        showMessage('Profile updated successfully. The page will reload in a moment...', 'success', 'dashboard');
         setTimeout(() => window.location.reload(), 2000);
     } catch (error) {
         handleFirebaseError(error, 'dashboard');

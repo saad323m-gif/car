@@ -185,7 +185,7 @@ async function handleApprove(reqId, reqData) {
                 text: `Approved unlink of ${label} for ${reqData.userName}`
             });
 
-            showMessage('Unlink approved successfully.', 'success', 'dashboard');
+            showMessage('Unlink request approved. The car is now unassigned.', 'success', 'dashboard');
             fetchRequests();
             updateRequestsBadge();
 
@@ -223,7 +223,7 @@ async function handleApprove(reqId, reqData) {
                     text: `Approved link of ${label} for ${reqData.userName}`
                 });
 
-                showMessage('Link approved successfully.', 'success', 'dashboard');
+                showMessage('Link request approved. The car has been assigned to the user.', 'success', 'dashboard');
                 fetchRequests();
                 updateRequestsBadge();
             } else {
@@ -374,7 +374,7 @@ async function handleCompleteAndAssign(reqId, reqData) {
             text: `Approved link of ${label} for ${reqData.userName}`
         });
 
-        showMessage('Car created and assigned successfully.', 'success', 'dashboard');
+        showMessage('New car created and assigned to the requester successfully.', 'success', 'dashboard');
         fetchRequests();
         updateRequestsBadge();
     } catch (error) {
@@ -398,7 +398,7 @@ async function handleReject(reqId, reqData) {
             text: `Rejected ${reqData.type} request from ${reqData.userName}`
         });
 
-        showMessage('Request rejected.', 'warning', 'dashboard');
+        showMessage('The request has been rejected and the requester will no longer see it as pending.', 'warning', 'dashboard');
         fetchRequests();
         updateRequestsBadge();
     } catch (error) {
@@ -433,11 +433,24 @@ export async function createLinkRequest(e) {
             const label = formatCarLabel(carData);
 
             if (carData.currentUserId === currentUserData.uid) {
-                showMessage('This car is already assigned to you.', 'warning', 'dashboard');
+                showMessage('This car is already assigned to you. No action needed.', 'warning', 'dashboard');
                 return;
             }
 
+            // Intentional feature: taking a car makes the requester fully responsible for it.
             if (carData.currentUserId) {
+                const previousUser = carData.currentUserName || 'another user';
+                const confirmed = confirm(
+                    `WARNING – Responsibility Transfer\n\n` +
+                    `This car (${label}) is currently assigned to “${previousUser}”.\n\n` +
+                    `By continuing you will take over the car and become fully responsible for all related obligations (license, insurance, usage, etc.).\n\n` +
+                    `Do you want to proceed?`
+                );
+                if (!confirmed) {
+                    showMessage('Link cancelled. The car remains with the current assignee.', 'warning', 'dashboard');
+                    return;
+                }
+
                 const prevAssignQ = query(
                     collection(db, 'cars', carDoc.id, 'assignments'),
                     where('userId', '==', carData.currentUserId),
@@ -478,7 +491,11 @@ export async function createLinkRequest(e) {
                 text: `Auto-linked ${label} to ${currentUserData.username}`
             });
 
-            showMessage(`Success: Car ${label} has been linked to you automatically.`, 'success', 'dashboard');
+            showMessage(
+                `Car ${label} has been linked to you. You are now responsible for this vehicle.`,
+                'success',
+                'dashboard'
+            );
 
             document.getElementById('request-car-form').reset();
             document.getElementById('request-car-form-wrapper').classList.add('hidden-form');
@@ -503,14 +520,18 @@ export async function createLinkRequest(e) {
                 text: `Requested link for plate ${plateNum} ${plateCode} (${emirate})`
             });
 
-            showMessage('Request sent to admin successfully. The car was not found in the system.', 'success', 'dashboard');
+            showMessage(
+                'Link request sent to admin. The plate was not found in the system, so an administrator must complete the car details.',
+                'success',
+                'dashboard'
+            );
 
             document.getElementById('request-car-form').reset();
             document.getElementById('request-car-form-wrapper').classList.add('hidden-form');
             updateRequestsBadge();
         }
     } catch (error) {
-        showMessage(`Error: ${error.message}`, 'error', 'dashboard');
+        showMessage(`Unable to process the request: ${error.message}`, 'error', 'dashboard');
     } finally {
         btn.disabled = false;
         btn.textContent = 'Send Request';
@@ -519,7 +540,7 @@ export async function createLinkRequest(e) {
 
 export async function createUnlinkRequest(carId, carData) {
     if (!isActiveUser(currentUserData)) return;
-    if (!confirm('Send request to admin to unlink this car?')) return;
+    if (!confirm('Send an unlink request to the administrator for this car?\n\nThe car will remain assigned to you until an admin approves the request.')) return;
 
     try {
         const label = formatCarLabel(carData);

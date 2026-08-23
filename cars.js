@@ -287,7 +287,7 @@ async function handleAddCar(e) {
             text: `Created car ${formatCarLabel({ carId, plateNumber: plateNum, plateCode, emirate })}`
         });
 
-        showMessage('Success: Car added successfully.', 'success', 'dashboard');
+        showMessage('Car added successfully and is now available in the list.', 'success', 'dashboard');
         const addForm = document.getElementById('add-car-form');
         if (addForm) addForm.reset();
         const addWrapper = document.getElementById('add-car-form-wrapper');
@@ -295,7 +295,7 @@ async function handleAddCar(e) {
         lastVisibleCar = null;
         fetchCars(false);
     } catch (error) {
-        showMessage(`Error: ${error.message}`, 'error', 'dashboard');
+        showMessage(`Could not add the car: ${error.message}`, 'error', 'dashboard');
     } finally {
         if (submitBtn) {
             submitBtn.disabled = false;
@@ -711,11 +711,11 @@ async function handleSaveEditCar(carId, originalData) {
             text: `Edited car ${label}`
         });
 
-        showMessage('Success: Car updated successfully.', 'success', 'dashboard');
+        showMessage('Car details updated successfully.', 'success', 'dashboard');
         lastVisibleCar = null;
         fetchCars(false);
     } catch (error) {
-        showMessage(`Error: ${error.message}`, 'error', 'dashboard');
+        showMessage(`Could not update the car: ${error.message}`, 'error', 'dashboard');
     }
 }
 
@@ -1044,11 +1044,11 @@ async function renderAssignUserUI(carId) {
                     text: `Assigned ${label} to ${userName}`
                 });
 
-                showMessage('User assigned successfully.', 'success', 'dashboard');
+                showMessage(`User has been assigned to the car successfully.`, 'success', 'dashboard');
                 lastVisibleCar = null;
                 fetchCars(false);
             } catch (err) {
-                showMessage(`Error: ${err.message}`, 'error', 'dashboard');
+                showMessage(`Could not assign user: ${err.message}`, 'error', 'dashboard');
             }
         });
     } catch (err) {
@@ -1059,7 +1059,7 @@ async function renderAssignUserUI(carId) {
 async function handleUnassignUser(carId, data) {
     if (!data.currentUserId || !isAdmin(currentUserData)) return;
 
-    if (!confirm(`Are you sure you want to unassign "${data.currentUserName}" from this car?`)) {
+    if (!confirm(`Unassign “${data.currentUserName}” from this car?\n\nThe assignment period will be closed and the car will become available.`)) {
         return;
     }
 
@@ -1091,10 +1091,10 @@ async function handleUnassignUser(carId, data) {
             text: `Unassigned ${label} from ${data.currentUserName}`
         });
 
-        showMessage('User unassigned successfully.', 'success', 'dashboard');
+        showMessage(`“${data.currentUserName}” has been unassigned from the car.`, 'success', 'dashboard');
         lastVisibleCar = null;
         fetchCars(false);
     } catch (err) {
-        showMessage(`Error: ${err.message}`, 'error', 'dashboard');
+        showMessage(`Could not unassign user: ${err.message}`, 'error', 'dashboard');
     }
 }

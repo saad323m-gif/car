@@ -1,15 +1,19 @@
 /**
  * Shared Utilities - Car Management System
  * English only | Latin digits only | Production-ready
+ * Improved: hashed PIN support, richer messages, shared helpers
  */
 
 import { auth } from "./firebase.js";
 
 let messageTimeout = null;
 
+/* ------------------------------------------------------------------ */
+/*  Messaging                                                         */
+/* ------------------------------------------------------------------ */
+
 /**
- * Display message in the appropriate message box
- * Auto-dismiss after 5 seconds
+ * Display a message (auto-dismiss after 6 seconds for longer texts)
  */
 export function showMessage(text, type = 'error', target = 'auth') {
     const boxId = target === 'dashboard' ? 'dashboard-message-box' : 'message-box';
@@ -25,6 +29,7 @@ export function showMessage(text, type = 'error', target = 'auth') {
     box.className = `message-box ${type}`;
     box.style.opacity = '1';
 
+    const duration = text.length > 80 ? 7000 : 5500;
     messageTimeout = setTimeout(() => {
         box.classList.add('fade-out');
         setTimeout(() => {
@@ -32,11 +37,11 @@ export function showMessage(text, type = 'error', target = 'auth') {
             box.className = 'message-box';
             box.style.opacity = '1';
         }, 400);
-    }, 5000);
+    }, duration);
 }
 
 /**
- * Clear any visible message immediately (used on tab change)
+ * Clear any visible message immediately
  */
 export function clearMessage(target = 'dashboard') {
     const boxId = target === 'dashboard' ? 'dashboard-message-box' : 'message-box';
@@ -53,46 +58,92 @@ export function clearMessage(target = 'dashboard') {
 }
 
 /**
- * Centralized Firebase / general error handler
+ * Centralized Firebase / general error handler with clearer messages
  */
 export function handleFirebaseError(error, target = 'auth') {
     let message = '';
     switch (error.code) {
         case 'auth/invalid-email':
-            message = 'Error: The email address is badly formatted.';
+            message = 'Invalid email format. Please check the address and try again.';
             break;
         case 'auth/user-disabled':
-            message = 'Error: This user has been disabled.';
+            message = 'This account has been disabled. Contact an administrator.';
             break;
         case 'auth/user-not-found':
-            message = 'Error: No user found with this email.';
+            message = 'No account found with this email address.';
             break;
         case 'auth/wrong-password':
-            message = 'Error: Incorrect password. Please try again.';
+            message = 'Incorrect password. Please try again.';
+            break;
+        case 'auth/invalid-credential':
+            message = 'Invalid email or password. Please check your credentials.';
             break;
         case 'auth/email-already-in-use':
-            message = 'Error: The email is already in use.';
+            message = 'This email is already registered to another account.';
             break;
         case 'auth/weak-password':
-            message = 'Error: Password should be at least 6 characters.';
+            message = 'Password is too weak. Use at least 6 characters.';
             break;
         case 'auth/too-many-requests':
-            message = 'Warning: Too many failed login attempts. Please try again later.';
+            message = 'Too many failed attempts. Please wait a few minutes and try again.';
             break;
         case 'auth/network-request-failed':
-            message = 'Error: Network error. Check your connection.';
+            message = 'Network error. Check your internet connection and try again.';
             break;
         case 'auth/requires-recent-login':
-            message = 'Error: Please logout and login again to perform this action.';
+            message = 'For security, please log out and log in again before performing this action.';
             break;
         case 'permission-denied':
-            message = 'Security Error: You do not have permission to perform this action.';
+            message = 'Permission denied. You do not have the required access for this action.';
+            break;
+        case 'unavailable':
+            message = 'Service temporarily unavailable. Please try again shortly.';
             break;
         default:
-            message = `System Error: ${error.message || 'Unknown error occurred.'}`;
+            message = error.message
+                ? `System error: ${error.message}`
+                : 'An unexpected error occurred. Please try again.';
     }
     showMessage(message, 'error', target);
 }
+
+/* ------------------------------------------------------------------ */
+/*  Security PIN hashing (SHA-256 via Web Crypto)                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Hash a 4-digit PIN using SHA-256.
+ * Returns a 64-character hex string.
+ */
+export async function hashPin(pin) {
+    if (!pin || typeof pin !== 'string') return '';
+    const encoder = new TextEncoder();
+    const data = encoder.encode(String(pin).trim());
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Verify a plain PIN against a stored value.
+ * Supports both legacy plain-text (length 4) and hashed (length 64) values
+ * so existing Super Admin accounts continue to work.
+ */
+export async function verifyPin(plainPin, storedValue) {
+    if (!plainPin || !storedValue) return false;
+    const stored = String(storedValue).trim();
+    // Legacy plain-text PIN
+    if (stored.length === 4 && /^\d{4}$/.test(stored)) {
+        return plainPin === stored;
+    }
+    // Hashed PIN
+    const hashed = await hashPin(plainPin);
+    return hashed === stored;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Date / Label helpers                                              */
+/* ------------------------------------------------------------------ */
 
 export function formatDateTime(ts) {
     if (!ts) return 'N/A';
@@ -122,11 +173,8 @@ export function formatDateOnly(ts) {
 
 export function formatPeriod(start, end) {
     const startStr = formatDateTime(start);
-    if (!end) {
-        return `From ${startStr} to Now`;
-    }
-    const endStr = formatDateTime(end);
-    return `From ${startStr} to ${endStr}`;
+    if (!end) return `From ${startStr} to Now`;
+    return `From ${startStr} to ${formatDateTime(end)}`;
 }
 
 export function formatCarLabel(carData) {
@@ -151,7 +199,9 @@ export function renderAccessDenied() {
     if (container) {
         container.innerHTML = `
             <h2>Access Denied</h2>
-            <p style="text-align:center; color:#666;">You do not have permission to view this page.</p>
+            <p style="text-align:center; color:#666; margin-top:12px;">
+                You do not have permission to view this page.
+            </p>
         `;
     }
 }
@@ -179,4 +229,29 @@ export function toDateInputValue(ts) {
     } catch {
         return '';
     }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Shared UI helpers (reduce duplication)                            */
+/* ------------------------------------------------------------------ */
+
+/** Standard emirate options HTML (used in multiple forms) */
+export function emirateOptionsHtml(selected = '') {
+    const emirates = [
+        'Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman',
+        'Fujairah', 'Umm Al Quwain', 'Ras Al Khaimah', 'Other'
+    ];
+    return emirates.map(e =>
+        `<option value="${e}" ${selected === e ? 'selected' : ''}>${e}</option>`
+    ).join('');
+}
+
+/** Empty-state helper */
+export function emptyStateHtml(text) {
+    return `<p class="empty-state">${text}</p>`;
+}
+
+/** Loading text helper */
+export function loadingHtml(text = 'Loading...') {
+    return `<p class="loading-text">${text}</p>`;
 }

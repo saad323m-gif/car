@@ -20,7 +20,7 @@ import { renderCarsView, setCarsCurrentUser } from "./cars.js";
 import { renderRequestsView, setRequestsCurrentUser } from "./requests.js";
 import { renderSearchView, setSearchCurrentUser } from "./search.js";
 import { renderStatsView, setStatsCurrentUser } from "./stats.js";
-import { showMessage, handleFirebaseError, clearMessage } from "./utils.js";
+import { showMessage, handleFirebaseError, clearMessage, hashPin } from "./utils.js";
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000;
@@ -326,11 +326,11 @@ async function handleSetup(e) {
     const securityPin = document.getElementById('securityPin').value;
 
     if (!/^0\d{9}$/.test(phone)) {
-        showMessage('Error: Phone must start with 0 and be exactly 10 digits.', 'error');
+        showMessage('Phone number must start with 0 and contain exactly 10 digits (e.g. 0501234567).', 'error');
         return;
     }
     if (!/^\d{4}$/.test(securityPin)) {
-        showMessage('Error: Security PIN must be exactly 4 digits.', 'error');
+        showMessage('Security PIN must be exactly 4 numeric digits.', 'error');
         return;
     }
 
@@ -338,12 +338,15 @@ async function handleSetup(e) {
         const q = query(collection(db, 'users'), where('username', '==', username));
         const usernameSnapshot = await getDocs(q);
         if (!usernameSnapshot.empty) {
-            showMessage('Error: Username already exists.', 'error');
+            showMessage('This username is already taken. Please choose another.', 'error');
             return;
         }
 
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const uid = userCredential.user.uid;
+
+        // Store PIN as SHA-256 hash (never plain text)
+        const hashedPin = await hashPin(securityPin);
 
         await setDoc(doc(db, 'users', uid), {
             username,
@@ -353,7 +356,7 @@ async function handleSetup(e) {
             status: 'active',
             notes: '',
             isProtected: true,
-            securityPin,
+            securityPin: hashedPin,
             rememberSession: false
         });
 
@@ -361,7 +364,7 @@ async function handleSetup(e) {
             text: 'System initialized with Super Admin'
         });
 
-        showMessage('Success: Super Admin created successfully.', 'success');
+        showMessage('Super Admin account created successfully. You can now log in.', 'success');
     } catch (error) {
         handleFirebaseError(error);
     }
@@ -409,7 +412,7 @@ async function handleLogin(e) {
         const lockStatus = await isLoginLocked(email);
         if (lockStatus.locked) {
             showMessage(
-                `Too many failed attempts. Try again after ${formatRemainingLock(lockStatus.remainingMs)}.`,
+                `Account temporarily locked due to too many failed attempts. Please try again after ${formatRemainingLock(lockStatus.remainingMs)}.`,
                 'error'
             );
             await logAction({ username: email }, 'LOGIN_FAILED', {
@@ -435,7 +438,7 @@ async function handleLogin(e) {
             await logAction({ username: email }, 'LOGIN_FAILED', {
                 text: `Suspended account attempt: ${email}`
             });
-            showMessage('Access Denied: Your account is suspended.', 'error');
+            showMessage('Access denied: Your account has been suspended. Please contact an administrator.', 'error');
             return;
         }
 
@@ -455,13 +458,13 @@ async function handleLogin(e) {
         });
 
         if (failInfo && failInfo.locked) {
-            showMessage(`Too many failed attempts. Account locked for 15 minutes.`, 'error');
+            showMessage('Too many failed login attempts. Your account is locked for 15 minutes.', 'error');
         } else if (failInfo && failInfo.failCount) {
             const left = MAX_LOGIN_ATTEMPTS - failInfo.failCount;
             handleFirebaseError(error);
             if (left > 0) {
                 showMessage(
-                    `Login failed. ${left} attempt${left === 1 ? '' : 's'} remaining before lock.`,
+                    `Login failed. You have ${left} attempt${left === 1 ? '' : 's'} remaining before the account is temporarily locked.`,
                     'warning'
                 );
             }
@@ -552,15 +555,15 @@ async function handleChangePassword(e) {
     const confirmPassword = confirmEl.value;
 
     if (newPassword.length < 6) {
-        showMessage('Error: New password must be at least 6 characters.', 'error', 'dashboard');
+        showMessage('New password must be at least 6 characters long.', 'error', 'dashboard');
         return;
     }
     if (newPassword !== confirmPassword) {
-        showMessage('Error: New password and confirmation do not match.', 'error', 'dashboard');
+        showMessage('New password and confirmation do not match. Please re-enter them carefully.', 'error', 'dashboard');
         return;
     }
     if (currentPassword === newPassword) {
-        showMessage('Error: New password must be different from the current password.', 'error', 'dashboard');
+        showMessage('New password must be different from your current password.', 'error', 'dashboard');
         return;
     }
 
@@ -580,7 +583,7 @@ async function handleChangePassword(e) {
             text: `Password changed by ${userData.username}`
         });
 
-        showMessage('Password updated successfully.', 'success', 'dashboard');
+        showMessage('Password updated successfully. You can continue using the system with the new password.', 'success', 'dashboard');
         currentEl.value = '';
         newEl.value = '';
         confirmEl.value = '';
