@@ -1065,46 +1065,61 @@ h4 {
 }
 
 .car-card-header .plate-container {
-    display: inline-flex;
+    display: grid;
+    grid-template-columns: minmax(62px, 0.78fr) minmax(0, 1.28fr) minmax(46px, 0.58fr);
     align-items: center;
-    justify-content: center;
-    gap: clamp(14px, 5vw, 28px);
-    width: min(100%, 340px);
+    gap: clamp(8px, 2.5vw, 18px);
+    width: min(100%, 360px);
     min-width: 0;
-    max-width: 340px;
+    max-width: 360px;
     height: 74px;
     margin: 0 auto;
-    padding: 10px clamp(16px, 4vw, 28px);
+    padding: 10px clamp(14px, 4vw, 24px);
     border: 2px solid #d9262e;
     border-radius: 10px;
     box-shadow: 0 3px 10px rgba(23, 43, 77, 0.14);
 }
 
 .car-card-header .plate-number {
-    flex: 0 1 auto;
-    width: auto;
+    width: 100%;
     min-width: 0;
     max-width: none;
-    font-size: clamp(1.45rem, 7vw, 2rem);
-    letter-spacing: 0.13em;
+    font-size: clamp(1.4rem, 6.3vw, 2rem);
+    letter-spacing: 0.11em;
     overflow: visible;
+    text-align: center;
     white-space: nowrap;
 }
 
 .car-card-header .plate-code {
-    flex: 0 0 auto;
-    width: auto;
+    justify-self: end;
+    width: max-content;
     min-width: 0;
     max-width: none;
-    padding: 5px 10px;
-    font-size: clamp(1.1rem, 5vw, 1.5rem);
+    padding: 5px 9px;
+    font-size: clamp(1.05rem, 4.5vw, 1.5rem);
     overflow: visible;
     white-space: nowrap;
 }
 
-.car-card-header .plate-top-bar,
-.car-card-header .plate-emirate {
+.car-card-header .plate-top-bar {
     display: none;
+}
+
+.car-card-header .plate-emirate {
+    display: block;
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+    color: #1c5c98;
+    font-size: clamp(0.48rem, 1.9vw, 0.7rem);
+    font-weight: 800;
+    letter-spacing: 0.035em;
+    line-height: 1.15;
+    overflow: visible;
+    text-align: center;
+    text-transform: uppercase;
+    white-space: nowrap;
 }
 
 .car-card-actions {
@@ -1172,9 +1187,25 @@ h4 {
     }
 
     .car-card-header .plate-container {
+        grid-template-columns: minmax(55px, 0.8fr) minmax(0, 1.2fr) minmax(42px, 0.55fr);
         width: min(100%, 300px);
         height: 68px;
-        gap: 16px;
+        gap: 8px;
+        padding: 8px 12px;
+    }
+
+    .car-card-header .plate-emirate {
+        font-size: 0.48rem;
+    }
+
+    .car-card-header .plate-number {
+        font-size: clamp(1.25rem, 6.5vw, 1.65rem);
+        letter-spacing: 0.08em;
+    }
+
+    .car-card-header .plate-code {
+        padding: 4px 7px;
+        font-size: clamp(0.95rem, 4.6vw, 1.2rem);
     }
 
     .car-summary-id {
