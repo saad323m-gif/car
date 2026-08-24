@@ -11,7 +11,7 @@ import {
     query, where, limit, startAfter, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { logAction } from "./logs.js";
-import { renderUserViolations } from "./violations.js";
+import { renderUserViolations, openViolationEntry } from "./violations.js";
 import {
     showMessage, handleFirebaseError, isAdmin, isActiveUser,
     renderAccessDenied, formatDateTime, formatPeriod,
@@ -240,6 +240,7 @@ function renderUserCard(uid, data) {
             <div class="action-buttons" id="member-actions-${uid}">
                 <button type="button" class="action-btn action-btn-edit" data-action="edit">✎ Edit</button>
                 <button type="button" class="action-btn action-btn-activity" data-action="activity">📋 Activity</button>
+                <button type="button" class="action-btn action-btn-add-violation" data-action="add-violation">Add Violation</button>
                 <button type="button" class="action-btn action-btn-violations" data-action="violations">Violations</button>
                 ${data.role === 'user'
                     ? '<button type="button" class="action-btn action-btn-promote" data-action="promote">↑ Promote</button>'
@@ -255,6 +256,7 @@ function renderUserCard(uid, data) {
         actionsHtml = `
             <div class="action-buttons" id="member-actions-${uid}">
                 <button type="button" class="action-btn action-btn-activity" data-action="activity">📋 Activity</button>
+                <button type="button" class="action-btn action-btn-add-violation" data-action="add-violation">Add Violation</button>
                 <button type="button" class="action-btn action-btn-violations" data-action="violations">Violations</button>
             </div>
             <div id="activity-area-${uid}" style="margin-top: 15px; display: none;"></div>
@@ -408,6 +410,11 @@ async function handleMemberAction(uid, action, username) {
 
     if (action === 'violations') {
         await renderUserViolations(uid, `member-violations-area-${uid}`, `Violations for ${username}`);
+        return;
+    }
+
+    if (action === 'add-violation') {
+        openViolationEntry({ sourceName: username });
         return;
     }
 

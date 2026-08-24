@@ -1532,3 +1532,113 @@ h4 {
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.04em;
 }
+
+.action-btn-add-violation {
+    background: #7b1fa2;
+}
+.action-btn-add-violation:hover {
+    background: #5b1677;
+}
+
+.violation-context-message {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border: 1px solid #bbdefb;
+    border-radius: 6px;
+    background: #f4f9ff;
+    color: #175c95;
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.violation-records {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.violation-card {
+    overflow: hidden;
+    border-color: #bbdefb;
+    background: #ffffff;
+}
+
+.violation-card-summary {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(88px, auto) minmax(120px, 1.4fr) minmax(160px, 1.25fr) auto auto 18px;
+    gap: 10px;
+    align-items: center;
+    padding: 14px 16px;
+    border: 0;
+    background: #f8fbff;
+    color: #263238;
+    cursor: pointer;
+    text-align: left;
+}
+
+.violation-card-summary:hover,
+.violation-card.open .violation-card-summary {
+    background: #edf6ff;
+}
+
+.violation-card-summary:focus-visible {
+    outline: 3px solid rgba(25, 118, 210, 0.35);
+    outline-offset: -3px;
+}
+
+.violation-summary-id {
+    color: #1565c0;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 0.92rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.violation-summary-type,
+.violation-summary-time {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.violation-summary-time {
+    color: #607d8b;
+    font-variant-numeric: tabular-nums;
+}
+
+.violation-card-chevron {
+    color: #1976d2;
+    font-size: 1.35rem;
+    font-weight: 700;
+    transition: transform 0.2s ease;
+}
+
+.violation-card.open .violation-card-chevron {
+    transform: rotate(180deg);
+}
+
+.violation-card-details {
+    padding: 16px;
+    border-top: 1px solid #dbeeff;
+    background: #ffffff;
+}
+
+@media (max-width: 760px) {
+    .violation-card-summary {
+        grid-template-columns: 1fr auto auto 18px;
+        gap: 8px;
+        padding: 12px;
+    }
+
+    .violation-summary-type,
+    .violation-summary-time {
+        grid-column: 1 / -1;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+    }
+}

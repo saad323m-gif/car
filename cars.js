@@ -10,7 +10,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { logAction } from "./logs.js";
 import { createLinkRequest, createUnlinkRequest } from "./requests.js";
-import { renderCarViolations } from "./violations.js";
+import { renderCarViolations, openViolationEntry } from "./violations.js";
 import {
     showMessage, handleFirebaseError, formatDateTime, formatDateOnly,
     formatPeriod, formatCarLabel, isAdmin, isActiveUser, renderAccessDenied,
@@ -440,6 +440,7 @@ function renderCarCard(id, data, isUserView = false) {
                     : '<button type="button" class="action-btn action-btn-assign" data-action="assign">Assign</button>'}
                 <button type="button" class="action-btn action-btn-print" data-action="print">Print</button>
                 <button type="button" class="action-btn action-btn-history" data-action="history">History</button>
+                <button type="button" class="action-btn action-btn-add-violation" data-action="add-violation">Add Violation</button>
                 <button type="button" class="action-btn action-btn-violations" data-action="violations">Violations</button>
             </div>
             <div id="assign-area-${id}" class="car-action-area"></div>
@@ -563,6 +564,8 @@ async function handleCarAction(id, action, data) {
         await renderCarHistory(id, data);
     } else if (action === 'violations') {
         await renderCarViolations(id, data);
+    } else if (action === 'add-violation') {
+        openViolationEntry({ carData: data });
     } else if (action === 'assign') {
         await renderAssignUserUI(id);
     } else if (action === 'unassign') {
