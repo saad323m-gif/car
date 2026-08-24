@@ -1,0 +1,56 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "violations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "settlementStatus", "order": "ASCENDING" },
+        { "fieldPath": "violationAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "violations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "matchStatus", "order": "ASCENDING" },
+        { "fieldPath": "violationAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "violations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "carId", "order": "ASCENDING" },
+        { "fieldPath": "violationAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "violations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "violationAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "violations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "matchStatus", "order": "ASCENDING" },
+        { "fieldPath": "violationAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "violations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "matchStatus", "order": "ASCENDING" },
+        { "fieldPath": "carId", "order": "ASCENDING" },
+        { "fieldPath": "violationAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

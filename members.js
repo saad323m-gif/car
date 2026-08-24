@@ -15,7 +15,8 @@ import { renderUserViolations, openViolationEntry } from "./violations.js";
 import {
     showMessage, handleFirebaseError, isAdmin, isActiveUser,
     renderAccessDenied, formatDateTime, formatPeriod,
-    emptyStateHtml, loadingHtml, escapeHtml, escapeAttribute, sanitizePlainText
+    emptyStateHtml, loadingHtml, escapeHtml, escapeAttribute, sanitizePlainText,
+    hashPin, verifyPin
 } from "./utils.js";
 
 let currentUserData = null;
@@ -637,12 +638,17 @@ function renderEditProfileForm() {
 
     container.innerHTML = `
         <h2>Edit Protected Profile</h2>
-        <p style="color: #666; margin-bottom: 20px; text-align:center;">Confirm your current password to update this protected profile.</p>
+        <p style="color: #666; margin-bottom: 20px; text-align:center;">Confirm your current password${currentUserData.securityPin ? ' and Security PIN' : ''} to update this protected profile.</p>
         <form id="edit-profile-form" style="max-width: 500px; margin: 0 auto;">
             <div class="form-group">
                 <label>Current Password</label>
                 <input type="password" id="verify-password" required autocomplete="current-password">
             </div>
+            ${currentUserData.securityPin ? `
+            <div class="form-group">
+                <label>Current Security PIN (4 digits)</label>
+                <input type="password" id="verify-pin" required pattern="\\d{4}" inputmode="numeric" maxlength="4" autocomplete="off">
+            </div>` : ''}
             <div class="divider"></div>
             <div class="form-group">
                 <label>New Username</label>
@@ -651,6 +657,16 @@ function renderEditProfileForm() {
             <div class="form-group">
                 <label>New Phone</label>
                 <input type="text" id="edit-phone" value="${escapeAttribute(currentUserData.phone)}" required pattern="0\\d{9}">
+            </div>
+            <div class="divider"></div>
+            <p style="color:#666; font-size:0.9rem; margin-bottom:12px; text-align:center;">${currentUserData.securityPin ? 'Leave the new PIN fields blank to keep the current PIN.' : 'Set a new four-digit Security PIN for this protected profile.'}</p>
+            <div class="form-group">
+                <label>${currentUserData.securityPin ? 'New Security PIN (4 digits, optional)' : 'New Security PIN (4 digits)'}</label>
+                <input type="password" id="edit-new-pin" ${currentUserData.securityPin ? '' : 'required'} pattern="\\d{4}" inputmode="numeric" maxlength="4" autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label>Confirm New Security PIN</label>
+                <input type="password" id="edit-confirm-pin" ${currentUserData.securityPin ? '' : 'required'} pattern="\\d{4}" inputmode="numeric" maxlength="4" autocomplete="new-password">
             </div>
             <button type="submit" class="btn">Verify & Update</button>
             <button type="button" class="btn btn-secondary" id="cancel-edit" style="margin-top:10px;">Cancel</button>
@@ -672,13 +688,20 @@ async function handleEditProtectedProfile(e) {
     if (!currentUserData?.isProtected || !auth.currentUser) return;
 
     const passwordEl = document.getElementById('verify-password');
+    const pinEl = document.getElementById('verify-pin');
     const usernameEl = document.getElementById('edit-username');
     const phoneEl = document.getElementById('edit-phone');
-    if (!passwordEl || !usernameEl || !phoneEl) return;
+    const newPinEl = document.getElementById('edit-new-pin');
+    const confirmPinEl = document.getElementById('edit-confirm-pin');
+    if (!passwordEl || !usernameEl || !phoneEl || !newPinEl || !confirmPinEl) return;
 
     const password = passwordEl.value;
+    const currentPin = pinEl?.value.trim() || '';
     const newUsername = sanitizePlainText(usernameEl.value, 40);
     const newPhone = phoneEl.value.trim();
+    const newPin = newPinEl.value.trim();
+    const confirmPin = confirmPinEl.value.trim();
+    const hasStoredPin = Boolean(currentUserData.securityPin);
 
     if (newUsername.length < 2) {
         showMessage('Username must contain at least 2 characters.', 'error', 'dashboard');
@@ -687,6 +710,24 @@ async function handleEditProtectedProfile(e) {
     if (!/^0\d{9}$/.test(newPhone)) {
         showMessage('Phone number must start with 0 and contain exactly 10 digits.', 'error', 'dashboard');
         return;
+    }
+    if (hasStoredPin && !(await verifyPin(currentPin, currentUserData.securityPin))) {
+        showMessage('Security PIN is incorrect.', 'error', 'dashboard');
+        return;
+    }
+    if (newPin || confirmPin || !hasStoredPin) {
+        if (!/^\d{4}$/.test(newPin)) {
+            showMessage('New Security PIN must be exactly 4 numeric digits.', 'error', 'dashboard');
+            return;
+        }
+        if (newPin !== confirmPin) {
+            showMessage('New Security PIN and confirmation do not match.', 'error', 'dashboard');
+            return;
+        }
+        if (hasStoredPin && newPin === currentPin) {
+            showMessage('New Security PIN must be different from the current PIN.', 'error', 'dashboard');
+            return;
+        }
     }
 
     try {
@@ -705,16 +746,22 @@ async function handleEditProtectedProfile(e) {
             }
         }
 
-        await updateDoc(doc(db, 'users', currentUserData.uid), {
+        const updates = {
             username: newUsername,
             phone: newPhone,
             updatedAt: serverTimestamp()
-        });
+        };
+        if (newPin) updates.securityPin = await hashPin(newPin);
+        await updateDoc(doc(db, 'users', currentUserData.uid), updates);
 
         await logAction(currentUserData, 'EDIT_SELF_PROFILE', {
             targetId: currentUserData.uid,
             targetName: newUsername,
-            text: 'Protected profile updated after password verification'
+            text: newPin
+                ? (hasStoredPin
+                    ? 'Protected profile updated after password and Security PIN verification; Security PIN changed'
+                    : 'Protected profile updated after password verification; Security PIN configured')
+                : 'Protected profile updated after password and Security PIN verification'
         });
 
         showMessage('Profile updated successfully. The page will reload in a moment...', 'success', 'dashboard');

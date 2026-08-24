@@ -278,9 +278,11 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/cars/$(data.carId))) ||
         (data.matchStatus == 'REVIEW_REQUIRED' &&
           data.assignmentId == null && data.userId == null && data.userName == null &&
-          ((data.carId == null && data.carLabel == '') ||
+          (
+            (data.carId == null && data.carLabel == '') ||
             (data.carId != null && data.carLabel.size() > 0 &&
-              exists(/databases/$(database)/documents/cars/$(data.carId))));
+              exists(/databases/$(database)/documents/cars/$(data.carId)))
+          ));
     }
 
     function validUnsettledViolation(data) {
@@ -344,8 +346,12 @@ service cloud.firestore {
           request.resource.data.status == resource.data.status &&
           request.resource.data.email == resource.data.email &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'username', 'phone', 'updatedAt'
-          ]) && validUserShape(request.resource.data));
+            'username', 'phone', 'securityPin', 'updatedAt'
+          ]) &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['securityPin']) ||
+            (request.resource.data.securityPin is string &&
+              request.resource.data.securityPin.matches('[0-9a-f]{64}'))) &&
+          validUserShape(request.resource.data));
       allow delete: if false;
     }
 

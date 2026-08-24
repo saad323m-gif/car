@@ -449,7 +449,7 @@ async function handleAddViolation(event) {
 }
 
 function resetViolationPage(key) {
-    const state = { records: [], lastDoc: null, hasMore: false };
+    const state = { records: [], lastDoc: null, visibleCount: 0, hasMore: false };
     violationPageState.set(key, state);
     return state;
 }
@@ -466,9 +466,15 @@ function buildAdminViolationsQuery(filter, lastDoc) {
     } else if (filter !== 'all') {
         constraints.push(where('matchStatus', '==', filter));
     }
-    constraints.push(orderBy('violationAt', 'desc'));
-    if (lastDoc) constraints.push(startAfter(lastDoc));
-    constraints.push(limit(VIOLATIONS_PAGE_SIZE + 1));
+
+    // All records retain server-side ordering and cursor pagination. Filtered
+    // records intentionally use equality filters only, then sort locally. This
+    // avoids making the core UI depend on deployment-sensitive composite indexes.
+    if (filter === 'all') {
+        constraints.push(orderBy('violationAt', 'desc'));
+        if (lastDoc) constraints.push(startAfter(lastDoc));
+        constraints.push(limit(VIOLATIONS_PAGE_SIZE + 1));
+    }
     return query(collection(db, 'violations'), ...constraints);
 }
 
@@ -481,32 +487,67 @@ async function loadAdminViolations(append = false) {
     if (!append) container.innerHTML = '<p class="loading-text">Loading violations...</p>';
 
     try {
-        const snapshot = await getDocs(buildAdminViolationsQuery(activeAdminFilter, state.lastDoc));
-        const pageDocs = snapshot.docs.slice(0, VIOLATIONS_PAGE_SIZE);
-        const pageRecords = pageDocs.map(item => ({ id: item.id, ...item.data() }));
-        state.records = append ? [...state.records, ...pageRecords] : pageRecords;
-        state.lastDoc = pageDocs.length ? pageDocs[pageDocs.length - 1] : state.lastDoc;
-        state.hasMore = snapshot.docs.length > pageDocs.length;
-        renderViolationRecords(container, state.records, {
+        const isAllFilter = activeAdminFilter === 'all';
+        const snapshot = await getDocs(buildAdminViolationsQuery(activeAdminFilter, isAllFilter ? state.lastDoc : null));
+
+        if (isAllFilter) {
+            const pageDocs = snapshot.docs.slice(0, VIOLATIONS_PAGE_SIZE);
+            const pageRecords = pageDocs.map(item => ({ id: item.id, ...item.data() }));
+            state.records = append ? [...state.records, ...pageRecords] : pageRecords;
+            state.lastDoc = pageDocs.length ? pageDocs[pageDocs.length - 1] : state.lastDoc;
+            state.hasMore = snapshot.docs.length > pageDocs.length;
+            renderViolationRecords(container, state.records, {
+                scope: 'admin',
+                hasMore: state.hasMore,
+                onLoadMore: () => loadAdminViolations(true)
+            });
+            return;
+        }
+
+        state.records = sortViolationRecords(snapshot.docs.map(item => ({ id: item.id, ...item.data() })));
+        if (!append) state.visibleCount = 0;
+        state.visibleCount += VIOLATIONS_PAGE_SIZE;
+        renderClientPagedViolations(container, state, {
             scope: 'admin',
-            hasMore: state.hasMore,
             onLoadMore: () => loadAdminViolations(true)
         });
     } catch (error) {
         console.error('Load violations failed:', error);
-        const requiresIndex = error?.code === 'failed-precondition' || /index/i.test(String(error?.message || ''));
-        container.innerHTML = requiresIndex
-            ? '<p class="error">This filter requires its Firestore index. Create the required violation indexes and wait until each one is Enabled.</p>'
-            : '<p class="error">Unable to load violations. Please try again.</p>';
+        container.innerHTML = violationLoadErrorHtml(error, 'admin');
     }
 }
 
-function buildScopedViolationsQuery(filters, lastDoc) {
-    const constraints = filters.map(filter => where(filter.field, '==', filter.value));
-    constraints.push(orderBy('violationAt', 'desc'));
-    if (lastDoc) constraints.push(startAfter(lastDoc));
-    constraints.push(limit(VIOLATIONS_PAGE_SIZE + 1));
-    return query(collection(db, 'violations'), ...constraints);
+function buildScopedViolationsQuery(filters) {
+    // Equality-only queries use Firestore's automatic single-field indexes.
+    // Sorting happens after the security-compatible query returns its matches.
+    return query(collection(db, 'violations'), ...filters.map(filter => where(filter.field, '==', filter.value)));
+}
+
+function sortViolationRecords(records) {
+    return records.sort((left, right) => getViolationTime(right) - getViolationTime(left));
+}
+
+function renderClientPagedViolations(container, state, options) {
+    const visibleRecords = state.records.slice(0, state.visibleCount);
+    state.hasMore = state.records.length > visibleRecords.length;
+    renderViolationRecords(container, visibleRecords, {
+        ...options,
+        hasMore: state.hasMore
+    });
+}
+
+function violationLoadErrorHtml(error, audience) {
+    const code = String(error?.code || 'unknown');
+    let text = 'Unable to load violations. Please refresh and try again.';
+    if (code === 'permission-denied') {
+        text = 'Access to violations was denied. The published Firestore rules may not match this release.';
+    } else if (code === 'failed-precondition') {
+        text = 'The deployed app is requesting an unavailable Firestore index. Publish this repaired release and verify the active rules.';
+    } else if (code === 'unavailable') {
+        text = 'The Firestore service is temporarily unavailable. Please retry shortly.';
+    }
+    const detail = audience === 'admin' ? `<br><small>Diagnostic code: ${escapeHtml(code)}</small>` : '';
+    return `<p class="error">${escapeHtml(text)}${detail}</p>`;
 }
 
 export async function renderCarViolations(carId, carData, append = false) {
@@ -529,21 +570,18 @@ export async function renderCarViolations(carId, carData, append = false) {
         ];
 
     try {
-        const snapshot = await getDocs(buildScopedViolationsQuery(filters, state.lastDoc));
-        const pageDocs = snapshot.docs.slice(0, VIOLATIONS_PAGE_SIZE);
-        const pageRecords = pageDocs.map(item => ({ id: item.id, ...item.data() }));
-        state.records = append ? [...state.records, ...pageRecords] : pageRecords;
-        state.lastDoc = pageDocs.length ? pageDocs[pageDocs.length - 1] : state.lastDoc;
-        state.hasMore = snapshot.docs.length > pageDocs.length;
-        renderViolationRecords(container, state.records, {
+        const snapshot = await getDocs(buildScopedViolationsQuery(filters));
+        state.records = sortViolationRecords(snapshot.docs.map(item => ({ id: item.id, ...item.data() })));
+        if (!append) state.visibleCount = 0;
+        state.visibleCount += VIOLATIONS_PAGE_SIZE;
+        renderClientPagedViolations(container, state, {
             scope,
             title: `Violations for ${formatCarLabel(carData)}`,
-            hasMore: state.hasMore,
             onLoadMore: () => renderCarViolations(carId, carData, true)
         });
     } catch (error) {
         console.error('Load car violations failed:', error);
-        container.innerHTML = '<p class="error">Unable to load violations for this car.</p>';
+        container.innerHTML = violationLoadErrorHtml(error, scope === 'admin' ? 'admin' : 'user');
     }
 }
 
@@ -569,21 +607,18 @@ export async function renderUserViolations(userId, targetContainerId, title = 'M
         ];
 
     try {
-        const snapshot = await getDocs(buildScopedViolationsQuery(filters, state.lastDoc));
-        const pageDocs = snapshot.docs.slice(0, VIOLATIONS_PAGE_SIZE);
-        const pageRecords = pageDocs.map(item => ({ id: item.id, ...item.data() }));
-        state.records = append ? [...state.records, ...pageRecords] : pageRecords;
-        state.lastDoc = pageDocs.length ? pageDocs[pageDocs.length - 1] : state.lastDoc;
-        state.hasMore = snapshot.docs.length > pageDocs.length;
-        renderViolationRecords(container, state.records, {
+        const snapshot = await getDocs(buildScopedViolationsQuery(filters));
+        state.records = sortViolationRecords(snapshot.docs.map(item => ({ id: item.id, ...item.data() })));
+        if (!append) state.visibleCount = 0;
+        state.visibleCount += VIOLATIONS_PAGE_SIZE;
+        renderClientPagedViolations(container, state, {
             scope,
             title,
-            hasMore: state.hasMore,
             onLoadMore: () => renderUserViolations(userId, targetContainerId, title, true)
         });
     } catch (error) {
         console.error('Load user violations failed:', error);
-        container.innerHTML = '<p class="error">Unable to load your violations.</p>';
+        container.innerHTML = violationLoadErrorHtml(error, scope === 'admin' ? 'admin' : 'user');
     }
 }
 

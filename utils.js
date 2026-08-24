@@ -70,6 +70,32 @@ export function handleFirebaseError(error, target = 'auth') {
     showMessage(message, 'error', target);
 }
 
+/**
+ * Compatibility support for the legacy four-digit protected-profile PIN.
+ * Firebase password reauthentication remains the actual security boundary.
+ */
+export async function hashPin(pin) {
+    const normalized = String(pin || '').trim();
+    if (!/^\d{4}$/.test(normalized) || !globalThis.crypto?.subtle) return '';
+    const encoded = new TextEncoder().encode(normalized);
+    const digest = await crypto.subtle.digest('SHA-256', encoded);
+    return Array.from(new Uint8Array(digest))
+        .map(byte => byte.toString(16).padStart(2, '0'))
+        .join('');
+}
+
+/**
+ * Supports historical plain-text values and SHA-256 values so an existing
+ * protected account can be migrated without a forced PIN reset.
+ */
+export async function verifyPin(pin, storedValue) {
+    const normalized = String(pin || '').trim();
+    const stored = String(storedValue || '').trim();
+    if (!/^\d{4}$/.test(normalized) || !stored) return false;
+    if (/^\d{4}$/.test(stored)) return normalized === stored;
+    return (await hashPin(normalized)) === stored;
+}
+
 export function escapeHtml(value) {
     return String(value ?? '')
         .replace(/&/g, '&amp;')
