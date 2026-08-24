@@ -494,7 +494,10 @@ async function loadAdminViolations(append = false) {
         });
     } catch (error) {
         console.error('Load violations failed:', error);
-        container.innerHTML = '<p class="error">Unable to load violations. Please try again.</p>';
+        const requiresIndex = error?.code === 'failed-precondition' || /index/i.test(String(error?.message || ''));
+        container.innerHTML = requiresIndex
+            ? '<p class="error">This filter requires its Firestore index. Create the required violation indexes and wait until each one is Enabled.</p>'
+            : '<p class="error">Unable to load violations. Please try again.</p>';
     }
 }
 
