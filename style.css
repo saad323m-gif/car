@@ -1066,7 +1066,7 @@ h4 {
 
 .car-card-header .plate-container {
     display: grid;
-    grid-template-columns: minmax(62px, 0.78fr) minmax(0, 1.28fr) minmax(46px, 0.58fr);
+    grid-template-columns: minmax(62px, 0.78fr) minmax(0, 1.28fr) 62px;
     align-items: center;
     gap: clamp(8px, 2.5vw, 18px);
     width: min(100%, 360px);
@@ -1092,13 +1092,21 @@ h4 {
 }
 
 .car-card-header .plate-code {
-    justify-self: end;
-    width: max-content;
-    min-width: 0;
-    max-width: none;
-    padding: 5px 9px;
+    justify-self: center;
+    box-sizing: border-box;
+    width: 62px;
+    min-width: 62px;
+    max-width: 62px;
+    height: 42px;
+    min-height: 42px;
+    max-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 4px;
+    line-height: 1;
     font-size: clamp(1.05rem, 4.5vw, 1.5rem);
-    overflow: visible;
+    overflow: hidden;
     white-space: nowrap;
 }
 
@@ -1187,7 +1195,7 @@ h4 {
     }
 
     .car-card-header .plate-container {
-        grid-template-columns: minmax(55px, 0.8fr) minmax(0, 1.2fr) minmax(42px, 0.55fr);
+        grid-template-columns: minmax(55px, 0.8fr) minmax(0, 1.2fr) 54px;
         width: min(100%, 300px);
         height: 68px;
         gap: 8px;
@@ -1204,7 +1212,13 @@ h4 {
     }
 
     .car-card-header .plate-code {
-        padding: 4px 7px;
+        width: 54px;
+        min-width: 54px;
+        max-width: 54px;
+        height: 36px;
+        min-height: 36px;
+        max-height: 36px;
+        padding: 4px 3px;
         font-size: clamp(0.95rem, 4.6vw, 1.2rem);
     }
 
