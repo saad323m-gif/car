@@ -10,6 +10,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { logAction } from "./logs.js";
 import { createLinkRequest, createUnlinkRequest } from "./requests.js";
+import { renderCarViolations } from "./violations.js";
 import {
     showMessage, handleFirebaseError, formatDateTime, formatDateOnly,
     formatPeriod, formatCarLabel, isAdmin, isActiveUser, renderAccessDenied,
@@ -439,18 +440,22 @@ function renderCarCard(id, data, isUserView = false) {
                     : '<button type="button" class="action-btn action-btn-assign" data-action="assign">Assign</button>'}
                 <button type="button" class="action-btn action-btn-print" data-action="print">Print</button>
                 <button type="button" class="action-btn action-btn-history" data-action="history">History</button>
+                <button type="button" class="action-btn action-btn-violations" data-action="violations">Violations</button>
             </div>
             <div id="assign-area-${id}" class="car-action-area"></div>
             <div id="edit-area-${id}" class="car-action-area"></div>
             <div id="history-area-${id}" class="car-action-area"></div>
+            <div id="violations-area-${id}" class="car-action-area violations-inline-area"></div>
         `;
     } else {
         actionsHtml = `
             <div class="action-buttons">
                 <button type="button" class="action-btn action-btn-unlink" id="req-unlink-${id}">Request Unlink</button>
                 <button type="button" class="action-btn action-btn-history" id="my-history-${id}">My History</button>
+                <button type="button" class="action-btn action-btn-violations" id="car-violations-${id}">Violations</button>
             </div>
             <div id="history-area-${id}" class="car-action-area"></div>
+            <div id="violations-area-${id}" class="car-action-area violations-inline-area"></div>
         `;
     }
 
@@ -527,6 +532,14 @@ function renderCarCard(id, data, isUserView = false) {
             renderMyCarHistory(id, data);
         });
     }
+
+    const violationsBtn = card.querySelector(`#car-violations-${id}`);
+    if (violationsBtn) {
+        violationsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            renderCarViolations(id, data);
+        });
+    }
 }
 
 async function handleCarAction(id, action, data) {
@@ -535,10 +548,12 @@ async function handleCarAction(id, action, data) {
     const assignArea = document.getElementById(`assign-area-${id}`);
     const editArea = document.getElementById(`edit-area-${id}`);
     const historyArea = document.getElementById(`history-area-${id}`);
+    const violationsArea = document.getElementById(`violations-area-${id}`);
 
     if (assignArea) assignArea.style.display = 'none';
     if (editArea) editArea.style.display = 'none';
     if (historyArea) historyArea.style.display = 'none';
+    if (violationsArea) violationsArea.style.display = 'none';
 
     if (action === 'edit') {
         renderEditCarForm(id, data);
@@ -546,6 +561,8 @@ async function handleCarAction(id, action, data) {
         handlePrintCard(data);
     } else if (action === 'history') {
         await renderCarHistory(id, data);
+    } else if (action === 'violations') {
+        await renderCarViolations(id, data);
     } else if (action === 'assign') {
         await renderAssignUserUI(id);
     } else if (action === 'unassign') {

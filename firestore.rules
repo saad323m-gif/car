@@ -1,0 +1,418 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath(userId) {
+      return /databases/$(database)/documents/users/$(userId);
+    }
+
+    function systemPath() {
+      return /databases/$(database)/documents/system/status;
+    }
+
+    function userData() {
+      return get(userPath(request.auth.uid)).data;
+    }
+
+    function isActiveUser() {
+      return signedIn() &&
+        exists(userPath(request.auth.uid)) &&
+        userData().status == 'active';
+    }
+
+    function isAdmin() {
+      return isActiveUser() && userData().role == 'admin';
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isText(value, min, max) {
+      return value is string && value.size() >= min && value.size() <= max;
+    }
+
+    function validPhone(value) {
+      return value is string && value.matches('0[0-9]{9}');
+    }
+
+    function validRole(value) {
+      return value == 'admin' || value == 'user';
+    }
+
+    function validStatus(value) {
+      return value == 'active' || value == 'suspended';
+    }
+
+    function validEmirate(value) {
+      return value in [
+        'Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Fujairah',
+        'Umm Al Quwain', 'Ras Al Khaimah', 'Other'
+      ];
+    }
+
+    function validUserShape(data) {
+      return data.keys().hasOnly([
+        'username', 'email', 'phone', 'role', 'status', 'notes',
+        'isProtected', 'rememberSession', 'securityPin', 'createdAt', 'updatedAt'
+      ]) &&
+        data.keys().hasAll([
+          'username', 'email', 'phone', 'role', 'status', 'notes',
+          'isProtected', 'rememberSession'
+        ]) &&
+        isText(data.username, 2, 40) &&
+        isText(data.email, 5, 254) &&
+        validPhone(data.phone) &&
+        validRole(data.role) &&
+        validStatus(data.status) &&
+        isText(data.notes, 0, 500) &&
+        data.isProtected is bool &&
+        data.rememberSession is bool &&
+        (!data.keys().hasAny(['securityPin']) || data.securityPin == null ||
+          (data.securityPin is string && data.securityPin.size() <= 128));
+    }
+
+    function validAdminCreatedUser(data) {
+      return validUserShape(data) &&
+        data.isProtected == false &&
+        data.status == 'active' &&
+        (!data.keys().hasAny(['securityPin']) || data.securityPin == null);
+    }
+
+    function validCarShape(data) {
+      return data.keys().hasOnly([
+        'carId', 'plateNumber', 'plateCode', 'emirate', 'plateIdentifier',
+        'type', 'ownerName', 'vin', 'manufactureYear', 'licenseExpiry',
+        'insuranceExpiry', 'notes', 'currentUserId', 'currentUserName',
+        'status', 'createdAt', 'updatedAt'
+      ]) &&
+        data.keys().hasAll([
+          'carId', 'plateNumber', 'plateCode', 'emirate', 'plateIdentifier',
+          'type', 'ownerName', 'vin', 'manufactureYear', 'licenseExpiry',
+          'insuranceExpiry', 'notes', 'currentUserId', 'currentUserName',
+          'status', 'createdAt'
+        ]) &&
+        isText(data.carId, 5, 30) &&
+        isText(data.plateNumber, 1, 6) && data.plateNumber.matches('[0-9]+') &&
+        isText(data.plateCode, 1, 3) &&
+        validEmirate(data.emirate) &&
+        isText(data.plateIdentifier, 5, 80) &&
+        isText(data.type, 1, 80) &&
+        isText(data.ownerName, 1, 80) &&
+        isText(data.vin, 5, 40) &&
+        data.manufactureYear is int &&
+        data.manufactureYear >= 1900 && data.manufactureYear <= 2100 &&
+        data.licenseExpiry is timestamp &&
+        data.insuranceExpiry is timestamp &&
+        isText(data.notes, 0, 500) &&
+        (data.currentUserId == null || isText(data.currentUserId, 1, 128)) &&
+        (data.currentUserName == null || isText(data.currentUserName, 1, 40)) &&
+        data.status == 'active';
+    }
+
+    function onlyValidSelfAssignment() {
+      return isActiveUser() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['currentUserId', 'currentUserName', 'updatedAt']) &&
+        request.resource.data.currentUserId == request.auth.uid &&
+        request.resource.data.currentUserName == userData().username &&
+        validCarShape(request.resource.data);
+    }
+
+    function validAssignmentShape(data) {
+      return data.keys().hasOnly(['userId', 'userName', 'startTime', 'endTime']) &&
+        data.keys().hasAll(['userId', 'userName', 'startTime', 'endTime']) &&
+        isText(data.userId, 1, 128) &&
+        isText(data.userName, 1, 40) &&
+        data.startTime is timestamp &&
+        (data.endTime == null || data.endTime is timestamp);
+    }
+
+    function validRequestShape(data) {
+      return data.keys().hasOnly([
+        'type', 'userId', 'userName', 'carId', 'plateNumber', 'plateCode',
+        'emirate', 'status', 'timestamp', 'processedAt', 'processedBy'
+      ]) &&
+        data.keys().hasAll([
+          'type', 'userId', 'userName', 'plateNumber', 'plateCode',
+          'emirate', 'status', 'timestamp'
+        ]) &&
+        data.type in ['LINK', 'UNLINK'] &&
+        isText(data.userId, 1, 128) &&
+        isText(data.userName, 1, 40) &&
+        isText(data.plateNumber, 1, 6) && data.plateNumber.matches('[0-9]+') &&
+        isText(data.plateCode, 1, 3) &&
+        validEmirate(data.emirate) &&
+        data.status in ['PENDING', 'APPROVED', 'REJECTED'] &&
+        data.timestamp is timestamp &&
+        (!data.keys().hasAny(['carId']) || data.carId == null || isText(data.carId, 5, 30)) &&
+        (!data.keys().hasAny(['processedAt']) || data.processedAt is timestamp) &&
+        (!data.keys().hasAny(['processedBy']) || isText(data.processedBy, 1, 128));
+    }
+
+    function validUserRequest() {
+      return validRequestShape(request.resource.data) &&
+        request.resource.data.status == 'PENDING' &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.userName == userData().username &&
+        request.resource.data.timestamp == request.time &&
+        (
+          (request.resource.data.type == 'LINK' &&
+            (!request.resource.data.keys().hasAny(['carId']) || request.resource.data.carId == null)) ||
+          (request.resource.data.type == 'UNLINK' &&
+            request.resource.data.keys().hasAny(['carId']) &&
+            request.resource.data.carId is string &&
+            exists(/databases/$(database)/documents/cars/$(request.resource.data.carId)) &&
+            get(/databases/$(database)/documents/cars/$(request.resource.data.carId)).data.currentUserId == request.auth.uid)
+        );
+    }
+
+    function validAdminRequestTransition() {
+      return validRequestShape(request.resource.data) &&
+        resource.data.status == 'PENDING' &&
+        request.resource.data.status in ['APPROVED', 'REJECTED'] &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.userName == resource.data.userName &&
+        request.resource.data.type == resource.data.type &&
+        request.resource.data.plateNumber == resource.data.plateNumber &&
+        request.resource.data.plateCode == resource.data.plateCode &&
+        request.resource.data.emirate == resource.data.emirate &&
+        request.resource.data.timestamp == resource.data.timestamp &&
+        request.resource.data.processedBy == request.auth.uid &&
+        request.resource.data.processedAt == request.time;
+    }
+
+    function validLogShape(data) {
+      return data.keys().hasOnly([
+        'timestamp', 'actorId', 'actorName', 'actionType', 'targetId',
+        'targetName', 'assigneeId', 'details'
+      ]) &&
+        data.keys().hasAll(['timestamp', 'actorId', 'actorName', 'actionType', 'details']) &&
+        data.timestamp is timestamp &&
+        isText(data.actorId, 1, 128) &&
+        isText(data.actorName, 1, 40) &&
+        isText(data.actionType, 3, 40) &&
+        (data.targetId == null || isText(data.targetId, 1, 128)) &&
+        (data.targetName == null || isText(data.targetName, 1, 160)) &&
+        (data.assigneeId == null || isText(data.assigneeId, 1, 128)) &&
+        isText(data.details, 0, 500);
+    }
+
+    function validViolationStatus(value) {
+      return value in ['AUTO_LINKED', 'NO_CAR', 'NO_ASSIGNMENT', 'REVIEW_REQUIRED'];
+    }
+
+    function validSettlementStatus(value) {
+      return value in ['UNSETTLED', 'SETTLED'];
+    }
+
+    function validSettlementMethod(value) {
+      return value == null || value in ['PAYMENT', 'OFFICIAL_OBJECTION', 'OTHER'];
+    }
+
+    function validViolationShape(data) {
+      return data.keys().hasOnly([
+        'violationId', 'referenceNumber', 'plateNumber', 'plateCode', 'emirate',
+        'plateIdentifier', 'violationAt', 'violationType', 'location', 'amount',
+        'notes', 'carId', 'carLabel', 'assignmentId', 'userId', 'userName',
+        'matchStatus', 'settlementStatus', 'settlementMethod', 'settlementNotes',
+        'settledAt', 'settledBy', 'settledByName', 'createdBy', 'createdByName',
+        'createdAt', 'updatedAt', 'reviewNote'
+      ]) &&
+        data.keys().hasAll([
+          'violationId', 'referenceNumber', 'plateNumber', 'plateCode', 'emirate',
+          'plateIdentifier', 'violationAt', 'violationType', 'location', 'amount',
+          'notes', 'carId', 'carLabel', 'assignmentId', 'userId', 'userName',
+          'matchStatus', 'settlementStatus', 'settlementMethod', 'settlementNotes',
+          'settledAt', 'settledBy', 'settledByName', 'createdBy', 'createdByName',
+          'createdAt', 'updatedAt', 'reviewNote'
+        ]) &&
+        isText(data.violationId, 5, 30) &&
+        isText(data.referenceNumber, 0, 80) &&
+        isText(data.plateNumber, 1, 6) && data.plateNumber.matches('[0-9]+') &&
+        isText(data.plateCode, 1, 3) &&
+        validEmirate(data.emirate) &&
+        isText(data.plateIdentifier, 5, 80) &&
+        data.violationAt is timestamp &&
+        isText(data.violationType, 2, 80) &&
+        isText(data.location, 0, 160) &&
+        data.amount is number && data.amount >= 0 && data.amount <= 1000000 &&
+        isText(data.notes, 0, 500) &&
+        (data.carId == null || isText(data.carId, 5, 30)) &&
+        isText(data.carLabel, 0, 160) &&
+        (data.assignmentId == null || isText(data.assignmentId, 1, 128)) &&
+        (data.userId == null || isText(data.userId, 1, 128)) &&
+        (data.userName == null || isText(data.userName, 1, 40)) &&
+        validViolationStatus(data.matchStatus) &&
+        validSettlementStatus(data.settlementStatus) &&
+        validSettlementMethod(data.settlementMethod) &&
+        isText(data.settlementNotes, 0, 500) &&
+        (data.settledAt == null || data.settledAt is timestamp) &&
+        (data.settledBy == null || isText(data.settledBy, 1, 128)) &&
+        (data.settledByName == null || isText(data.settledByName, 1, 40)) &&
+        isText(data.createdBy, 1, 128) &&
+        isText(data.createdByName, 1, 40) &&
+        data.createdAt is timestamp && data.updatedAt is timestamp &&
+        isText(data.reviewNote, 0, 500);
+    }
+
+    function validViolationLink(data) {
+      return
+        (data.matchStatus == 'AUTO_LINKED' &&
+          data.carId != null && data.carLabel.size() > 0 &&
+          data.assignmentId != null && data.userId != null && data.userName != null &&
+          exists(/databases/$(database)/documents/cars/$(data.carId)) &&
+          exists(/databases/$(database)/documents/cars/$(data.carId)/assignments/$(data.assignmentId)) &&
+          get(/databases/$(database)/documents/cars/$(data.carId)/assignments/$(data.assignmentId)).data.userId == data.userId &&
+          get(/databases/$(database)/documents/cars/$(data.carId)/assignments/$(data.assignmentId)).data.userName == data.userName) ||
+        (data.matchStatus == 'NO_CAR' &&
+          data.carId == null && data.carLabel == '' &&
+          data.assignmentId == null && data.userId == null && data.userName == null) ||
+        (data.matchStatus == 'NO_ASSIGNMENT' &&
+          data.carId != null && data.carLabel.size() > 0 &&
+          data.assignmentId == null && data.userId == null && data.userName == null &&
+          exists(/databases/$(database)/documents/cars/$(data.carId))) ||
+        (data.matchStatus == 'REVIEW_REQUIRED' &&
+          data.assignmentId == null && data.userId == null && data.userName == null &&
+          ((data.carId == null && data.carLabel == '') ||
+            (data.carId != null && data.carLabel.size() > 0 &&
+              exists(/databases/$(database)/documents/cars/$(data.carId))));
+    }
+
+    function validUnsettledViolation(data) {
+      return data.settlementStatus == 'UNSETTLED' &&
+        data.settlementMethod == null && data.settlementNotes == '' &&
+        data.settledAt == null && data.settledBy == null && data.settledByName == null;
+    }
+
+    function validSettledViolation(data) {
+      return data.settlementStatus == 'SETTLED' &&
+        data.settlementMethod != null && data.settlementNotes.size() > 0 &&
+        data.settledAt is timestamp && data.settledBy is string &&
+        data.settledByName is string;
+    }
+
+    function validViolationCreate(data) {
+      return validViolationShape(data) && validViolationLink(data) &&
+        validUnsettledViolation(data) && data.reviewNote == '' &&
+        data.createdBy == request.auth.uid &&
+        data.createdByName == userData().username &&
+        data.createdAt == request.time && data.updatedAt == request.time;
+    }
+
+    function validViolationSettlementUpdate() {
+      return validViolationShape(request.resource.data) &&
+        resource.data.settlementStatus == 'UNSETTLED' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'settlementStatus', 'settlementMethod', 'settlementNotes', 'settledAt',
+          'settledBy', 'settledByName', 'updatedAt'
+        ]) &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.settledBy == request.auth.uid &&
+        request.resource.data.settledByName == userData().username &&
+        validViolationLink(request.resource.data) && validSettledViolation(request.resource.data);
+    }
+
+    match /system/status {
+      allow get: if true;
+      allow create: if false;
+      allow update: if isAdmin() &&
+        request.resource.data.keys().hasOnly(['initialized', 'usersCount', 'ownerId', 'createdAt', 'updatedAt']) &&
+        request.resource.data.initialized == true &&
+        request.resource.data.ownerId == resource.data.ownerId;
+      allow delete: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isAdmin() && validAdminCreatedUser(request.resource.data);
+      allow update: if
+        (isAdmin() && !resource.data.isProtected &&
+          request.resource.data.isProtected == false &&
+          request.resource.data.email == resource.data.email &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'username', 'phone', 'notes', 'role', 'status', 'rememberSession', 'updatedAt'
+          ]) && validUserShape(request.resource.data)) ||
+        (isOwner(userId) && resource.data.isProtected == true &&
+          request.resource.data.isProtected == true &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.status == resource.data.status &&
+          request.resource.data.email == resource.data.email &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'username', 'phone', 'updatedAt'
+          ]) && validUserShape(request.resource.data));
+      allow delete: if false;
+    }
+
+    match /cars/{carId} {
+      allow read: if isActiveUser();
+      allow create: if isAdmin() && validCarShape(request.resource.data);
+      allow update: if (isAdmin() && validCarShape(request.resource.data)) || onlyValidSelfAssignment();
+      allow delete: if false;
+
+      match /assignments/{assignmentId} {
+        allow get: if isAdmin() || (isActiveUser() && resource.data.userId == request.auth.uid);
+        allow list: if isAdmin() || isActiveUser();
+        allow create: if validAssignmentShape(request.resource.data) &&
+          ((isAdmin()) ||
+            (isActiveUser() && request.resource.data.userId == request.auth.uid &&
+              request.resource.data.userName == userData().username &&
+              getAfter(/databases/$(database)/documents/cars/$(carId)).data.currentUserId == request.auth.uid));
+        allow update: if validAssignmentShape(request.resource.data) &&
+          ((isAdmin()) ||
+            (isActiveUser() &&
+              request.resource.data.userId == resource.data.userId &&
+              request.resource.data.userName == resource.data.userName &&
+              request.resource.data.startTime == resource.data.startTime &&
+              resource.data.endTime == null && request.resource.data.endTime == request.time &&
+              getAfter(/databases/$(database)/documents/cars/$(carId)).data.currentUserId == request.auth.uid));
+        allow delete: if false;
+      }
+    }
+
+    match /requests/{requestId} {
+      allow get: if isAdmin() || (isActiveUser() && resource.data.userId == request.auth.uid);
+      allow list: if isAdmin();
+      allow create: if isActiveUser() && validUserRequest();
+      allow update: if isAdmin() && validAdminRequestTransition();
+      allow delete: if false;
+    }
+
+    match /logs/{logId} {
+      allow get: if isAdmin() || (isActiveUser() &&
+        (resource.data.actorId == request.auth.uid || resource.data.assigneeId == request.auth.uid));
+      allow list: if isAdmin() || (isActiveUser() &&
+        (resource.data.actorId == request.auth.uid || resource.data.assigneeId == request.auth.uid));
+      allow create: if isActiveUser() && validLogShape(request.resource.data) &&
+        request.resource.data.timestamp == request.time &&
+        request.resource.data.actorId == request.auth.uid &&
+        request.resource.data.actorName == userData().username;
+      allow update, delete: if false;
+    }
+
+    match /violations/{violationId} {
+      allow get: if isAdmin() || (isActiveUser() &&
+        resource.data.userId == request.auth.uid &&
+        resource.data.matchStatus == 'AUTO_LINKED');
+      allow list: if isAdmin() || (isActiveUser() &&
+        resource.data.userId == request.auth.uid &&
+        resource.data.matchStatus == 'AUTO_LINKED');
+      allow create: if isAdmin() && validViolationCreate(request.resource.data);
+      allow update: if isAdmin() && validViolationSettlementUpdate();
+      allow delete: if false;
+    }
+
+    match /counters/{counterId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /loginAttempts/{attemptId} {
+      allow read, write: if false;
+    }
+  }
+}

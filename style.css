@@ -1221,3 +1221,304 @@ h4 {
         text-align: center;
     }
 }
+
+
+/* Violations module */
+.violations-page {
+    width: 100%;
+}
+
+.violations-page-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+}
+
+.violations-page-heading h2 {
+    margin-bottom: 4px;
+}
+
+.violations-page-subtitle {
+    margin: 0;
+    color: #657084;
+    font-size: 0.92rem;
+    line-height: 1.55;
+}
+
+.violations-form-wrapper {
+    margin: 0 0 24px;
+    padding: 20px;
+    border: 1px solid #dbe4f0;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #f9fbff 0%, #ffffff 100%);
+    box-shadow: 0 8px 24px rgba(21, 51, 91, 0.06);
+}
+
+.violation-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.violation-form-intro {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    align-items: baseline;
+    padding: 11px 13px;
+    border-left: 4px solid #1c5c98;
+    border-radius: 7px;
+    color: #40516a;
+    background: #edf5ff;
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+
+.violation-form-intro strong {
+    color: #15335b;
+}
+
+.violation-form-actions,
+.settlement-form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.violations-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 20px;
+}
+
+.violations-list {
+    min-height: 52px;
+}
+
+.violations-list-title {
+    margin: 0 0 12px;
+    color: #1b2a4a;
+    font-size: 0.96rem;
+}
+
+.violation-records {
+    display: grid;
+    gap: 12px;
+}
+
+.violation-record {
+    padding: 16px;
+    border: 1px solid #e1e7ef;
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 4px 12px rgba(27, 42, 74, 0.04);
+}
+
+.violation-record-topline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 14px;
+    color: #1b2a4a;
+}
+
+.violation-record-topline > strong {
+    font-size: 1rem;
+    letter-spacing: 0.04em;
+}
+
+.violation-status,
+.settlement-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 800;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.status-linked {
+    color: #166534;
+    background: #dcfce7;
+}
+
+.status-no-car {
+    color: #9a3412;
+    background: #ffedd5;
+}
+
+.status-no-assignment {
+    color: #92400e;
+    background: #fef3c7;
+}
+
+.status-review {
+    color: #5b21b6;
+    background: #ede9fe;
+}
+
+.settlement-unsettled {
+    color: #9f1239;
+    background: #ffe4e6;
+}
+
+.settlement-settled {
+    color: #166534;
+    background: #dcfce7;
+}
+
+.violation-record-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+}
+
+.violation-record-grid > div {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid #edf0f5;
+    border-radius: 8px;
+    background: #fafcff;
+}
+
+.violation-record-grid span {
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.violation-record-grid strong {
+    overflow-wrap: anywhere;
+    color: #1f2d42;
+    font-size: 0.84rem;
+    line-height: 1.35;
+}
+
+.violation-notes {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    color: #46566f;
+    background: #f8fafc;
+    border-radius: 8px;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.violation-settlement-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid #bbf7d0;
+    border-radius: 9px;
+    color: #166534;
+    background: #f0fdf4;
+    font-size: 0.82rem;
+    overflow-wrap: anywhere;
+}
+
+.violation-record-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 14px;
+}
+
+.action-btn-violations {
+    color: #0f4c81;
+    border: 1px solid #9cc6ed;
+    background: #edf7ff;
+}
+
+.action-btn-violations:hover,
+.action-btn-violations:focus-visible {
+    color: #ffffff;
+    background: #1c5c98;
+    border-color: #1c5c98;
+}
+
+.action-btn-settle {
+    color: #166534;
+    border: 1px solid #86efac;
+    background: #f0fdf4;
+}
+
+.action-btn-settle:hover,
+.action-btn-settle:focus-visible {
+    color: #ffffff;
+    background: #15803d;
+    border-color: #15803d;
+}
+
+.settlement-area {
+    margin-top: 12px;
+}
+
+.settlement-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid #bbf7d0;
+    border-radius: 10px;
+    background: #f7fff9;
+}
+
+.settlement-form h5,
+.settlement-form p {
+    grid-column: 1 / -1;
+    margin: 0;
+}
+
+.settlement-form h5 {
+    color: #166534;
+    font-size: 0.95rem;
+}
+
+.settlement-form p {
+    color: #547262;
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+
+.violations-inline-area {
+    margin-top: 14px;
+}
+
+@media (max-width: 700px) {
+    .violations-page-heading {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .violations-page-heading .btn-add-toggle {
+        width: 100%;
+    }
+
+    .violation-record-topline {
+        align-items: flex-start;
+        justify-content: flex-start;
+    }
+
+    .violation-record-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .violation-record-actions .action-btn-settle {
+        width: 100%;
+    }
+}

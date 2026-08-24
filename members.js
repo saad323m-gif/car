@@ -11,6 +11,7 @@ import {
     query, where, limit, startAfter, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { logAction } from "./logs.js";
+import { renderUserViolations } from "./violations.js";
 import {
     showMessage, handleFirebaseError, isAdmin, isActiveUser,
     renderAccessDenied, formatDateTime, formatPeriod,
@@ -239,6 +240,7 @@ function renderUserCard(uid, data) {
             <div class="action-buttons" id="member-actions-${uid}">
                 <button type="button" class="action-btn action-btn-edit" data-action="edit">✎ Edit</button>
                 <button type="button" class="action-btn action-btn-activity" data-action="activity">📋 Activity</button>
+                <button type="button" class="action-btn action-btn-violations" data-action="violations">Violations</button>
                 ${data.role === 'user'
                     ? '<button type="button" class="action-btn action-btn-promote" data-action="promote">↑ Promote</button>'
                     : '<button type="button" class="action-btn action-btn-demote" data-action="demote">↓ Demote</button>'}
@@ -247,13 +249,16 @@ function renderUserCard(uid, data) {
                     : '<button type="button" class="action-btn action-btn-activate" data-action="activate">▶ Activate</button>'}
             </div>
             <div id="activity-area-${uid}" style="margin-top: 15px; display: none;"></div>
+            <div id="member-violations-area-${uid}" class="member-violations-area" style="display: none;"></div>
         `;
     } else {
         actionsHtml = `
             <div class="action-buttons" id="member-actions-${uid}">
                 <button type="button" class="action-btn action-btn-activity" data-action="activity">📋 Activity</button>
+                <button type="button" class="action-btn action-btn-violations" data-action="violations">Violations</button>
             </div>
             <div id="activity-area-${uid}" style="margin-top: 15px; display: none;"></div>
+            <div id="member-violations-area-${uid}" class="member-violations-area" style="display: none;"></div>
         `;
     }
 
@@ -397,7 +402,14 @@ async function handleMemberAction(uid, action, username) {
     if (!isAdmin(currentUserData) || !action) return;
 
     const activityArea = document.getElementById(`activity-area-${uid}`);
+    const violationsArea = document.getElementById(`member-violations-area-${uid}`);
     if (activityArea) activityArea.style.display = 'none';
+    if (violationsArea) violationsArea.style.display = 'none';
+
+    if (action === 'violations') {
+        await renderUserViolations(uid, `member-violations-area-${uid}`, `Violations for ${username}`);
+        return;
+    }
 
     try {
         if (action === 'promote') {

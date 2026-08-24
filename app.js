@@ -20,6 +20,7 @@ import { renderCarsView, setCarsCurrentUser } from "./cars.js";
 import { renderRequestsView, setRequestsCurrentUser } from "./requests.js";
 import { renderSearchView, setSearchCurrentUser } from "./search.js";
 import { renderStatsView, setStatsCurrentUser } from "./stats.js";
+import { renderViolationsView, renderMyViolationsView, setViolationsCurrentUser } from "./violations.js";
 import { showMessage, handleFirebaseError, clearMessage } from "./utils.js";
 
 function updateDateTime() {
@@ -86,6 +87,8 @@ window.addEventListener('DOMContentLoaded', () => {
             else if (tab === 'requests') renderRequestsView();
             else if (tab === 'search') renderSearchView();
             else if (tab === 'stats') renderStatsView();
+            else if (tab === 'violations') renderViolationsView();
+            else if (tab === 'my-violations') renderMyViolationsView();
             else if (tab === 'my-activity') renderMyActivityView();
         });
     });
@@ -115,9 +118,11 @@ window.addEventListener('DOMContentLoaded', () => {
                 setLogsCurrentUser(userData);
                 setSearchCurrentUser(userData);
                 setStatsCurrentUser(userData);
+                setViolationsCurrentUser(userData);
 
                 document.querySelectorAll('.tab-btn').forEach(tab => {
-                    tab.style.display = userData.role === 'admin' || tab.dataset.tab === 'cars'
+                    const publicUserTabs = ['cars', 'my-activity', 'my-violations'];
+                    tab.style.display = userData.role === 'admin' || publicUserTabs.includes(tab.dataset.tab)
                         ? 'block'
                         : 'none';
                 });
