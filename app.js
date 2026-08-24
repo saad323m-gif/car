@@ -11,7 +11,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import {
     collection, doc, setDoc, getDoc, getDocs, updateDoc, query, where, limit,
-    serverTimestamp, Timestamp
+    serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 import { renderDashboard, setCurrentUser, getCurrentUser } from "./members.js";
@@ -20,82 +20,7 @@ import { renderCarsView, setCarsCurrentUser } from "./cars.js";
 import { renderRequestsView, setRequestsCurrentUser } from "./requests.js";
 import { renderSearchView, setSearchCurrentUser } from "./search.js";
 import { renderStatsView, setStatsCurrentUser } from "./stats.js";
-import { showMessage, handleFirebaseError, clearMessage, hashPin } from "./utils.js";
-
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOCK_DURATION_MS = 15 * 60 * 1000;
-
-function emailToDocId(email) {
-    return String(email || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-}
-
-async function getLoginAttemptDoc(email) {
-    const id = emailToDocId(email);
-    if (!id) return null;
-    const ref = doc(db, 'loginAttempts', id);
-    const snap = await getDoc(ref);
-    return snap.exists() ? { ref, data: snap.data() } : { ref, data: null };
-}
-
-async function isLoginLocked(email) {
-    const result = await getLoginAttemptDoc(email);
-    if (!result || !result.data || !result.data.lockedUntil) return { locked: false, remainingMs: 0 };
-
-    const lockedUntil = result.data.lockedUntil.toDate
-        ? result.data.lockedUntil.toDate()
-        : new Date(result.data.lockedUntil);
-    const now = new Date();
-    if (lockedUntil > now) {
-        return { locked: true, remainingMs: lockedUntil - now };
-    }
-    return { locked: false, remainingMs: 0 };
-}
-
-async function recordFailedLogin(email) {
-    const result = await getLoginAttemptDoc(email);
-    if (!result) return;
-
-    const prev = result.data || {};
-    let failCount = (prev.failCount || 0) + 1;
-    let lockedUntil = null;
-
-    if (prev.lockedUntil) {
-        const prevLock = prev.lockedUntil.toDate ? prev.lockedUntil.toDate() : new Date(prev.lockedUntil);
-        if (prevLock <= new Date()) {
-            failCount = 1;
-        }
-    }
-
-    if (failCount >= MAX_LOGIN_ATTEMPTS) {
-        lockedUntil = Timestamp.fromDate(new Date(Date.now() + LOCK_DURATION_MS));
-        failCount = MAX_LOGIN_ATTEMPTS;
-    }
-
-    await setDoc(result.ref, {
-        email: String(email || '').trim().toLowerCase(),
-        failCount,
-        lockedUntil,
-        updatedAt: serverTimestamp()
-    }, { merge: true });
-
-    return { failCount, locked: !!lockedUntil };
-}
-
-async function clearLoginAttempts(email) {
-    const result = await getLoginAttemptDoc(email);
-    if (!result) return;
-    await setDoc(result.ref, {
-        email: String(email || '').trim().toLowerCase(),
-        failCount: 0,
-        lockedUntil: null,
-        updatedAt: serverTimestamp()
-    }, { merge: true });
-}
-
-function formatRemainingLock(ms) {
-    const mins = Math.ceil(ms / 60000);
-    return mins <= 1 ? '1 minute' : `${mins} minutes`;
-}
+import { showMessage, handleFirebaseError, clearMessage } from "./utils.js";
 
 function updateDateTime() {
     const now = new Date();
@@ -166,11 +91,23 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     onAuthStateChanged(auth, async (user) => {
-        if (user) {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
-                userData.uid = user.uid;
+        try {
+            if (user) {
+                const userDoc = await getDoc(doc(db, 'users', user.uid));
+                if (!userDoc.exists()) {
+                    await signOut(auth);
+                    showAuthView();
+                    showMessage('Your account is not registered in this system.', 'error');
+                    return;
+                }
+
+                const userData = { ...userDoc.data(), uid: user.uid };
+                if (userData.status !== 'active') {
+                    await signOut(auth);
+                    showAuthView();
+                    showMessage('Access is currently unavailable for this account.', 'error');
+                    return;
+                }
 
                 setCurrentUser(userData);
                 setCarsCurrentUser(userData);
@@ -180,29 +117,28 @@ window.addEventListener('DOMContentLoaded', () => {
                 setStatsCurrentUser(userData);
 
                 document.querySelectorAll('.tab-btn').forEach(tab => {
-                    if (userData.role === 'admin' && userData.status === 'active') {
-                        tab.style.display = 'block';
-                    } else {
-                        tab.style.display = tab.dataset.tab === 'cars' ? 'block' : 'none';
-                    }
+                    tab.style.display = userData.role === 'admin' || tab.dataset.tab === 'cars'
+                        ? 'block'
+                        : 'none';
                 });
 
-                // Show My Activity tab for all active users
                 const myActivityTab = document.getElementById('my-activity-tab');
                 if (myActivityTab) {
-                    myActivityTab.style.display = userData.status === 'active' ? 'block' : 'none';
+                    myActivityTab.style.display = 'block';
                 }
 
                 showDashboard();
                 updateRequestsBadge();
-            } else {
-                await signOut(auth);
-                showAuthView();
+                return;
             }
-        } else {
+
             setCurrentUser(null);
             showAuthView();
             await checkSystemState();
+        } catch (error) {
+            console.error('Authentication state handling failed:', error);
+            showAuthView();
+            showMessage('Unable to load your account. Please refresh and try again.', 'error');
         }
     });
 });
@@ -250,123 +186,11 @@ function showDashboard() {
 
 async function checkSystemState() {
     try {
-        // الطريقة الآمنة الجديدة - تقرأ مستند عام لا يحتوي بيانات حساسة
-        const statusRef = doc(db, 'system', 'status');
-        const statusSnap = await getDoc(statusRef);
-        
-        if (statusSnap.exists()) {
-            const data = statusSnap.data();
-            if (data.usersCount > 0 || data.initialized === true) {
-                renderLoginForm();
-            } else {
-                renderSetupForm();
-            }
-        } else {
-            // هجرة أول مرة - إذا لم يوجد المستند العام
-            try {
-                const q = query(collection(db, 'users'), limit(1));
-                const snapshot = await getDocs(q);
-                if (snapshot.empty) {
-                    renderSetupForm();
-                } else {
-                    renderLoginForm();
-                }
-            } catch (e) {
-                // إذا فشل بسبب الصلاحيات الجديدة، اعرض تسجيل الدخول مباشرة ولا تكسر الفورم
-                console.warn('Fallback to login form:', e.message);
-                renderLoginForm();
-            }
-        }
-    } catch (error) {
-        // أهم حماية: حتى لو فشل كل شيء، اعرض فورم الدخول
-        console.error('checkSystemState error:', error);
+        const statusSnap = await getDoc(doc(db, 'system', 'status'));
         renderLoginForm();
-    }
-}
-
-function renderSetupForm() {
-    document.getElementById('form-container').innerHTML = `
-        <h2>System Setup</h2>
-        <p style="margin-bottom: 20px; font-size: 0.9rem; color: #666; text-align:center;">
-            Create the protected Super Admin account.
-        </p>
-        <form id="setup-form">
-            <div class="form-group">
-                <label>Username</label>
-                <input type="text" id="username" required>
-            </div>
-            <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="email" required>
-            </div>
-            <div class="form-group">
-                <label>Password</label>
-                <input type="password" id="password" required minlength="6">
-            </div>
-            <div class="form-group">
-                <label>Phone (Starts with 0, 10 digits)</label>
-                <input type="text" id="phone" required pattern="0\\d{9}" placeholder="0XXXXXXXXX">
-            </div>
-            <div class="form-group">
-                <label>Security PIN (4 digits)</label>
-                <input type="password" id="securityPin" required pattern="\\d{4}">
-            </div>
-            <button type="submit" class="btn">Create Super Admin</button>
-        </form>
-    `;
-    document.getElementById('setup-form').addEventListener('submit', handleSetup);
-}
-
-async function handleSetup(e) {
-    e.preventDefault();
-    const username = document.getElementById('username').value.trim();
-    const email = document.getElementById('email').value.trim();
-    const password = document.getElementById('password').value;
-    const phone = document.getElementById('phone').value.trim();
-    const securityPin = document.getElementById('securityPin').value;
-
-    if (!/^0\d{9}$/.test(phone)) {
-        showMessage('Phone number must start with 0 and contain exactly 10 digits (e.g. 0501234567).', 'error');
-        return;
-    }
-    if (!/^\d{4}$/.test(securityPin)) {
-        showMessage('Security PIN must be exactly 4 numeric digits.', 'error');
-        return;
-    }
-
-    try {
-        const q = query(collection(db, 'users'), where('username', '==', username));
-        const usernameSnapshot = await getDocs(q);
-        if (!usernameSnapshot.empty) {
-            showMessage('This username is already taken. Please choose another.', 'error');
-            return;
-        }
-
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const uid = userCredential.user.uid;
-
-        // Store PIN as SHA-256 hash (never plain text)
-        const hashedPin = await hashPin(securityPin);
-
-        await setDoc(doc(db, 'users', uid), {
-            username,
-            email,
-            phone,
-            role: 'admin',
-            status: 'active',
-            notes: '',
-            isProtected: true,
-            securityPin: hashedPin,
-            rememberSession: false
-        });
-
-        await logAction({ uid, username }, 'SYSTEM_SETUP', {
-            text: 'System initialized with Super Admin'
-        });
-
-        showMessage('Super Admin account created successfully. You can now log in.', 'success');
     } catch (error) {
-        handleFirebaseError(error);
+        console.error('System state check failed:', error);
+        renderLoginForm();
     }
 }
 
@@ -409,18 +233,6 @@ async function handleLogin(e) {
     }
 
     try {
-        const lockStatus = await isLoginLocked(email);
-        if (lockStatus.locked) {
-            showMessage(
-                `Account temporarily locked due to too many failed attempts. Please try again after ${formatRemainingLock(lockStatus.remainingMs)}.`,
-                'error'
-            );
-            await logAction({ username: email }, 'LOGIN_FAILED', {
-                text: `Locked account login attempt for ${email}`
-            });
-            return;
-        }
-
         await auth.setPersistence(rememberMe ? browserLocalPersistence : browserSessionPersistence);
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const uid = userCredential.user.uid;
@@ -442,35 +254,9 @@ async function handleLogin(e) {
             return;
         }
 
-        await clearLoginAttempts(email);
-        await updateDoc(doc(db, 'users', uid), { rememberSession: rememberMe });
-        await logAction(userData, 'LOGIN', { text: 'User logged in' });
+        await logAction({ ...userData, uid }, 'LOGIN', { text: 'User logged in' });
     } catch (error) {
-        let failInfo = null;
-        try {
-            failInfo = await recordFailedLogin(email);
-        } catch (recordErr) {
-            console.error('Failed to record login attempt:', recordErr);
-        }
-
-        await logAction({ username: email }, 'LOGIN_FAILED', {
-            text: `Failed login attempt for ${email}`
-        });
-
-        if (failInfo && failInfo.locked) {
-            showMessage('Too many failed login attempts. Your account is locked for 15 minutes.', 'error');
-        } else if (failInfo && failInfo.failCount) {
-            const left = MAX_LOGIN_ATTEMPTS - failInfo.failCount;
-            handleFirebaseError(error);
-            if (left > 0) {
-                showMessage(
-                    `Login failed. You have ${left} attempt${left === 1 ? '' : 's'} remaining before the account is temporarily locked.`,
-                    'warning'
-                );
-            }
-        } else {
-            handleFirebaseError(error);
-        }
+        handleFirebaseError(error);
     }
 }
 
@@ -480,7 +266,7 @@ async function handleLogout() {
         if (currentUser) {
             const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
             if (userDoc.exists()) {
-                await logAction(userDoc.data(), 'LOGOUT', { text: 'User logged out' });
+                await logAction({ ...userDoc.data(), uid: currentUser.uid }, 'LOGOUT', { text: 'User logged out' });
             }
         }
         await signOut(auth);

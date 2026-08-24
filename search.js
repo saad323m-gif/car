@@ -122,7 +122,8 @@ async function runSearch() {
 
         renderPage();
     } catch (error) {
-        resultsContainer.innerHTML = `<p class="error">Search error: ${error.message}</p>`;
+        console.error('Search failed:', error);
+        resultsContainer.innerHTML = '<p class="error">Unable to complete the search. Please try again.</p>';
     }
 }
 
@@ -281,9 +282,9 @@ function renderUserCard(data) {
         <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
             <span class="card-title">${escapeHtml(data.username)}</span>
             <div class="card-meta">
-                <span class="role-${data.role}">${data.role}</span>
-                <span class="status-${data.status}">${data.status}</span>
-                <span class="match-badge">Matched: ${data._match}</span>
+                <span class="role-${escapeHtml(data.role)}">${escapeHtml(data.role)}</span>
+                <span class="status-${escapeHtml(data.status)}">${escapeHtml(data.status)}</span>
+                <span class="match-badge">Matched: ${escapeHtml(data._match)}</span>
             </div>
         </div>
         <div class="card-body">
@@ -326,7 +327,7 @@ function renderCarCard(data) {
             <span class="card-title">${escapeHtml(label)}</span>
             <div class="card-meta">
                 <span>${escapeHtml(data.carId || '')}</span>
-                <span class="match-badge">Matched: ${data._match}</span>
+                <span class="match-badge">Matched: ${escapeHtml(data._match)}</span>
             </div>
         </div>
         <div class="card-body">
@@ -363,8 +364,8 @@ function renderLogCard(data) {
         <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
             <span class="card-title">${escapeHtml(data.actionType || 'Action')}</span>
             <div class="card-meta">
-                <span class="timestamp-meta">${dateStr}</span>
-                <span class="match-badge">Matched: ${data._match}</span>
+                <span class="timestamp-meta">${escapeHtml(dateStr)}</span>
+                <span class="match-badge">Matched: ${escapeHtml(data._match)}</span>
             </div>
         </div>
         <div class="card-body">

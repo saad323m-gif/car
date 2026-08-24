@@ -1,20 +1,10 @@
 /**
- * Shared Utilities - Car Management System
- * English only | Latin digits only | Production-ready
- * Improved: hashed PIN support, richer messages, shared helpers
+ * Shared utilities for the Car Management System.
+ * Dynamic values must be escaped before insertion into HTML templates.
  */
-
-import { auth } from "./firebase.js";
 
 let messageTimeout = null;
 
-/* ------------------------------------------------------------------ */
-/*  Messaging                                                         */
-/* ------------------------------------------------------------------ */
-
-/**
- * Display a message (auto-dismiss after 6 seconds for longer texts)
- */
 export function showMessage(text, type = 'error', target = 'auth') {
     const boxId = target === 'dashboard' ? 'dashboard-message-box' : 'message-box';
     const box = document.getElementById(boxId);
@@ -25,11 +15,11 @@ export function showMessage(text, type = 'error', target = 'auth') {
         messageTimeout = null;
     }
 
-    box.textContent = text;
+    box.textContent = String(text || '');
     box.className = `message-box ${type}`;
     box.style.opacity = '1';
 
-    const duration = text.length > 80 ? 7000 : 5500;
+    const duration = String(text || '').length > 80 ? 7000 : 5500;
     messageTimeout = setTimeout(() => {
         box.classList.add('fade-out');
         setTimeout(() => {
@@ -40,114 +30,71 @@ export function showMessage(text, type = 'error', target = 'auth') {
     }, duration);
 }
 
-/**
- * Clear any visible message immediately
- */
 export function clearMessage(target = 'dashboard') {
     const boxId = target === 'dashboard' ? 'dashboard-message-box' : 'message-box';
     const box = document.getElementById(boxId);
-    if (box) {
-        if (messageTimeout) {
-            clearTimeout(messageTimeout);
-            messageTimeout = null;
-        }
-        box.textContent = '';
-        box.className = 'message-box';
-        box.style.opacity = '1';
+    if (!box) return;
+
+    if (messageTimeout) {
+        clearTimeout(messageTimeout);
+        messageTimeout = null;
     }
+
+    box.textContent = '';
+    box.className = 'message-box';
+    box.style.opacity = '1';
 }
 
-/**
- * Centralized Firebase / general error handler with clearer messages
- */
 export function handleFirebaseError(error, target = 'auth') {
-    let message = '';
-    switch (error.code) {
-        case 'auth/invalid-email':
-            message = 'Invalid email format. Please check the address and try again.';
-            break;
-        case 'auth/user-disabled':
-            message = 'This account has been disabled. Contact an administrator.';
-            break;
-        case 'auth/user-not-found':
-            message = 'No account found with this email address.';
-            break;
-        case 'auth/wrong-password':
-            message = 'Incorrect password. Please try again.';
-            break;
-        case 'auth/invalid-credential':
-            message = 'Invalid email or password. Please check your credentials.';
-            break;
-        case 'auth/email-already-in-use':
-            message = 'This email is already registered to another account.';
-            break;
-        case 'auth/weak-password':
-            message = 'Password is too weak. Use at least 6 characters.';
-            break;
-        case 'auth/too-many-requests':
-            message = 'Too many failed attempts. Please wait a few minutes and try again.';
-            break;
-        case 'auth/network-request-failed':
-            message = 'Network error. Check your internet connection and try again.';
-            break;
-        case 'auth/requires-recent-login':
-            message = 'For security, please log out and log in again before performing this action.';
-            break;
-        case 'permission-denied':
-            message = 'Permission denied. You do not have the required access for this action.';
-            break;
-        case 'unavailable':
-            message = 'Service temporarily unavailable. Please try again shortly.';
-            break;
-        default:
-            message = error.message
-                ? `System error: ${error.message}`
-                : 'An unexpected error occurred. Please try again.';
+    const code = error?.code || '';
+    let message = 'Unable to complete the request. Please try again.';
+
+    if (code === 'auth/invalid-email') {
+        message = 'Please enter a valid email address.';
+    } else if (code === 'auth/invalid-credential' || code === 'auth/user-not-found' || code === 'auth/wrong-password') {
+        message = 'Invalid email or password.';
+    } else if (code === 'auth/email-already-in-use') {
+        message = 'This email address is already registered.';
+    } else if (code === 'auth/weak-password') {
+        message = 'Password does not meet the security requirements.';
+    } else if (code === 'auth/too-many-requests') {
+        message = 'Too many attempts. Please wait a few minutes and try again.';
+    } else if (code === 'auth/network-request-failed' || code === 'unavailable') {
+        message = 'Network or service issue. Please check your connection and retry.';
+    } else if (code === 'auth/requires-recent-login') {
+        message = 'For security, please sign in again before continuing.';
+    } else if (code === 'permission-denied') {
+        message = 'You do not have permission to complete this action.';
     }
+
     showMessage(message, 'error', target);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Security PIN hashing (SHA-256 via Web Crypto)                     */
-/* ------------------------------------------------------------------ */
-
-/**
- * Hash a 4-digit PIN using SHA-256.
- * Returns a 64-character hex string.
- */
-export async function hashPin(pin) {
-    if (!pin || typeof pin !== 'string') return '';
-    const encoder = new TextEncoder();
-    const data = encoder.encode(String(pin).trim());
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+export function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
-/**
- * Verify a plain PIN against a stored value.
- * Supports both legacy plain-text (length 4) and hashed (length 64) values
- * so existing Super Admin accounts continue to work.
- */
-export async function verifyPin(plainPin, storedValue) {
-    if (!plainPin || !storedValue) return false;
-    const stored = String(storedValue).trim();
-    // Legacy plain-text PIN
-    if (stored.length === 4 && /^\d{4}$/.test(stored)) {
-        return plainPin === stored;
-    }
-    // Hashed PIN
-    const hashed = await hashPin(plainPin);
-    return hashed === stored;
+export function escapeAttribute(value) {
+    return escapeHtml(value);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Date / Label helpers                                              */
-/* ------------------------------------------------------------------ */
+export function sanitizePlainText(value, maxLength = 500) {
+    return String(value ?? '')
+        .replace(/[\u0000-\u001F\u007F]/g, ' ')
+        .trim()
+        .slice(0, maxLength);
+}
 
 export function formatDateTime(ts) {
     if (!ts) return 'N/A';
     const date = ts.toDate ? ts.toDate() : new Date(ts);
+    if (Number.isNaN(date.getTime())) return 'N/A';
+
     return date.toLocaleString('en-GB', {
         timeZone: 'Asia/Dubai',
         day: '2-digit',
@@ -163,6 +110,8 @@ export function formatDateTime(ts) {
 export function formatDateOnly(ts) {
     if (!ts) return 'N/A';
     const date = ts.toDate ? ts.toDate() : new Date(ts);
+    if (Number.isNaN(date.getTime())) return 'N/A';
+
     return date.toLocaleDateString('en-GB', {
         timeZone: 'Asia/Dubai',
         day: '2-digit',
@@ -173,45 +122,48 @@ export function formatDateOnly(ts) {
 
 export function formatPeriod(start, end) {
     const startStr = formatDateTime(start);
-    if (!end) return `From ${startStr} to Now`;
-    return `From ${startStr} to ${formatDateTime(end)}`;
+    return end ? `From ${startStr} to ${formatDateTime(end)}` : `From ${startStr} to Now`;
 }
 
 export function formatCarLabel(carData) {
     if (!carData) return 'Unknown Car';
     const id = carData.carId || 'N/A';
-    const num = carData.plateNumber || '';
+    const number = carData.plateNumber || '';
     const code = carData.plateCode || '';
     const emirate = carData.emirate || '';
-    return `${id} | ${num} ${code} (${emirate})`;
+    return `${id} | ${number} ${code} (${emirate})`;
 }
 
 export function isAdmin(userData) {
-    return !!(userData && userData.role === 'admin' && userData.status === 'active');
+    return Boolean(userData && userData.role === 'admin' && userData.status === 'active');
 }
 
 export function isActiveUser(userData) {
-    return !!(userData && userData.uid && userData.status === 'active');
+    return Boolean(userData && userData.uid && userData.status === 'active');
 }
 
 export function renderAccessDenied() {
     const container = document.getElementById('dashboard-container');
-    if (container) {
-        container.innerHTML = `
+    if (!container) return;
+
+    container.innerHTML = `
+        <section class="access-denied" role="alert">
             <h2>Access Denied</h2>
-            <p style="text-align:center; color:#666; margin-top:12px;">
-                You do not have permission to view this page.
-            </p>
-        `;
-    }
+            <p>You do not have permission to view this page.</p>
+        </section>
+    `;
 }
 
 export function daysUntil(expiry) {
     if (!expiry) return 0;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const exp = expiry.toDate ? expiry.toDate() : new Date(expiry);
-    return Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
+    const date = expiry.toDate ? expiry.toDate() : new Date(expiry);
+    if (Number.isNaN(date.getTime())) return 0;
+
+    const dubaiToday = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Dubai' }));
+    dubaiToday.setHours(0, 0, 0, 0);
+    const dubaiExpiry = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Dubai' }));
+    dubaiExpiry.setHours(0, 0, 0, 0);
+    return Math.ceil((dubaiExpiry - dubaiToday) / 86400000);
 }
 
 export function expiryClass(days) {
@@ -222,36 +174,35 @@ export function expiryClass(days) {
 
 export function toDateInputValue(ts) {
     if (!ts) return '';
-    try {
-        const d = ts.toDate ? ts.toDate() : new Date(ts);
-        if (isNaN(d.getTime())) return '';
-        return d.toISOString().split('T')[0];
-    } catch {
-        return '';
-    }
+    const date = ts.toDate ? ts.toDate() : new Date(ts);
+    if (Number.isNaN(date.getTime())) return '';
+
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Dubai',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Shared UI helpers (reduce duplication)                            */
-/* ------------------------------------------------------------------ */
-
-/** Standard emirate options HTML (used in multiple forms) */
 export function emirateOptionsHtml(selected = '') {
     const emirates = [
         'Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman',
         'Fujairah', 'Umm Al Quwain', 'Ras Al Khaimah', 'Other'
     ];
-    return emirates.map(e =>
-        `<option value="${e}" ${selected === e ? 'selected' : ''}>${e}</option>`
-    ).join('');
+
+    return emirates.map(emirate => {
+        const isSelected = emirate === selected ? ' selected' : '';
+        return `<option value="${escapeAttribute(emirate)}"${isSelected}>${escapeHtml(emirate)}</option>`;
+    }).join('');
 }
 
-/** Empty-state helper */
 export function emptyStateHtml(text) {
-    return `<p class="empty-state">${text}</p>`;
+    return `<p class="empty-state">${escapeHtml(text)}</p>`;
 }
 
-/** Loading text helper */
 export function loadingHtml(text = 'Loading...') {
-    return `<p class="loading-text">${text}</p>`;
+    return `<p class="loading-text">${escapeHtml(text)}</p>`;
 }

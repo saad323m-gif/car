@@ -4,17 +4,17 @@
  */
 
 import { auth, db, firebaseConfig } from "./firebase.js";
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, deleteUser } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import {
     collection, doc, setDoc, getDoc, getDocs, updateDoc,
-    query, where, limit, startAfter, orderBy
+    query, where, limit, startAfter, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { logAction } from "./logs.js";
 import {
     showMessage, handleFirebaseError, isAdmin, isActiveUser,
     renderAccessDenied, formatDateTime, formatPeriod,
-    hashPin, verifyPin, emptyStateHtml, loadingHtml
+    emptyStateHtml, loadingHtml, escapeHtml, escapeAttribute, sanitizePlainText
 } from "./utils.js";
 
 let currentUserData = null;
@@ -33,7 +33,7 @@ export function renderDashboard() {
     container.innerHTML = `
         <div class="dashboard-header">
             <h2>Admin Dashboard</h2>
-            <p style="text-align:center;">Welcome, <strong>${currentUserData.username}</strong></p>
+            <p style="text-align:center;">Welcome, <strong>${escapeHtml(currentUserData.username)}</strong></p>
             <button class="btn btn-sm btn-warning" id="edit-profile-btn" style="margin-top: 10px;">Edit My Profile</button>
         </div>
         <div class="divider"></div>
@@ -109,12 +109,16 @@ async function handleAddUser(e) {
         return;
     }
 
-    const username = usernameEl.value.trim();
+    const username = sanitizePlainText(usernameEl.value, 40);
     const email = emailEl.value.trim();
     const password = passwordEl.value;
     const phone = phoneEl.value.trim();
-    const role = roleEl.value;
+    const role = roleEl.value === 'admin' ? 'admin' : 'user';
 
+    if (username.length < 2) {
+        showMessage('Username must contain at least 2 characters.', 'error', 'dashboard');
+        return;
+    }
     if (!/^0\d{9}$/.test(phone)) {
         showMessage('Phone number must start with 0 and contain exactly 10 digits (e.g. 0501234567).', 'error', 'dashboard');
         return;
@@ -128,24 +132,32 @@ async function handleAddUser(e) {
             return;
         }
 
-        const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
+        const secondaryApp = getApps().find(app => app.name === 'Secondary') || initializeApp(firebaseConfig, 'Secondary');
         const secondaryAuth = getAuth(secondaryApp);
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-        const uid = userCredential.user.uid;
+        const createdUser = userCredential.user;
+        const uid = createdUser.uid;
 
-        await setDoc(doc(db, 'users', uid), {
-            username,
-            email,
-            phone,
-            role,
-            status: 'active',
-            notes: '',
-            isProtected: false,
-            securityPin: null,
-            rememberSession: false
-        });
-
-        await secondaryAuth.signOut();
+        try {
+            await setDoc(doc(db, 'users', uid), {
+                username,
+                email,
+                phone,
+                role,
+                status: 'active',
+                notes: '',
+                isProtected: false,
+                securityPin: null,
+                rememberSession: false,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            });
+        } catch (profileError) {
+            await deleteUser(createdUser).catch(() => undefined);
+            throw profileError;
+        } finally {
+            await secondaryAuth.signOut().catch(() => undefined);
+        }
 
         await logAction(currentUserData, 'CREATE_USER', {
             targetId: uid,
@@ -248,10 +260,10 @@ function renderUserCard(uid, data) {
     card.innerHTML = `
         <div class="card-header" id="header-${uid}">
             <div class="card-header-top">
-                <span class="card-title">${data.username}</span>
+                <span class="card-title">${escapeHtml(data.username)}</span>
                 <div class="card-meta">
-                    <span class="role-${data.role}">${data.role}</span>
-                    <span class="status-${data.status}">${data.status}</span>
+                    <span class="role-${escapeAttribute(data.role)}">${escapeHtml(data.role)}</span>
+                    <span class="status-${escapeAttribute(data.status)}">${escapeHtml(data.status)}</span>
                 </div>
             </div>
             <div class="card-header-plates" id="header-plates-${uid}">
@@ -263,15 +275,15 @@ function renderUserCard(uid, data) {
                 <div class="detail-list">
                     <div class="detail-item">
                         <span class="detail-label">Email</span>
-                        <span class="detail-value">${data.email}</span>
+                        <span class="detail-value">${escapeHtml(data.email)}</span>
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">Phone</span>
-                        <span class="detail-value">${data.phone}</span>
+                        <span class="detail-value">${escapeHtml(data.phone)}</span>
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">Notes</span>
-                        <span class="detail-value">${data.notes || 'N/A'}</span>
+                        <span class="detail-value">${escapeHtml(data.notes || 'N/A')}</span>
                     </div>
                     <div class="detail-item">
                         <span class="detail-label">Assigned Cars</span>
@@ -329,10 +341,10 @@ async function loadUserCars(uid) {
             carsSnap.forEach(d => {
                 const c = d.data();
                 plateItems.push(`
-                    <div class="mini-plate" title="${c.carId || ''}">
-                        <span class="mini-plate-emirate">${c.emirate || ''}</span>
-                        <span class="mini-plate-number">${c.plateNumber || ''}</span>
-                        <span class="mini-plate-code">${c.plateCode || ''}</span>
+                    <div class="mini-plate" title="${escapeAttribute(c.carId || '')}">
+                        <span class="mini-plate-emirate">${escapeHtml(c.emirate || '')}</span>
+                        <span class="mini-plate-number">${escapeHtml(c.plateNumber || '')}</span>
+                        <span class="mini-plate-code">${escapeHtml(c.plateCode || '')}</span>
                     </div>
                 `);
             });
@@ -475,14 +487,14 @@ async function renderUserActivity(uid) {
         logs.slice(0, 15).forEach(log => {
             const dateStr = formatDateTime(log.timestamp);
             let itemClass = 'timeline-item';
-            let text = log.details || '';
+            let text = escapeHtml(log.details || '');
 
             if (log.actionType === 'CAR_ASSIGN' || log.actionType === 'AUTO_LINK') {
                 itemClass += ' ongoing';
-                text = `Assigned car <strong>${log.targetName || log.targetId}</strong>`;
+                text = `Assigned car <strong>${escapeHtml(log.targetName || log.targetId)}</strong>`;
             } else if (log.actionType === 'CAR_UNASSIGN' || log.actionType === 'APPROVE_UNLINK') {
                 itemClass += ' completed';
-                text = `Unassigned car <strong>${log.targetName || log.targetId}</strong>`;
+                text = `Unassigned car <strong>${escapeHtml(log.targetName || log.targetId)}</strong>`;
             } else if (log.actionType === 'LOGIN') {
                 text = 'Logged into the system';
             } else if (log.actionType === 'LOGOUT') {
@@ -502,7 +514,8 @@ async function renderUserActivity(uid) {
         html += '</div>';
         activityArea.innerHTML = html;
     } catch (error) {
-        activityArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error: ${error.message}</p>`;
+        console.error('Load member activity failed:', error);
+        activityArea.innerHTML = '<p class="error" style="font-size:0.85rem;">Unable to load activity.</p>';
     }
 }
 
@@ -522,19 +535,19 @@ async function renderInlineEditForm(uid) {
         <form id="form-edit-${uid}" class="inline-edit-form">
             <div class="form-group">
                 <label>Username</label>
-                <input type="text" id="edit-un-${uid}" value="${data.username}" required>
+                <input type="text" id="edit-un-${uid}" value="${escapeAttribute(data.username)}" required maxlength="40">
             </div>
-            <div class="form-group">
+            <div class="form-group read-only-field">
                 <label>Email</label>
-                <input type="email" id="edit-em-${uid}" value="${data.email}" required>
+                <input type="email" value="${escapeAttribute(data.email)}" readonly aria-readonly="true">
             </div>
             <div class="form-group">
                 <label>Phone</label>
-                <input type="text" id="edit-ph-${uid}" value="${data.phone}" required pattern="0\\d{9}">
+                <input type="text" id="edit-ph-${uid}" value="${escapeAttribute(data.phone)}" required pattern="0\\d{9}">
             </div>
             <div class="form-group">
                 <label>Notes (Admin only)</label>
-                <input type="text" id="edit-nt-${uid}" value="${data.notes || ''}">
+                <input type="text" id="edit-nt-${uid}" value="${escapeAttribute(data.notes || '')}" maxlength="500">
             </div>
             <div class="form-group full-width" style="display:flex; gap:10px;">
                 <button type="submit" class="btn btn-sm">Save Changes</button>
@@ -548,15 +561,13 @@ async function renderInlineEditForm(uid) {
         formEdit.addEventListener('submit', async (e) => {
             e.preventDefault();
             const unEl = document.getElementById(`edit-un-${uid}`);
-            const emEl = document.getElementById(`edit-em-${uid}`);
             const phEl = document.getElementById(`edit-ph-${uid}`);
             const ntEl = document.getElementById(`edit-nt-${uid}`);
-            if (!unEl || !emEl || !phEl) return;
+            if (!unEl || !phEl) return;
 
-            const newUsername = unEl.value.trim();
-            const newEmail = emEl.value.trim();
+            const newUsername = sanitizePlainText(unEl.value, 40);
             const newPhone = phEl.value.trim();
-            const newNotes = ntEl ? ntEl.value.trim() : '';
+            const newNotes = sanitizePlainText(ntEl ? ntEl.value : '', 500);
 
             if (!/^0\d{9}$/.test(newPhone)) {
                 showMessage('Error: Phone must be 10 digits starting with 0.', 'error', 'dashboard');
@@ -566,9 +577,9 @@ async function renderInlineEditForm(uid) {
             try {
                 await updateDoc(doc(db, 'users', uid), {
                     username: newUsername,
-                    email: newEmail,
                     phone: newPhone,
-                    notes: newNotes
+                    notes: newNotes,
+                    updatedAt: serverTimestamp()
                 });
 
                 await logAction(currentUserData, 'EDIT_USER', {
@@ -607,36 +618,20 @@ function renderEditProfileForm() {
 
     container.innerHTML = `
         <h2>Edit Protected Profile</h2>
-        <p style="color: #666; margin-bottom: 20px; text-align:center;">Two-step verification required.</p>
+        <p style="color: #666; margin-bottom: 20px; text-align:center;">Confirm your current password to update this protected profile.</p>
         <form id="edit-profile-form" style="max-width: 500px; margin: 0 auto;">
             <div class="form-group">
                 <label>Current Password</label>
                 <input type="password" id="verify-password" required autocomplete="current-password">
             </div>
-            <div class="form-group">
-                <label>Current Security PIN (4 digits)</label>
-                <input type="password" id="verify-pin" required pattern="\\d{4}" inputmode="numeric" maxlength="4">
-            </div>
             <div class="divider"></div>
             <div class="form-group">
                 <label>New Username</label>
-                <input type="text" id="edit-username" value="${currentUserData.username}" required>
+                <input type="text" id="edit-username" value="${escapeAttribute(currentUserData.username)}" required maxlength="40">
             </div>
             <div class="form-group">
                 <label>New Phone</label>
-                <input type="text" id="edit-phone" value="${currentUserData.phone}" required pattern="0\\d{9}">
-            </div>
-            <div class="divider"></div>
-            <p style="color:#666; font-size:0.9rem; margin-bottom:12px; text-align:center;">
-                Leave New PIN fields empty if you do not want to change the PIN.
-            </p>
-            <div class="form-group">
-                <label>New Security PIN (4 digits, optional)</label>
-                <input type="password" id="edit-new-pin" pattern="\\d{4}" inputmode="numeric" maxlength="4" placeholder="Leave blank to keep current">
-            </div>
-            <div class="form-group">
-                <label>Confirm New Security PIN</label>
-                <input type="password" id="edit-confirm-pin" pattern="\\d{4}" inputmode="numeric" maxlength="4" placeholder="Leave blank to keep current">
+                <input type="text" id="edit-phone" value="${escapeAttribute(currentUserData.phone)}" required pattern="0\\d{9}">
             </div>
             <button type="submit" class="btn">Verify & Update</button>
             <button type="button" class="btn btn-secondary" id="cancel-edit" style="margin-top:10px;">Cancel</button>
@@ -655,48 +650,24 @@ function renderEditProfileForm() {
 
 async function handleEditProtectedProfile(e) {
     e.preventDefault();
-    if (!currentUserData.isProtected) return;
+    if (!currentUserData?.isProtected || !auth.currentUser) return;
 
     const passwordEl = document.getElementById('verify-password');
-    const pinEl = document.getElementById('verify-pin');
     const usernameEl = document.getElementById('edit-username');
     const phoneEl = document.getElementById('edit-phone');
-    const newPinEl = document.getElementById('edit-new-pin');
-    const confirmPinEl = document.getElementById('edit-confirm-pin');
-
-    if (!passwordEl || !pinEl || !usernameEl || !phoneEl) return;
+    if (!passwordEl || !usernameEl || !phoneEl) return;
 
     const password = passwordEl.value;
-    const pin = pinEl.value;
-    const newUsername = usernameEl.value.trim();
+    const newUsername = sanitizePlainText(usernameEl.value, 40);
     const newPhone = phoneEl.value.trim();
-    const newPin = newPinEl ? newPinEl.value.trim() : '';
-    const confirmPin = confirmPinEl ? confirmPinEl.value.trim() : '';
 
-    // Verify PIN against stored hash (supports legacy plain-text for migration)
-    const pinValid = await verifyPin(pin, currentUserData.securityPin);
-    if (!pinValid) {
-        showMessage('Security error: The Security PIN you entered is incorrect.', 'error', 'dashboard');
+    if (newUsername.length < 2) {
+        showMessage('Username must contain at least 2 characters.', 'error', 'dashboard');
         return;
     }
     if (!/^0\d{9}$/.test(newPhone)) {
         showMessage('Phone number must start with 0 and contain exactly 10 digits.', 'error', 'dashboard');
         return;
-    }
-
-    if (newPin || confirmPin) {
-        if (!/^\d{4}$/.test(newPin)) {
-            showMessage('New Security PIN must be exactly 4 numeric digits.', 'error', 'dashboard');
-            return;
-        }
-        if (newPin !== confirmPin) {
-            showMessage('New PIN and confirmation do not match. Please re-enter them carefully.', 'error', 'dashboard');
-            return;
-        }
-        if (newPin === pin) {
-            showMessage('New PIN must be different from your current PIN.', 'error', 'dashboard');
-            return;
-        }
     }
 
     try {
@@ -715,27 +686,20 @@ async function handleEditProtectedProfile(e) {
             }
         }
 
-        const updates = {
+        await updateDoc(doc(db, 'users', currentUserData.uid), {
             username: newUsername,
-            phone: newPhone
-        };
-        if (newPin) {
-            // Always store the new PIN as a hash
-            updates.securityPin = await hashPin(newPin);
-        }
-
-        await updateDoc(doc(db, 'users', currentUserData.uid), updates);
+            phone: newPhone,
+            updatedAt: serverTimestamp()
+        });
 
         await logAction(currentUserData, 'EDIT_SELF_PROFILE', {
             targetId: currentUserData.uid,
             targetName: newUsername,
-            text: newPin
-                ? 'Super Admin updated own profile and security PIN'
-                : 'Super Admin updated own profile'
+            text: 'Protected profile updated after password verification'
         });
 
         showMessage('Profile updated successfully. The page will reload in a moment...', 'success', 'dashboard');
-        setTimeout(() => window.location.reload(), 2000);
+        setTimeout(() => window.location.reload(), 900);
     } catch (error) {
         handleFirebaseError(error, 'dashboard');
     }
@@ -807,20 +771,20 @@ async function loadMyPersonalActivity() {
         unique.slice(0, 25).forEach(log => {
             const dateStr = formatDateTime(log.timestamp);
             let itemClass = 'timeline-item';
-            let text = log.details || log.actionType;
+            let text = escapeHtml(log.details || log.actionType || 'Activity');
 
             if (log.actionType === 'CAR_ASSIGN' || log.actionType === 'AUTO_LINK' || log.actionType === 'APPROVE_LINK') {
                 itemClass += ' ongoing';
-                text = `Assigned / Linked to car <strong>${log.targetName || log.targetId}</strong>`;
+                text = `Assigned / Linked to car <strong>${escapeHtml(log.targetName || log.targetId)}</strong>`;
             } else if (log.actionType === 'CAR_UNASSIGN' || log.actionType === 'APPROVE_UNLINK' || log.actionType === 'REQUEST_UNLINK') {
                 itemClass += ' completed';
-                text = `Unassigned / Unlinked from car <strong>${log.targetName || log.targetId}</strong>`;
+                text = `Unassigned / Unlinked from car <strong>${escapeHtml(log.targetName || log.targetId)}</strong>`;
             } else if (log.actionType === 'LOGIN') {
                 text = 'Logged into the system';
             } else if (log.actionType === 'LOGOUT') {
                 text = 'Logged out';
             } else if (log.actionType === 'REQUEST_LINK') {
-                text = `Requested to link car: <strong>${log.targetName || ''}</strong>`;
+                text = `Requested to link car: <strong>${escapeHtml(log.targetName || '')}</strong>`;
             }
 
             html += `
@@ -836,6 +800,7 @@ async function loadMyPersonalActivity() {
 
         timeline.innerHTML = html;
     } catch (error) {
-        timeline.innerHTML = `<p class="error">Error loading activity: ${error.message}</p>`;
+        console.error('Load personal activity failed:', error);
+        timeline.innerHTML = '<p class="error">Unable to load activity.</p>';
     }
 }

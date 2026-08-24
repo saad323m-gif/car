@@ -6,14 +6,14 @@
 import { db } from "./firebase.js";
 import {
     collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc,
-    query, where, limit, startAfter, orderBy, runTransaction, serverTimestamp
+    query, where, limit, startAfter, orderBy, runTransaction, serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { logAction } from "./logs.js";
 import { createLinkRequest, createUnlinkRequest } from "./requests.js";
 import {
     showMessage, handleFirebaseError, formatDateTime, formatDateOnly,
     formatPeriod, formatCarLabel, isAdmin, isActiveUser, renderAccessDenied,
-    daysUntil, expiryClass, toDateInputValue
+    daysUntil, expiryClass, toDateInputValue, escapeHtml, escapeAttribute, sanitizePlainText
 } from "./utils.js";
 
 let currentUserData = null;
@@ -119,8 +119,9 @@ export function renderCarsView() {
             addCarForm.addEventListener('submit', handleAddCar);
         }
 
-        // Filters
+        const activeFilter = sessionStorage.getItem('carsFilter') || 'all';
         document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.filter === activeFilter);
             btn.addEventListener('click', () => {
                 document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
@@ -229,16 +230,16 @@ async function handleAddCar(e) {
         return;
     }
 
-    const plateNum = plateNumEl.value.trim();
-    const plateCode = plateCodeEl.value.trim().toUpperCase();
+    const plateNum = sanitizePlainText(plateNumEl.value, 6);
+    const plateCode = sanitizePlainText(plateCodeEl.value, 3).toUpperCase();
     const emirate = emirateSelect.value;
-    const type = typeEl.value.trim();
-    const owner = ownerEl.value.trim();
-    const vin = vinEl.value.trim().toUpperCase();
+    const type = sanitizePlainText(typeEl.value, 80);
+    const owner = sanitizePlainText(ownerEl.value, 80);
+    const vin = sanitizePlainText(vinEl.value, 40).toUpperCase();
     const manufactureYear = parseInt(yearEl.value);
     const licenseExp = licenseExpEl.value;
     const insuranceExp = insuranceExpEl.value;
-    const notes = notesEl ? notesEl.value.trim() : '';
+    const notes = notesEl ? sanitizePlainText(notesEl.value, 500) : '';
 
     if (isNaN(manufactureYear) || manufactureYear < 1900 || manufactureYear > 2026) {
         showMessage('Error: Please enter a valid manufacture year (1900-2026).', 'error', 'dashboard');
@@ -278,7 +279,8 @@ async function handleAddCar(e) {
             currentUserId: null,
             currentUserName: null,
             status: 'active',
-            createdAt: serverTimestamp()
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
         });
 
         await logAction(currentUserData, 'CREATE_CAR', {
@@ -295,7 +297,8 @@ async function handleAddCar(e) {
         lastVisibleCar = null;
         fetchCars(false);
     } catch (error) {
-        showMessage(`Could not add the car: ${error.message}`, 'error', 'dashboard');
+        console.error('Create car failed:', error);
+        showMessage('Could not add the car. Verify that the plate and VIN are unique, then try again.', 'error', 'dashboard');
     } finally {
         if (submitBtn) {
             submitBtn.disabled = false;
@@ -369,10 +372,10 @@ async function fetchCars(loadMore = false) {
             }
         }
 
-        if (filter && filter !== 'all') sessionStorage.removeItem('carsFilter');
     } catch (error) {
+        console.error('Load cars failed:', error);
         if (listContainer) {
-            listContainer.innerHTML = `<p class="error">Error loading cars: ${error.message}</p>`;
+            listContainer.innerHTML = '<p class="error">Unable to load cars. Please try again.</p>';
         }
     }
 }
@@ -397,7 +400,8 @@ async function fetchUserCars() {
         listContainer.innerHTML = '';
         snapshot.forEach((d) => renderCarCard(d.id, d.data(), true));
     } catch (error) {
-        listContainer.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+        console.error('Load user cars failed:', error);
+        listContainer.innerHTML = '<p class="error">Unable to load your cars. Please try again.</p>';
     }
 }
 
@@ -419,97 +423,61 @@ function renderCarCard(id, data, isUserView = false) {
     const licClass = expiryClass(licDiff);
     const insClass = expiryClass(insDiff);
 
-    const emirateColors = {
-        'Abu Dhabi': '#0070c0',
-        'Dubai': '#b91d1d',
-        'Sharjah': '#ff0000000',
-        'Ajman': '#ed1c24',
-        'Fujairah': '#8a2be2',
-        'Umm Al Quwain': '#006400',
-        'Ras Al Khaimah': '#ff8c00',
-        'Other': '#666666'
-    };
-    const topBarColor = emirateColors[data.emirate] || '#666666';
+    const carId = escapeHtml(data.carId || id);
+    const assigneeName = escapeHtml(data.currentUserName || 'Unassigned');
+    const assignmentText = data.currentUserName
+        ? `Assigned to: ${assigneeName}`
+        : 'Currently unassigned';
 
     let actionsHtml = '';
     if (!isUserView) {
         actionsHtml = `
             <div class="action-buttons" id="car-actions-${id}">
-                <button type="button" class="action-btn action-btn-edit" data-action="edit">✎ Edit</button>
+                <button type="button" class="action-btn action-btn-edit" data-action="edit">Edit</button>
                 ${data.currentUserId
-                    ? '<button type="button" class="action-btn action-btn-unassign" data-action="unassign">👤 Unassign</button>'
-                    : '<button type="button" class="action-btn action-btn-assign" data-action="assign">👤 Assign</button>'}
-                <button type="button" class="action-btn action-btn-print" data-action="print">🖨 Print</button>
-                <button type="button" class="action-btn action-btn-history" data-action="history">📋 History</button>
+                    ? '<button type="button" class="action-btn action-btn-unassign" data-action="unassign">Unassign</button>'
+                    : '<button type="button" class="action-btn action-btn-assign" data-action="assign">Assign</button>'}
+                <button type="button" class="action-btn action-btn-print" data-action="print">Print</button>
+                <button type="button" class="action-btn action-btn-history" data-action="history">History</button>
             </div>
-            <div id="assign-area-${id}" style="margin-top: 10px; display:none;"></div>
-            <div id="edit-area-${id}" style="margin-top: 10px; display:none;"></div>
-            <div id="history-area-${id}" style="margin-top: 10px; display:none;"></div>
+            <div id="assign-area-${id}" class="car-action-area"></div>
+            <div id="edit-area-${id}" class="car-action-area"></div>
+            <div id="history-area-${id}" class="car-action-area"></div>
         `;
     } else {
         actionsHtml = `
             <div class="action-buttons">
-                <button type="button" class="action-btn action-btn-unlink" id="req-unlink-${id}">✎ Request Unlink</button>
-                <button type="button" class="action-btn action-btn-history" id="my-history-${id}">📋 My History</button>
+                <button type="button" class="action-btn action-btn-unlink" id="req-unlink-${id}">Request Unlink</button>
+                <button type="button" class="action-btn action-btn-history" id="my-history-${id}">My History</button>
             </div>
-            <div id="history-area-${id}" style="margin-top: 10px; display:none;"></div>
+            <div id="history-area-${id}" class="car-action-area"></div>
         `;
     }
 
     card.innerHTML = `
-        <div class="card-header" id="header-${id}">
-            <div class="card-header-top">
-                <div class="card-title">
-                    <div class="plate-wrapper">
-                        <div class="plate-meta-top">
-                            <span class="plate-id">${data.carId}</span>
-                            <span class="meta-separator"></span>
-                            <span class="plate-owner">Assignee: ${data.currentUserName || 'Unassigned'}</span>
-                        </div>
-                        <div class="plate-container">
-                            <div style="display:flex; flex-direction:column; align-items:center;">
-                                <div class="plate-top-bar" style="background:${topBarColor};"></div>
-                                <span class="plate-emirate">${data.emirate}</span>
-                            </div>
-                            <span class="plate-number">${data.plateNumber}</span>
-                            <span class="plate-code">${data.plateCode}</span>
-                        </div>
-                    </div>
+        <div class="card-header car-card-header" id="header-${id}" role="button" tabindex="0" aria-expanded="false" aria-controls="body-${id}">
+            <div class="car-summary-id">${carId}</div>
+            <div class="car-summary-divider" aria-hidden="true"></div>
+            <div class="car-assignment-status"><span>Assignment</span><strong>${assignmentText}</strong></div>
+            <div class="plate-wrapper">
+                <div class="plate-container" aria-label="Plate ${escapeAttribute(data.plateNumber)} ${escapeAttribute(data.plateCode)}">
+                    <span class="plate-number">${escapeHtml(data.plateNumber)}</span>
+                    <span class="plate-code">${escapeHtml(data.plateCode)}</span>
                 </div>
             </div>
         </div>
         <div class="card-body" id="body-${id}">
             <div class="detail-list">
-                <div class="detail-item">
-                    <span class="detail-label">Type</span>
-                    <span class="detail-value">${data.type}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Owner Name</span>
-                    <span class="detail-value">${data.ownerName}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">VIN</span>
-                    <span class="detail-value">${data.vin}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Manufacture Year</span>
-                    <span class="detail-value">${data.manufactureYear || 'N/A'}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">License Expiry</span>
-                    <span class="detail-value ${licClass}">${formatDateOnly(data.licenseExpiry)} (${licDiff} days left)</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Insurance Expiry</span>
-                    <span class="detail-value ${insClass}">${formatDateOnly(data.insuranceExpiry)} (${insDiff} days left)</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Notes</span>
-                    <span class="detail-value">${data.notes || 'N/A'}</span>
-                </div>
+                <div class="detail-item"><span class="detail-label">Emirate</span><span class="detail-value">${escapeHtml(data.emirate || 'N/A')}</span></div>
+                <div class="detail-item"><span class="detail-label">Type</span><span class="detail-value">${escapeHtml(data.type || 'N/A')}</span></div>
+                <div class="detail-item"><span class="detail-label">Owner Name</span><span class="detail-value">${escapeHtml(data.ownerName || 'N/A')}</span></div>
+                <div class="detail-item"><span class="detail-label">VIN</span><span class="detail-value">${escapeHtml(data.vin || 'N/A')}</span></div>
+                <div class="detail-item"><span class="detail-label">Manufacture Year</span><span class="detail-value">${escapeHtml(data.manufactureYear || 'N/A')}</span></div>
+                <div class="detail-item"><span class="detail-label">License Expiry</span><span class="detail-value ${licClass}">${escapeHtml(formatDateOnly(data.licenseExpiry))} (${licDiff} days left)</span></div>
+                <div class="detail-item"><span class="detail-label">Insurance Expiry</span><span class="detail-value ${insClass}">${escapeHtml(formatDateOnly(data.insuranceExpiry))} (${insDiff} days left)</span></div>
+                <div class="detail-item"><span class="detail-label">Notes</span><span class="detail-value">${escapeHtml(data.notes || 'N/A')}</span></div>
             </div>
-            <div style="margin-top: 15px;">${actionsHtml}</div>
+            <div class="car-card-actions">${actionsHtml}</div>
         </div>
     `;
 
@@ -517,9 +485,18 @@ function renderCarCard(id, data, isUserView = false) {
 
     const headerEl = card.querySelector(`#header-${id}`);
     if (headerEl) {
-        headerEl.addEventListener('click', (e) => {
-            if (e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
-                card.classList.toggle('open');
+        const toggleCard = () => {
+            const willOpen = !card.classList.contains('open');
+            card.classList.toggle('open', willOpen);
+            headerEl.setAttribute('aria-expanded', String(willOpen));
+        };
+        headerEl.addEventListener('click', event => {
+            if (!['SELECT', 'BUTTON', 'INPUT'].includes(event.target.tagName)) toggleCard();
+        });
+        headerEl.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                toggleCard();
             }
         });
     }
@@ -529,7 +506,7 @@ function renderCarCard(id, data, isUserView = false) {
         actionsWrap.querySelectorAll('[data-action]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                handleCarAction(id, btn.getAttribute('data-action'), data, topBarColor);
+                handleCarAction(id, btn.getAttribute('data-action'), data);
             });
         });
     }
@@ -551,7 +528,7 @@ function renderCarCard(id, data, isUserView = false) {
     }
 }
 
-async function handleCarAction(id, action, data, topBarColor) {
+async function handleCarAction(id, action, data) {
     if (!action || !isAdmin(currentUserData)) return;
 
     const assignArea = document.getElementById(`assign-area-${id}`);
@@ -565,7 +542,7 @@ async function handleCarAction(id, action, data, topBarColor) {
     if (action === 'edit') {
         renderEditCarForm(id, data);
     } else if (action === 'print') {
-        handlePrintCard(data, topBarColor);
+        handlePrintCard(data);
     } else if (action === 'history') {
         await renderCarHistory(id, data);
     } else if (action === 'assign') {
@@ -585,11 +562,11 @@ function renderEditCarForm(carId, data) {
         <form id="edit-car-form-${carId}" class="edit-car-form">
             <div class="form-group">
                 <label>Plate Number</label>
-                <input type="text" id="edit-plate-num-${carId}" value="${data.plateNumber}" required pattern="\\d+" maxlength="6">
+                <input type="text" id="edit-plate-num-${carId}" value="${escapeAttribute(data.plateNumber)}" required pattern="\\d+" maxlength="6">
             </div>
             <div class="form-group">
                 <label>Plate Code</label>
-                <input type="text" id="edit-plate-code-${carId}" value="${data.plateCode}" required maxlength="3">
+                <input type="text" id="edit-plate-code-${carId}" value="${escapeAttribute(data.plateCode)}" required maxlength="3">
             </div>
             <div class="form-group">
                 <label>Emirate</label>
@@ -606,19 +583,19 @@ function renderEditCarForm(carId, data) {
             </div>
             <div class="form-group">
                 <label>Type (Make)</label>
-                <input type="text" id="edit-type-${carId}" value="${data.type}" required>
+                <input type="text" id="edit-type-${carId}" value="${escapeAttribute(data.type)}" required maxlength="80">
             </div>
             <div class="form-group">
                 <label>Owner Name</label>
-                <input type="text" id="edit-owner-${carId}" value="${data.ownerName}" required>
+                <input type="text" id="edit-owner-${carId}" value="${escapeAttribute(data.ownerName)}" required maxlength="80">
             </div>
             <div class="form-group">
                 <label>VIN</label>
-                <input type="text" id="edit-vin-${carId}" value="${data.vin}" required>
+                <input type="text" id="edit-vin-${carId}" value="${escapeAttribute(data.vin)}" required maxlength="40">
             </div>
             <div class="form-group">
                 <label>Manufacture Year</label>
-                <input type="number" id="edit-year-${carId}" value="${data.manufactureYear || ''}" required min="1900" max="2026">
+                <input type="number" id="edit-year-${carId}" value="${escapeAttribute(data.manufactureYear || '')}" required min="1900" max="2100">
             </div>
             <div class="form-group">
                 <label>License Expiry</label>
@@ -630,7 +607,7 @@ function renderEditCarForm(carId, data) {
             </div>
             <div class="form-group full-width">
                 <label>Notes</label>
-                <input type="text" id="edit-notes-${carId}" value="${data.notes || ''}">
+                <input type="text" id="edit-notes-${carId}" value="${escapeAttribute(data.notes || '')}" maxlength="500">
             </div>
             <div class="form-group full-width" style="display:flex; gap:10px;">
                 <button type="submit" class="btn btn-sm btn-success">Save Changes</button>
@@ -659,16 +636,16 @@ function renderEditCarForm(carId, data) {
 async function handleSaveEditCar(carId, originalData) {
     if (!isAdmin(currentUserData)) return;
 
-    const plateNum = document.getElementById(`edit-plate-num-${carId}`).value.trim();
-    const plateCode = document.getElementById(`edit-plate-code-${carId}`).value.trim().toUpperCase();
+    const plateNum = sanitizePlainText(document.getElementById(`edit-plate-num-${carId}`).value, 6);
+    const plateCode = sanitizePlainText(document.getElementById(`edit-plate-code-${carId}`).value, 3).toUpperCase();
     const emirate = document.getElementById(`edit-emirate-${carId}`).value;
-    const type = document.getElementById(`edit-type-${carId}`).value.trim();
-    const owner = document.getElementById(`edit-owner-${carId}`).value.trim();
-    const vin = document.getElementById(`edit-vin-${carId}`).value.trim().toUpperCase();
+    const type = sanitizePlainText(document.getElementById(`edit-type-${carId}`).value, 80);
+    const owner = sanitizePlainText(document.getElementById(`edit-owner-${carId}`).value, 80);
+    const vin = sanitizePlainText(document.getElementById(`edit-vin-${carId}`).value, 40).toUpperCase();
     const year = parseInt(document.getElementById(`edit-year-${carId}`).value);
     const licExp = document.getElementById(`edit-lic-${carId}`).value;
     const insExp = document.getElementById(`edit-ins-${carId}`).value;
-    const notes = document.getElementById(`edit-notes-${carId}`).value.trim();
+    const notes = sanitizePlainText(document.getElementById(`edit-notes-${carId}`).value, 500);
 
     if (isNaN(year) || year < 1900 || year > 2026) {
         showMessage('Error: Please enter a valid manufacture year (1900-2026).', 'error', 'dashboard');
@@ -701,7 +678,8 @@ async function handleSaveEditCar(carId, originalData) {
             manufactureYear: year,
             licenseExpiry: new Date(licExp),
             insuranceExpiry: new Date(insExp),
-            notes
+            notes,
+            updatedAt: serverTimestamp()
         });
 
         const label = formatCarLabel({ carId, plateNumber: plateNum, plateCode, emirate });
@@ -715,11 +693,12 @@ async function handleSaveEditCar(carId, originalData) {
         lastVisibleCar = null;
         fetchCars(false);
     } catch (error) {
-        showMessage(`Could not update the car: ${error.message}`, 'error', 'dashboard');
+        console.error('Update car failed:', error);
+        showMessage('Could not update the car. Verify the entered details and try again.', 'error', 'dashboard');
     }
 }
 
-function handlePrintCard(data, topBarColor) {
+function handlePrintCard(data) {
     try {
         const label = formatCarLabel(data);
         const licStr = formatDateOnly(data.licenseExpiry);
@@ -742,8 +721,7 @@ function handlePrintCard(data, topBarColor) {
         .print-header h2 { margin: 0; color: #1565c0; font-size: 18px; }
         h3 { margin: 12px 0; font-size: 15px; word-break: break-word; }
         .plate-container { display: inline-flex; align-items: center; gap: 14px; border: 2px solid #ff0000; border-radius: 8px; padding: 10px 18px; margin: 16px 0; }
-        .plate-top-bar { width: 100%; height: 5px; margin-bottom: 5px; border-radius: 2px; background: ${topBarColor || '#666'}; }
-        .plate-emirate { font-size: 12px; font-weight: bold; text-transform: uppercase; }
+
         .plate-number { font-family: 'Courier New', monospace; font-size: 28px; font-weight: bold; letter-spacing: 3px; font-variant-numeric: tabular-nums; width: 7ch; text-align: center; display: inline-block; }
         .plate-code { font-family: 'Courier New', monospace; font-size: 22px; font-weight: bold; color: #fff; background: #ff0000; padding: 2px 8px; border-radius: 4px; letter-spacing: 2px; }
         .details { text-align: left; max-width: 420px; margin: 0 auto; }
@@ -758,10 +736,6 @@ function handlePrintCard(data, topBarColor) {
     </div>
     <h3>${safe(label)}</h3>
     <div class="plate-container">
-        <div style="display:flex; flex-direction:column; align-items:center;">
-            <div class="plate-top-bar"></div>
-            <span class="plate-emirate">${safe(data.emirate)}</span>
-        </div>
         <span class="plate-number">${safe(data.plateNumber)}</span>
         <span class="plate-code">${safe(data.plateCode)}</span>
     </div>
@@ -818,7 +792,7 @@ async function renderCarHistory(carId, carData) {
     historyArea.innerHTML = '<p class="loading-text" style="font-size: 0.85rem;">Loading history...</p>';
 
     const carLabel = formatCarLabel(carData);
-    let html = `<div class="history-list"><h4>History for ${carLabel}</h4>`;
+    let html = `<div class="history-list"><h4>History for ${escapeHtml(carLabel)}</h4>`;
 
     try {
         const logsQuery = query(collection(db, 'logs'), where('targetId', '==', carId), limit(20));
@@ -839,9 +813,9 @@ async function renderCarHistory(carId, carData) {
                 const date = formatDateTime(log.timestamp);
                 html += `
                     <div class="history-item">
-                        <span class="action-type">${log.actionType}</span> by ${log.actorName}<br>
-                        ${log.details || ''}<br>
-                        <span class="timestamp-meta">${date}</span>
+                        <span class="action-type">${escapeHtml(log.actionType)}</span> by ${escapeHtml(log.actorName)}<br>
+                        ${escapeHtml(log.details || '')}<br>
+                        <span class="timestamp-meta">${escapeHtml(date)}</span>
                     </div>
                 `;
             });
@@ -861,8 +835,8 @@ async function renderCarHistory(carId, carData) {
                 const period = formatPeriod(a.startTime, a.endTime);
                 html += `
                     <div class="history-item">
-                        <strong>${a.userName}</strong><br>
-                        ${period}
+                        <strong>${escapeHtml(a.userName)}</strong><br>
+                        ${escapeHtml(period)}
                     </div>
                 `;
             });
@@ -871,7 +845,8 @@ async function renderCarHistory(carId, carData) {
         html += '</div>';
         historyArea.innerHTML = html;
     } catch (error) {
-        historyArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error loading history: ${error.message}</p>`;
+        console.error('Load car history failed:', error);
+        historyArea.innerHTML = '<p class="error" style="font-size:0.85rem;">Unable to load history.</p>';
     }
 }
 
@@ -883,7 +858,7 @@ async function renderMyCarHistory(carId, carData) {
     historyArea.innerHTML = '<p class="loading-text" style="font-size: 0.85rem;">Loading your history...</p>';
 
     const carLabel = formatCarLabel(carData);
-    let html = `<div class="history-list"><h4>My History for ${carLabel}</h4>`;
+    let html = `<div class="history-list"><h4>My History for ${escapeHtml(carLabel)}</h4>`;
 
     try {
         // 1. فترات التعيين الخاصة بالمستخدم فقط
@@ -964,9 +939,9 @@ async function renderMyCarHistory(carId, carData) {
                 const date = formatDateTime(log.timestamp);
                 html += `
                     <div class="history-item">
-                        <span class="action-type">${log.actionType}</span><br>
-                        ${log.details || ''}<br>
-                        <span class="timestamp-meta">${date}</span>
+                        <span class="action-type">${escapeHtml(log.actionType)}</span><br>
+                        ${escapeHtml(log.details || '')}<br>
+                        <span class="timestamp-meta">${escapeHtml(date)}</span>
                     </div>
                 `;
             });
@@ -976,8 +951,8 @@ async function renderMyCarHistory(carId, carData) {
         historyArea.innerHTML = html;
 
     } catch (error) {
-        console.error(error);
-        historyArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error loading history: ${error.message}</p>`;
+        console.error('Load personal car history failed:', error);
+        historyArea.innerHTML = '<p class="error" style="font-size:0.85rem;">Unable to load your history.</p>';
     }
     
     }
@@ -997,7 +972,7 @@ async function renderAssignUserUI(carId) {
         let options = '<option value="">Select Active User</option>';
         snapshot.forEach(d => {
             const u = d.data();
-            options += `<option value="${d.id}">${u.username} (${u.role})</option>`;
+            options += `<option value="${escapeAttribute(d.id)}">${escapeHtml(u.username)} (${escapeHtml(u.role)})</option>`;
         });
 
         assignArea.innerHTML = `
@@ -1021,21 +996,26 @@ async function renderAssignUserUI(carId) {
                 if (!userDoc.exists()) throw new Error('User not found.');
                 const userName = userDoc.data().username;
 
-                const carDoc = await getDoc(doc(db, 'cars', carId));
+                const carRef = doc(db, 'cars', carId);
+                const carDoc = await getDoc(carRef);
+                if (!carDoc.exists()) throw new Error('Car not found.');
                 const carData = carDoc.data();
                 const label = formatCarLabel(carData);
+                const assignmentRef = doc(collection(db, 'cars', carId, 'assignments'));
+                const batch = writeBatch(db);
 
-                await updateDoc(doc(db, 'cars', carId), {
+                batch.update(carRef, {
                     currentUserId: userId,
-                    currentUserName: userName
+                    currentUserName: userName,
+                    updatedAt: serverTimestamp()
                 });
-
-                await addDoc(collection(db, 'cars', carId, 'assignments'), {
+                batch.set(assignmentRef, {
                     userId,
                     userName,
                     startTime: serverTimestamp(),
                     endTime: null
                 });
+                await batch.commit();
 
                 await logAction(currentUserData, 'CAR_ASSIGN', {
                     targetId: carId,
@@ -1048,11 +1028,13 @@ async function renderAssignUserUI(carId) {
                 lastVisibleCar = null;
                 fetchCars(false);
             } catch (err) {
-                showMessage(`Could not assign user: ${err.message}`, 'error', 'dashboard');
+                console.error('Assign user failed:', err);
+                showMessage('Could not assign the selected user. Please try again.', 'error', 'dashboard');
             }
         });
     } catch (err) {
-        assignArea.innerHTML = `<p class="error" style="font-size:0.85rem;">Error: ${err.message}</p>`;
+        console.error('Load active users failed:', err);
+        assignArea.innerHTML = '<p class="error" style="font-size:0.85rem;">Unable to load active users.</p>';
     }
 }
 
@@ -1066,11 +1048,6 @@ async function handleUnassignUser(carId, data) {
     try {
         const label = formatCarLabel(data);
 
-        await updateDoc(doc(db, 'cars', carId), {
-            currentUserId: null,
-            currentUserName: null
-        });
-
         const q = query(
             collection(db, 'cars', carId, 'assignments'),
             where('userId', '==', data.currentUserId),
@@ -1078,11 +1055,18 @@ async function handleUnassignUser(carId, data) {
             limit(1)
         );
         const snap = await getDocs(q);
+        const batch = writeBatch(db);
+        batch.update(doc(db, 'cars', carId), {
+            currentUserId: null,
+            currentUserName: null,
+            updatedAt: serverTimestamp()
+        });
         if (!snap.empty) {
-            await updateDoc(doc(db, 'cars', carId, 'assignments', snap.docs[0].id), {
+            batch.update(doc(db, 'cars', carId, 'assignments', snap.docs[0].id), {
                 endTime: serverTimestamp()
             });
         }
+        await batch.commit();
 
         await logAction(currentUserData, 'CAR_UNASSIGN', {
             targetId: carId,
@@ -1095,6 +1079,7 @@ async function handleUnassignUser(carId, data) {
         lastVisibleCar = null;
         fetchCars(false);
     } catch (err) {
-        showMessage(`Could not unassign user: ${err.message}`, 'error', 'dashboard');
+        console.error('Unassign user failed:', err);
+        showMessage('Could not unassign this car. Please try again.', 'error', 'dashboard');
     }
 }

@@ -969,3 +969,224 @@ h4 {
 .btn:active {
     transform: scale(0.98);
 }
+
+
+/* ========== Secure UX and Symmetric Car Card Refresh ========== */
+.section-intro {
+    color: #5f6b7a;
+    margin: -8px auto 20px;
+    max-width: 680px;
+    text-align: center;
+    line-height: 1.5;
+}
+
+.access-denied {
+    text-align: center;
+    padding: 32px 20px;
+}
+
+.car-card-header {
+    align-items: center;
+    gap: 12px;
+    padding: 18px 20px 20px;
+    text-align: center;
+    outline: none;
+}
+
+.car-card-header:focus-visible,
+.card-header:focus-visible,
+.stat-card.clickable:focus-visible,
+.tab-btn:focus-visible,
+.action-btn:focus-visible,
+.load-more-btn:focus-visible,
+.filter-btn:focus-visible,
+.btn-add-toggle:focus-visible,
+.btn-refresh:focus-visible {
+    outline: 3px solid rgba(25, 118, 210, 0.38);
+    outline-offset: 3px;
+}
+
+.car-summary-id {
+    width: 100%;
+    color: #0f4f8f;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: clamp(1.05rem, 3vw, 1.35rem);
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    line-height: 1.2;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.car-summary-divider {
+    width: min(100%, 460px);
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, #90caf9 15%, #1976d2 50%, #90caf9 85%, transparent);
+}
+
+.car-assignment-status {
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+    width: 100%;
+    color: #4b5a6a;
+    text-align: center;
+}
+
+.car-assignment-status span {
+    color: #1976d2;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.car-assignment-status strong {
+    display: block;
+    max-width: 100%;
+    color: #26384a;
+    font-size: clamp(0.9rem, 2.7vw, 1rem);
+    font-weight: 700;
+    line-height: 1.45;
+    overflow-x: auto;
+    scrollbar-width: none;
+    white-space: nowrap;
+}
+
+.car-assignment-status strong::-webkit-scrollbar {
+    display: none;
+}
+
+.car-card-header .plate-wrapper {
+    align-items: center;
+    justify-content: center;
+    margin-top: 2px;
+}
+
+.car-card-header .plate-container {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(14px, 5vw, 28px);
+    width: min(100%, 340px);
+    min-width: 0;
+    max-width: 340px;
+    height: 74px;
+    margin: 0 auto;
+    padding: 10px clamp(16px, 4vw, 28px);
+    border: 2px solid #d9262e;
+    border-radius: 10px;
+    box-shadow: 0 3px 10px rgba(23, 43, 77, 0.14);
+}
+
+.car-card-header .plate-number {
+    flex: 0 1 auto;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    font-size: clamp(1.45rem, 7vw, 2rem);
+    letter-spacing: 0.13em;
+    overflow: visible;
+    white-space: nowrap;
+}
+
+.car-card-header .plate-code {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    padding: 5px 10px;
+    font-size: clamp(1.1rem, 5vw, 1.5rem);
+    overflow: visible;
+    white-space: nowrap;
+}
+
+.car-card-header .plate-top-bar,
+.car-card-header .plate-emirate {
+    display: none;
+}
+
+.car-card-actions {
+    margin-top: 16px;
+}
+
+.car-action-area {
+    display: none;
+    margin-top: 10px;
+}
+
+.read-only-field input {
+    background: #f4f7fa;
+    color: #5b6570;
+    cursor: not-allowed;
+}
+
+.request-body {
+    display: block;
+}
+
+.request-actions {
+    margin-top: 15px;
+}
+
+.card-header:not(.car-card-header) {
+    cursor: default;
+}
+
+.card-header:not(.car-card-header) .card-title {
+    overflow-x: auto;
+    scrollbar-width: none;
+    white-space: nowrap;
+}
+
+.card-header:not(.car-card-header) .card-title::-webkit-scrollbar {
+    display: none;
+}
+
+.detail-value,
+.timeline-text,
+.history-item {
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+
+@media (max-width: 480px) {
+    body {
+        border-width: 1px;
+        border-radius: 7px;
+        margin: 4px;
+    }
+
+    main {
+        padding: 12px;
+    }
+
+    .dashboard-box,
+    .form-box {
+        padding: 14px;
+    }
+
+    .car-card-header {
+        padding: 16px 12px 18px;
+    }
+
+    .car-card-header .plate-container {
+        width: min(100%, 300px);
+        height: 68px;
+        gap: 16px;
+    }
+
+    .car-summary-id {
+        font-size: 1rem;
+    }
+
+    .action-buttons {
+        justify-content: center;
+    }
+
+    .action-btn {
+        flex: 1 1 120px;
+        text-align: center;
+    }
+}

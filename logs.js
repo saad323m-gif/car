@@ -1,7 +1,5 @@
 /**
- * Logs Module - Car Management System
- * English only | Latin digits only | Production-ready
- * Logs are immutable - no edit or delete functionality exists.
+ * Immutable client-side audit log helper and administrator timeline.
  */
 
 import { db } from "./firebase.js";
@@ -9,28 +7,38 @@ import {
     collection, addDoc, query, orderBy, limit, startAfter, getDocs, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import {
-    showMessage, isAdmin, renderAccessDenied, formatDateTime
+    isAdmin, renderAccessDenied, formatDateTime, escapeHtml, sanitizePlainText
 } from "./utils.js";
 
 let lastVisibleLog = null;
 let currentUserData = null;
 
-export const setLogsCurrentUser = (data) => { currentUserData = data; };
+export const setLogsCurrentUser = (data) => {
+    currentUserData = data;
+};
 
 export async function logAction(actor, actionType, details = {}) {
+    if (!actor?.uid || !actor?.username) return false;
+
+    const entry = {
+        timestamp: serverTimestamp(),
+        actorId: sanitizePlainText(actor.uid, 128),
+        actorName: sanitizePlainText(actor.username, 40),
+        actionType: sanitizePlainText(actionType, 40),
+        targetId: details.targetId ? sanitizePlainText(details.targetId, 128) : null,
+        targetName: details.targetName ? sanitizePlainText(details.targetName, 160) : null,
+        assigneeId: details.assigneeId ? sanitizePlainText(details.assigneeId, 128) : null,
+        details: sanitizePlainText(details.text, 500)
+    };
+
+    if (!entry.actionType) return false;
+
     try {
-        await addDoc(collection(db, 'logs'), {
-            timestamp: serverTimestamp(),
-            actorId: actor.uid || 'system',
-            actorName: actor.username || 'System',
-            actionType: actionType,
-            targetId: details.targetId || null,
-            targetName: details.targetName || null,
-            assigneeId: details.assigneeId || null,
-            details: details.text || ''
-        });
+        await addDoc(collection(db, 'logs'), entry);
+        return true;
     } catch (error) {
-        console.error('Logging failed:', error);
+        console.error('Audit log write failed:', error?.code || 'unknown');
+        return false;
     }
 }
 
@@ -41,17 +49,18 @@ export function renderLogsView() {
     }
 
     const container = document.getElementById('dashboard-container');
+    if (!container) return;
+
     container.innerHTML = `
         <h2>System Logs Timeline</h2>
-        <p style="text-align: center; color: #666; margin-bottom: 20px;">
-            Immutable audit trail of all system activities.
-        </p>
+        <p class="section-intro">Immutable audit trail of recorded system activities.</p>
         <div class="divider"></div>
-        <div id="logs-timeline" class="timeline">
+        <div id="logs-timeline" class="timeline" aria-live="polite">
             <p class="loading-text">Loading logs...</p>
         </div>
         <div id="load-more-container" class="load-more-container"></div>
     `;
+
     lastVisibleLog = null;
     fetchLogs(false);
 }
@@ -66,79 +75,51 @@ async function fetchLogs(loadMore = false) {
     if (!loadMore) listContainer.innerHTML = '<p class="loading-text">Loading logs...</p>';
 
     try {
-        let q;
-        if (loadMore && lastVisibleLog) {
-            q = query(
-                collection(db, 'logs'),
-                orderBy('timestamp', 'desc'),
-                startAfter(lastVisibleLog),
-                limit(10)
-            );
-        } else {
-            q = query(
-                collection(db, 'logs'),
-                orderBy('timestamp', 'desc'),
-                limit(10)
-            );
-        }
-
-        const snapshot = await getDocs(q);
+        const baseQuery = [collection(db, 'logs'), orderBy('timestamp', 'desc')];
+        const logQuery = loadMore && lastVisibleLog
+            ? query(...baseQuery, startAfter(lastVisibleLog), limit(10))
+            : query(...baseQuery, limit(10));
+        const snapshot = await getDocs(logQuery);
 
         if (snapshot.empty) {
-            if (!loadMore) {
-                listContainer.innerHTML = '<p style="text-align:center; color:#666;">No logs found.</p>';
-            }
+            if (!loadMore) listContainer.innerHTML = '<p class="empty-state">No logs found.</p>';
             if (loadMoreContainer) loadMoreContainer.innerHTML = '';
             return;
         }
 
         lastVisibleLog = snapshot.docs[snapshot.docs.length - 1];
         if (!loadMore) listContainer.innerHTML = '';
+        snapshot.forEach(logDoc => renderLogTimelineItem(listContainer, logDoc.data()));
 
-        snapshot.forEach((d) => {
-            renderLogTimelineItem(listContainer, d.data());
-        });
-
-        if (loadMoreContainer) {
-            if (snapshot.size === 10) {
-                loadMoreContainer.innerHTML = '<button class="load-more-btn" id="load-more-btn">Load More</button>';
-                const loadMoreBtn = document.getElementById('load-more-btn');
-                if (loadMoreBtn) {
-                    loadMoreBtn.addEventListener('click', () => fetchLogs(true));
-                }
-            } else {
-                loadMoreContainer.innerHTML = '';
-            }
+        if (!loadMoreContainer) return;
+        if (snapshot.size === 10) {
+            loadMoreContainer.innerHTML = '<button class="load-more-btn" id="load-more-btn" type="button">Load More</button>';
+            document.getElementById('load-more-btn')?.addEventListener('click', () => fetchLogs(true));
+        } else {
+            loadMoreContainer.innerHTML = '';
         }
     } catch (error) {
-        if (listContainer) {
-            listContainer.innerHTML = `<p class="error">Error loading logs: ${error.message}</p>`;
-        }
+        listContainer.innerHTML = '<p class="error">Unable to load logs. Please try again.</p>';
     }
 }
 
 function renderLogTimelineItem(container, data) {
-    const item = document.createElement('div');
+    const item = document.createElement('article');
     item.className = 'timeline-item';
 
-    const dateStr = formatDateTime(data.timestamp);
-
-    let extra = '';
-    if (data.targetName) {
-        extra = `<br><strong>Target:</strong> ${data.targetName}`;
-    }
-    if (data.details) {
-        extra += `<br>${data.details}`;
-    }
+    const date = escapeHtml(formatDateTime(data.timestamp));
+    const action = escapeHtml(data.actionType || 'Activity');
+    const actor = escapeHtml(data.actorName || 'System');
+    const target = data.targetName
+        ? `<br><strong>Target:</strong> ${escapeHtml(data.targetName)}`
+        : '';
+    const details = data.details ? `<br>${escapeHtml(data.details)}` : '';
 
     item.innerHTML = `
-        <div class="timeline-dot"></div>
+        <div class="timeline-dot" aria-hidden="true"></div>
         <div class="timeline-content">
-            <div class="timeline-date">${dateStr}</div>
-            <div class="timeline-text">
-                <strong>${data.actionType}</strong> by ${data.actorName}
-                ${extra}
-            </div>
+            <div class="timeline-date">${date}</div>
+            <div class="timeline-text"><strong>${action}</strong> by ${actor}${target}${details}</div>
         </div>
     `;
     container.appendChild(item);
