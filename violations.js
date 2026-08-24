@@ -1,7 +1,7 @@
 import { db } from "./firebase.js";
 import {
     collection, doc, getDoc, getDocs, setDoc, query, where, orderBy,
-    limit, runTransaction, serverTimestamp
+    limit, startAfter, runTransaction, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { logAction } from "./logs.js";
 import {
@@ -11,10 +11,49 @@ import {
 
 let currentUserData = null;
 let activeAdminFilter = 'all';
+const VIOLATIONS_PAGE_SIZE = 10;
+const violationPageState = new Map();
 
 export const setViolationsCurrentUser = (data) => {
     currentUserData = data;
 };
+
+export function openViolationEntry(context = {}) {
+    if (!isAdmin(currentUserData)) return;
+
+    const violationsTab = document.querySelector('.tab-btn[data-tab="violations"]');
+    if (!violationsTab) {
+        showMessage('The Violations tab is not available.', 'error', 'dashboard');
+        return;
+    }
+
+    violationsTab.click();
+    const formWrapper = document.getElementById('violation-form-wrapper');
+    if (formWrapper) formWrapper.classList.remove('hidden-form');
+
+    const contextMessage = document.getElementById('violation-context-message');
+    const carData = context.carData || null;
+    const sourceName = sanitizePlainText(context.sourceName || '', 80);
+    if (carData) {
+        const plateNumber = document.getElementById('violation-plate-number');
+        const plateCode = document.getElementById('violation-plate-code');
+        const emirate = document.getElementById('violation-emirate');
+        if (plateNumber) plateNumber.value = sanitizePlainText(carData.plateNumber || '', 6);
+        if (plateCode) plateCode.value = sanitizePlainText(carData.plateCode || '', 3).toUpperCase();
+        if (emirate) emirate.value = carData.emirate || '';
+        if (contextMessage) {
+            contextMessage.textContent = `Vehicle context loaded: ${formatCarLabel(carData)}. The driver will still be determined from the violation time.`;
+            contextMessage.hidden = false;
+        }
+    } else if (sourceName && contextMessage) {
+        contextMessage.textContent = `User context: ${sourceName}. Enter the actual plate and time; the system will determine the responsible driver.`;
+        contextMessage.hidden = false;
+    }
+
+    const timeInput = document.getElementById('violation-at');
+    if (timeInput && !timeInput.value) timeInput.value = toDubaiDateTimeText(new Date());
+    document.getElementById('violation-plate-number')?.focus();
+}
 
 function normalizePlateIdentifier(plateNumber, plateCode, emirate) {
     return `${plateNumber}-${plateCode.toLowerCase()}-${emirate.toLowerCase()}`;
@@ -185,6 +224,7 @@ function renderViolationFormHtml() {
                 <strong>Matching keys</strong>
                 <span>Plate number, code, emirate, and occurrence time determine the car and the active assignment.</span>
             </div>
+            <p id="violation-context-message" class="violation-context-message" hidden></p>
             <div class="form-group">
                 <label for="violation-plate-number">Plate Number</label>
                 <input type="text" id="violation-plate-number" required pattern="\\d+" maxlength="6" inputmode="numeric" placeholder="e.g. 12345">
@@ -408,52 +448,95 @@ async function handleAddViolation(event) {
     }
 }
 
-async function loadAdminViolations() {
+function resetViolationPage(key) {
+    const state = { records: [], lastDoc: null, hasMore: false };
+    violationPageState.set(key, state);
+    return state;
+}
+
+function getViolationPage(key, append) {
+    if (!append || !violationPageState.has(key)) return resetViolationPage(key);
+    return violationPageState.get(key);
+}
+
+function buildAdminViolationsQuery(filter, lastDoc) {
+    const constraints = [];
+    if (filter === 'UNSETTLED' || filter === 'SETTLED') {
+        constraints.push(where('settlementStatus', '==', filter));
+    } else if (filter !== 'all') {
+        constraints.push(where('matchStatus', '==', filter));
+    }
+    constraints.push(orderBy('violationAt', 'desc'));
+    if (lastDoc) constraints.push(startAfter(lastDoc));
+    constraints.push(limit(VIOLATIONS_PAGE_SIZE + 1));
+    return query(collection(db, 'violations'), ...constraints);
+}
+
+async function loadAdminViolations(append = false) {
     const container = document.getElementById('violations-admin-list');
     if (!container || !isAdmin(currentUserData)) return;
 
-    container.innerHTML = '<p class="loading-text">Loading violations...</p>';
+    const pageKey = `admin-${activeAdminFilter}`;
+    const state = getViolationPage(pageKey, append);
+    if (!append) container.innerHTML = '<p class="loading-text">Loading violations...</p>';
+
     try {
-        const snapshot = await getDocs(query(collection(db, 'violations'), orderBy('violationAt', 'desc'), limit(100)));
-        const violations = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
-        const filtered = violations.filter(item => {
-            if (activeAdminFilter === 'all') return true;
-            if (activeAdminFilter === 'UNSETTLED' || activeAdminFilter === 'SETTLED') {
-                return item.settlementStatus === activeAdminFilter;
-            }
-            return item.matchStatus === activeAdminFilter;
+        const snapshot = await getDocs(buildAdminViolationsQuery(activeAdminFilter, state.lastDoc));
+        const pageDocs = snapshot.docs.slice(0, VIOLATIONS_PAGE_SIZE);
+        const pageRecords = pageDocs.map(item => ({ id: item.id, ...item.data() }));
+        state.records = append ? [...state.records, ...pageRecords] : pageRecords;
+        state.lastDoc = pageDocs.length ? pageDocs[pageDocs.length - 1] : state.lastDoc;
+        state.hasMore = snapshot.docs.length > pageDocs.length;
+        renderViolationRecords(container, state.records, {
+            scope: 'admin',
+            hasMore: state.hasMore,
+            onLoadMore: () => loadAdminViolations(true)
         });
-        renderViolationRecords(container, filtered, { scope: 'admin' });
     } catch (error) {
         console.error('Load violations failed:', error);
         container.innerHTML = '<p class="error">Unable to load violations. Please try again.</p>';
     }
 }
 
-export async function renderCarViolations(carId, carData) {
+function buildScopedViolationsQuery(filters, lastDoc) {
+    const constraints = filters.map(filter => where(filter.field, '==', filter.value));
+    constraints.push(orderBy('violationAt', 'desc'));
+    if (lastDoc) constraints.push(startAfter(lastDoc));
+    constraints.push(limit(VIOLATIONS_PAGE_SIZE + 1));
+    return query(collection(db, 'violations'), ...constraints);
+}
+
+export async function renderCarViolations(carId, carData, append = false) {
     const areaId = getAreaId('violations-area', carId);
     const container = document.getElementById(areaId);
     if (!container || !isActiveUser(currentUserData)) return;
 
+    const scope = isAdmin(currentUserData) ? 'admin' : 'user';
+    const pageKey = `car-${scope}-${carId}`;
+    const state = getViolationPage(pageKey, append);
     container.style.display = 'block';
-    container.innerHTML = '<p class="loading-text">Loading violations...</p>';
+    if (!append) container.innerHTML = '<p class="loading-text">Loading violations...</p>';
+
+    const filters = isAdmin(currentUserData)
+        ? [{ field: 'carId', value: carId }]
+        : [
+            { field: 'userId', value: currentUserData.uid },
+            { field: 'matchStatus', value: 'AUTO_LINKED' },
+            { field: 'carId', value: carId }
+        ];
 
     try {
-        const violationQuery = isAdmin(currentUserData)
-            ? query(collection(db, 'violations'), where('carId', '==', carId), limit(100))
-            : query(
-                collection(db, 'violations'),
-                where('userId', '==', currentUserData.uid),
-                where('matchStatus', '==', 'AUTO_LINKED'),
-                limit(100)
-            );
-        const snapshot = await getDocs(violationQuery);
-        const records = snapshot.docs.map(item => ({ id: item.id, ...item.data() }))
-            .filter(item => isAdmin(currentUserData) || item.carId === carId)
-            .sort((first, second) => getViolationTime(second) - getViolationTime(first));
-        renderViolationRecords(container, records, {
-            scope: isAdmin(currentUserData) ? 'admin' : 'user',
-            title: `Violations for ${formatCarLabel(carData)}`
+        const snapshot = await getDocs(buildScopedViolationsQuery(filters, state.lastDoc));
+        const pageDocs = snapshot.docs.slice(0, VIOLATIONS_PAGE_SIZE);
+        const pageRecords = pageDocs.map(item => ({ id: item.id, ...item.data() }));
+        state.records = append ? [...state.records, ...pageRecords] : pageRecords;
+        state.lastDoc = pageDocs.length ? pageDocs[pageDocs.length - 1] : state.lastDoc;
+        state.hasMore = snapshot.docs.length > pageDocs.length;
+        renderViolationRecords(container, state.records, {
+            scope,
+            title: `Violations for ${formatCarLabel(carData)}`,
+            hasMore: state.hasMore,
+            onLoadMore: () => renderCarViolations(carId, carData, true)
         });
     } catch (error) {
         console.error('Load car violations failed:', error);
@@ -461,7 +544,7 @@ export async function renderCarViolations(carId, carData) {
     }
 }
 
-export async function renderUserViolations(userId, targetContainerId, title = 'My Violations') {
+export async function renderUserViolations(userId, targetContainerId, title = 'My Violations', append = false) {
     const container = document.getElementById(targetContainerId);
     if (!container || !isActiveUser(currentUserData)) return;
     if (!isAdmin(currentUserData) && currentUserData.uid !== userId) {
@@ -469,25 +552,31 @@ export async function renderUserViolations(userId, targetContainerId, title = 'M
         return;
     }
 
+    const scope = isAdmin(currentUserData) ? 'admin' : 'user';
+    const pageKey = `user-${scope}-${userId}-${targetContainerId}`;
+    const state = getViolationPage(pageKey, append);
     container.style.display = 'block';
-    container.innerHTML = '<p class="loading-text">Loading violations...</p>';
+    if (!append) container.innerHTML = '<p class="loading-text">Loading violations...</p>';
+
+    const filters = isAdmin(currentUserData)
+        ? [{ field: 'userId', value: userId }]
+        : [
+            { field: 'userId', value: currentUserData.uid },
+            { field: 'matchStatus', value: 'AUTO_LINKED' }
+        ];
 
     try {
-        const violationQuery = isAdmin(currentUserData)
-            ? query(collection(db, 'violations'), where('userId', '==', userId), limit(100))
-            : query(
-                collection(db, 'violations'),
-                where('userId', '==', currentUserData.uid),
-                where('matchStatus', '==', 'AUTO_LINKED'),
-                limit(100)
-            );
-        const snapshot = await getDocs(violationQuery);
-        const records = snapshot.docs.map(item => ({ id: item.id, ...item.data() }))
-            .filter(item => isAdmin(currentUserData) || item.matchStatus === 'AUTO_LINKED')
-            .sort((first, second) => getViolationTime(second) - getViolationTime(first));
-        renderViolationRecords(container, records, {
-            scope: isAdmin(currentUserData) ? 'admin' : 'user',
-            title
+        const snapshot = await getDocs(buildScopedViolationsQuery(filters, state.lastDoc));
+        const pageDocs = snapshot.docs.slice(0, VIOLATIONS_PAGE_SIZE);
+        const pageRecords = pageDocs.map(item => ({ id: item.id, ...item.data() }));
+        state.records = append ? [...state.records, ...pageRecords] : pageRecords;
+        state.lastDoc = pageDocs.length ? pageDocs[pageDocs.length - 1] : state.lastDoc;
+        state.hasMore = snapshot.docs.length > pageDocs.length;
+        renderViolationRecords(container, state.records, {
+            scope,
+            title,
+            hasMore: state.hasMore,
+            onLoadMore: () => renderUserViolations(userId, targetContainerId, title, true)
         });
     } catch (error) {
         console.error('Load user violations failed:', error);
@@ -511,10 +600,24 @@ function renderViolationRecords(container, records, options = {}) {
 
     container.innerHTML = `${title}<div class="violation-records">${records.map(record => renderViolationRecordHtml(record, options.scope)).join('')}</div>`;
     records.forEach(record => bindViolationRecordActions(record, container));
+
+    if (options.hasMore && typeof options.onLoadMore === 'function') {
+        const moreContainer = document.createElement('div');
+        moreContainer.className = 'load-more-container';
+        const moreButton = document.createElement('button');
+        moreButton.type = 'button';
+        moreButton.className = 'load-more-btn';
+        moreButton.textContent = 'Load More';
+        moreButton.addEventListener('click', options.onLoadMore);
+        moreContainer.appendChild(moreButton);
+        container.appendChild(moreContainer);
+    }
 }
 
 function renderViolationRecordHtml(record, scope) {
     const canSettle = scope === 'admin' && record.settlementStatus !== 'SETTLED';
+    const recordId = escapeAttribute(record.id);
+    const detailsId = `violation-details-${recordId}`;
     const settlementDetails = record.settlementStatus === 'SETTLED'
         ? `<div class="violation-settlement-details">
                 <span>Method: ${escapeHtml(settlementMethodLabel(record.settlementMethod))}</span>
@@ -526,37 +629,53 @@ function renderViolationRecordHtml(record, scope) {
     const assignee = record.userName || 'No linked driver';
     const car = record.carLabel || `${record.plateNumber || ''} ${record.plateCode || ''} ${record.emirate || ''}`.trim();
     const settlementAction = canSettle
-        ? `<button type="button" class="action-btn action-btn-settle" data-settle-violation="${escapeAttribute(record.id)}">Mark as Settled</button>`
+        ? `<button type="button" class="action-btn action-btn-settle" data-settle-violation="${recordId}">Mark as Settled</button>`
         : '';
 
     return `
-        <article class="violation-record" id="violation-${escapeAttribute(record.id)}">
-            <div class="violation-record-topline">
-                <strong>${escapeHtml(record.violationId || record.id)}</strong>
+        <article class="violation-record violation-card" id="violation-${recordId}">
+            <button type="button" class="violation-card-summary" data-toggle-violation="${recordId}" aria-expanded="false" aria-controls="${detailsId}">
+                <span class="violation-summary-id">${escapeHtml(record.violationId || record.id)}</span>
+                <span class="violation-summary-type">${escapeHtml(record.violationType || 'Violation')}</span>
+                <span class="violation-summary-time">${escapeHtml(formatDateTime(record.violationAt))}</span>
                 <span class="violation-status ${statusClass(record.matchStatus)}">${escapeHtml(matchStatusLabel(record.matchStatus))}</span>
                 <span class="settlement-status ${settlementClass(record.settlementStatus)}">${escapeHtml(settlementStatusLabel(record.settlementStatus))}</span>
+                <span class="violation-card-chevron" aria-hidden="true">⌄</span>
+            </button>
+            <div class="violation-card-details" id="${detailsId}" hidden>
+                <div class="violation-record-grid">
+                    <div><span>Occurred</span><strong>${escapeHtml(formatDateTime(record.violationAt))}</strong></div>
+                    <div><span>Type</span><strong>${escapeHtml(record.violationType || 'N/A')}</strong></div>
+                    <div><span>Vehicle</span><strong>${escapeHtml(car || 'Not matched')}</strong></div>
+                    <div><span>Driver</span><strong>${escapeHtml(assignee)}</strong></div>
+                    <div><span>Reference</span><strong>${escapeHtml(record.referenceNumber || 'Not specified')}</strong></div>
+                    <div><span>Amount</span><strong>${escapeHtml(formatAmount(record.amount))}</strong></div>
+                    <div><span>Location</span><strong>${escapeHtml(record.location || 'Not specified')}</strong></div>
+                    <div><span>Assignment</span><strong>${escapeHtml(record.assignmentId || 'Not linked')}</strong></div>
+                </div>
+                ${record.notes ? `<p class="violation-notes">${escapeHtml(record.notes)}</p>` : ''}
+                ${settlementDetails}
+                ${settlementAction ? `<div class="violation-record-actions">${settlementAction}</div><div id="settlement-area-${recordId}" class="settlement-area"></div>` : ''}
             </div>
-            <div class="violation-record-grid">
-                <div><span>Occurred</span><strong>${escapeHtml(formatDateTime(record.violationAt))}</strong></div>
-                <div><span>Type</span><strong>${escapeHtml(record.violationType || 'N/A')}</strong></div>
-                <div><span>Vehicle</span><strong>${escapeHtml(car || 'Not matched')}</strong></div>
-                <div><span>Driver</span><strong>${escapeHtml(assignee)}</strong></div>
-                <div><span>Reference</span><strong>${escapeHtml(record.referenceNumber || 'Not specified')}</strong></div>
-                <div><span>Amount</span><strong>${escapeHtml(formatAmount(record.amount))}</strong></div>
-                <div><span>Location</span><strong>${escapeHtml(record.location || 'Not specified')}</strong></div>
-                <div><span>Assignment</span><strong>${escapeHtml(record.assignmentId || 'Not linked')}</strong></div>
-            </div>
-            ${record.notes ? `<p class="violation-notes">${escapeHtml(record.notes)}</p>` : ''}
-            ${settlementDetails}
-            ${settlementAction ? `<div class="violation-record-actions">${settlementAction}</div><div id="settlement-area-${escapeAttribute(record.id)}" class="settlement-area"></div>` : ''}
         </article>
     `;
 }
 
 function bindViolationRecordActions(record, container) {
-    const settleButton = container.querySelector(`[data-settle-violation="${CSS.escape(record.id)}"]`);
-    if (!settleButton) return;
-    settleButton.addEventListener('click', () => renderSettlementForm(record));
+    const card = container.querySelector(`#violation-${CSS.escape(record.id)}`);
+    const toggleButton = card?.querySelector(`[data-toggle-violation="${CSS.escape(record.id)}"]`);
+    const details = card?.querySelector(`#violation-details-${CSS.escape(record.id)}`);
+    if (toggleButton && details) {
+        toggleButton.addEventListener('click', () => {
+            const willOpen = details.hidden;
+            details.hidden = !willOpen;
+            toggleButton.setAttribute('aria-expanded', String(willOpen));
+            card.classList.toggle('open', willOpen);
+        });
+    }
+
+    const settleButton = card?.querySelector(`[data-settle-violation="${CSS.escape(record.id)}"]`);
+    if (settleButton) settleButton.addEventListener('click', () => renderSettlementForm(record));
 }
 
 function renderSettlementForm(record) {
