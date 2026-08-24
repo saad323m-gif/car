@@ -20,16 +20,26 @@ function normalizePlateIdentifier(plateNumber, plateCode, emirate) {
     return `${plateNumber}-${plateCode.toLowerCase()}-${emirate.toLowerCase()}`;
 }
 
+function normalizeEnglishDigits(value) {
+    const arabicIndic = '٠١٢٣٤٥٦٧٨٩';
+    const easternArabicIndic = '۰۱۲۳۴۵۶۷۸۹';
+    return String(value || '').replace(/[٠-٩۰-۹]/g, character => {
+        const arabicIndex = arabicIndic.indexOf(character);
+        return arabicIndex >= 0 ? String(arabicIndex) : String(easternArabicIndic.indexOf(character));
+    });
+}
+
 function parseDubaiDateTime(value) {
-    if (!value || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return null;
-    const date = new Date(`${value}:00+04:00`);
+    const normalized = normalizeEnglishDigits(value).trim();
+    if (!/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}$/.test(normalized)) return null;
+    const date = new Date(`${normalized.replace(' ', 'T')}:00+04:00`);
     return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function toDubaiDateTimeInput(value) {
+function toDubaiDateTimeText(value) {
     const source = value && typeof value.toDate === 'function' ? value.toDate() : new Date(value || Date.now());
     const time = source.getTime() + (4 * 60 * 60 * 1000);
-    return new Date(time).toISOString().slice(0, 16);
+    return new Date(time).toISOString().slice(0, 16).replace('T', ' ');
 }
 
 function isAssignmentActiveAt(assignment, violationAt) {
@@ -140,12 +150,20 @@ export function renderViolationsView() {
             formWrapper.classList.toggle('hidden-form');
             if (!formWrapper.classList.contains('hidden-form')) {
                 const timeInput = document.getElementById('violation-at');
-                if (timeInput && !timeInput.value) timeInput.value = toDubaiDateTimeInput(new Date());
+                if (timeInput && !timeInput.value) timeInput.value = toDubaiDateTimeText(new Date());
             }
         });
     }
 
     if (form) form.addEventListener('submit', handleAddViolation);
+
+    const violationTimeInput = document.getElementById('violation-at');
+    if (violationTimeInput) {
+        violationTimeInput.addEventListener('input', () => {
+            const normalized = normalizeEnglishDigits(violationTimeInput.value);
+            if (normalized !== violationTimeInput.value) violationTimeInput.value = normalized;
+        });
+    }
 
     document.querySelectorAll('[data-violation-filter]').forEach(button => {
         button.addEventListener('click', () => {
@@ -189,8 +207,8 @@ function renderViolationFormHtml() {
                 </select>
             </div>
             <div class="form-group">
-                <label for="violation-at">Violation Date & Time (UAE)</label>
-                <input type="datetime-local" id="violation-at" required>
+                <label for="violation-at">Violation Date & Time (UAE, GMT+4)</label>
+                <input type="text" id="violation-at" class="english-datetime-input" required inputmode="numeric" autocomplete="off" spellcheck="false" dir="ltr" maxlength="16" placeholder="YYYY-MM-DD HH:MM">
             </div>
             <div class="form-group">
                 <label for="violation-type">Violation Type</label>
@@ -277,9 +295,17 @@ async function handleAddViolation(event) {
         ));
 
         let candidateCarRef = null;
+        let candidateAssignmentRefs = [];
 
         if (matchingCars.size === 1) {
             candidateCarRef = doc(db, 'cars', matchingCars.docs[0].id);
+            const assignmentCandidates = await getDocs(query(
+                collection(db, 'cars', matchingCars.docs[0].id, 'assignments'),
+                where('startTime', '<=', data.violationAt),
+                orderBy('startTime', 'desc'),
+                limit(10)
+            ));
+            candidateAssignmentRefs = assignmentCandidates.docs.map(item => item.ref);
         }
 
         const result = await runTransaction(db, async transaction => {
@@ -305,20 +331,15 @@ async function handleAddViolation(event) {
                     carLabel = formatCarLabel(freshCar);
                     matchStatus = 'NO_ASSIGNMENT';
 
-                    const freshAssignmentQuery = query(
-                        collection(db, 'cars', freshCarSnap.id, 'assignments'),
-                        where('startTime', '<=', data.violationAt),
-                        orderBy('startTime', 'desc'),
-                        limit(10)
-                    );
-                    const assignmentSnap = await transaction.get(freshAssignmentQuery);
-                    const matchingAssignment = assignmentSnap.docs.find(item => isAssignmentActiveAt(item.data(), data.violationAt));
-                    if (matchingAssignment) {
-                        const assignment = matchingAssignment.data();
-                        assignmentId = matchingAssignment.id;
+                    for (const assignmentRef of candidateAssignmentRefs) {
+                        const assignmentSnap = await transaction.get(assignmentRef);
+                        if (!assignmentSnap.exists() || !isAssignmentActiveAt(assignmentSnap.data(), data.violationAt)) continue;
+                        const assignment = assignmentSnap.data();
+                        assignmentId = assignmentSnap.id;
                         userId = assignment.userId;
                         userName = assignment.userName;
                         matchStatus = 'AUTO_LINKED';
+                        break;
                     }
                 } else {
                     matchStatus = 'NO_CAR';

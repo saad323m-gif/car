@@ -1522,3 +1522,13 @@ h4 {
         width: 100%;
     }
 }
+
+/* English-only violation date and time entry */
+.english-datetime-input {
+    direction: ltr;
+    text-align: left;
+    unicode-bidi: plaintext;
+    font-family: "Courier New", Courier, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+}
