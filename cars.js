@@ -16,9 +16,18 @@ import {
     formatPeriod, formatCarLabel, isAdmin, isActiveUser, renderAccessDenied,
     daysUntil, expiryClass, toDateInputValue, escapeHtml, escapeAttribute, sanitizePlainText
 } from "./utils.js";
+import { formatNumber, t } from "./i18n.js";
 
 let currentUserData = null;
 let lastVisibleCar = null;
+
+function getMaximumManufactureYear() {
+    const currentDubaiYear = Number(new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Dubai',
+        year: 'numeric'
+    }).format(new Date()));
+    return currentDubaiYear + 1;
+}
 
 export const setCarsCurrentUser = (data) => { currentUserData = data; };
 
@@ -82,7 +91,7 @@ export function renderCarsView() {
                     </div>
                     <div class="form-group">
                         <label>Manufacture Year</label>
-                        <input type="number" id="car-year" required min="1900" max="2026" placeholder="e.g. 2020">
+                        <input type="number" id="car-year" required min="1900" max="${getMaximumManufactureYear()}" step="1" placeholder="e.g. ${getMaximumManufactureYear()}" oninvalid="this.setCustomValidity('Please enter a manufacture year from 1900 to ${getMaximumManufactureYear()}.')" oninput="this.setCustomValidity('')">
                     </div>
                     <div class="form-group">
                         <label>License Expiry</label>
@@ -242,8 +251,9 @@ async function handleAddCar(e) {
     const insuranceExp = insuranceExpEl.value;
     const notes = notesEl ? sanitizePlainText(notesEl.value, 500) : '';
 
-    if (isNaN(manufactureYear) || manufactureYear < 1900 || manufactureYear > 2026) {
-        showMessage('Error: Please enter a valid manufacture year (1900-2026).', 'error', 'dashboard');
+    const maximumManufactureYear = getMaximumManufactureYear();
+    if (isNaN(manufactureYear) || manufactureYear < 1900 || manufactureYear > maximumManufactureYear) {
+        showMessage(`Error: Please enter a valid manufacture year (1900-${maximumManufactureYear}).`, 'error', 'dashboard');
         if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Add Car';
@@ -425,10 +435,10 @@ function renderCarCard(id, data, isUserView = false) {
     const insClass = expiryClass(insDiff);
 
     const carId = escapeHtml(data.carId || id);
-    const assigneeName = escapeHtml(data.currentUserName || 'Unassigned');
+    const assigneeName = escapeHtml(data.currentUserName || t('Unassigned'));
     const assignmentText = data.currentUserName
-        ? `Assigned to: ${assigneeName}`
-        : 'Currently unassigned';
+        ? `${t('Assigned to:')} ${assigneeName}`
+        : t('Currently unassigned');
 
     let actionsHtml = '';
     if (!isUserView) {
@@ -480,8 +490,8 @@ function renderCarCard(id, data, isUserView = false) {
                 <div class="detail-item"><span class="detail-label">Owner Name</span><span class="detail-value">${escapeHtml(data.ownerName || 'N/A')}</span></div>
                 <div class="detail-item"><span class="detail-label">VIN</span><span class="detail-value">${escapeHtml(data.vin || 'N/A')}</span></div>
                 <div class="detail-item"><span class="detail-label">Manufacture Year</span><span class="detail-value">${escapeHtml(data.manufactureYear || 'N/A')}</span></div>
-                <div class="detail-item"><span class="detail-label">License Expiry</span><span class="detail-value ${licClass}">${escapeHtml(formatDateOnly(data.licenseExpiry))} (${licDiff} days left)</span></div>
-                <div class="detail-item"><span class="detail-label">Insurance Expiry</span><span class="detail-value ${insClass}">${escapeHtml(formatDateOnly(data.insuranceExpiry))} (${insDiff} days left)</span></div>
+                <div class="detail-item"><span class="detail-label">License Expiry</span><span class="detail-value ${licClass}">${escapeHtml(formatDateOnly(data.licenseExpiry))} (${formatNumber(licDiff)} ${t('days left')})</span></div>
+                <div class="detail-item"><span class="detail-label">Insurance Expiry</span><span class="detail-value ${insClass}">${escapeHtml(formatDateOnly(data.insuranceExpiry))} (${formatNumber(insDiff)} ${t('days left')})</span></div>
                 <div class="detail-item"><span class="detail-label">Notes</span><span class="detail-value">${escapeHtml(data.notes || 'N/A')}</span></div>
             </div>
             <div class="car-card-actions">${actionsHtml}</div>
@@ -616,7 +626,7 @@ function renderEditCarForm(carId, data) {
             </div>
             <div class="form-group">
                 <label>Manufacture Year</label>
-                <input type="number" id="edit-year-${carId}" value="${escapeAttribute(data.manufactureYear || '')}" required min="1900" max="2100">
+                <input type="number" id="edit-year-${carId}" value="${escapeAttribute(data.manufactureYear || '')}" required min="1900" max="${getMaximumManufactureYear()}" step="1" oninvalid="this.setCustomValidity('Please enter a manufacture year from 1900 to ${getMaximumManufactureYear()}.')" oninput="this.setCustomValidity('')">
             </div>
             <div class="form-group">
                 <label>License Expiry</label>
@@ -668,8 +678,9 @@ async function handleSaveEditCar(carId, originalData) {
     const insExp = document.getElementById(`edit-ins-${carId}`).value;
     const notes = sanitizePlainText(document.getElementById(`edit-notes-${carId}`).value, 500);
 
-    if (isNaN(year) || year < 1900 || year > 2026) {
-        showMessage('Error: Please enter a valid manufacture year (1900-2026).', 'error', 'dashboard');
+    const maximumManufactureYear = getMaximumManufactureYear();
+    if (isNaN(year) || year < 1900 || year > maximumManufactureYear) {
+        showMessage(`Error: Please enter a valid manufacture year (1900-${maximumManufactureYear}).`, 'error', 'dashboard');
         return;
     }
 

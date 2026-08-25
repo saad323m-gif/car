@@ -8,6 +8,7 @@ import {
     showMessage, formatDateTime, formatCarLabel, isAdmin, isActiveUser,
     renderAccessDenied, escapeHtml, escapeAttribute, sanitizePlainText
 } from "./utils.js";
+import { formatNumber, t } from "./i18n.js";
 
 let currentUserData = null;
 let activeAdminFilter = 'all';
@@ -50,8 +51,6 @@ export function openViolationEntry(context = {}) {
         contextMessage.hidden = false;
     }
 
-    const timeInput = document.getElementById('violation-at');
-    if (timeInput && !timeInput.value) timeInput.value = toDubaiDateTimeText(new Date());
     document.getElementById('violation-plate-number')?.focus();
 }
 
@@ -59,26 +58,115 @@ function normalizePlateIdentifier(plateNumber, plateCode, emirate) {
     return `${plateNumber}-${plateCode.toLowerCase()}-${emirate.toLowerCase()}`;
 }
 
-function normalizeEnglishDigits(value) {
-    const arabicIndic = '٠١٢٣٤٥٦٧٨٩';
-    const easternArabicIndic = '۰۱۲۳۴۵۶۷۸۹';
-    return String(value || '').replace(/[٠-٩۰-۹]/g, character => {
-        const arabicIndex = arabicIndic.indexOf(character);
-        return arabicIndex >= 0 ? String(arabicIndex) : String(easternArabicIndic.indexOf(character));
-    });
+function getDubaiDateTimeParts(value = new Date()) {
+    const source = value && typeof value.toDate === 'function' ? value.toDate() : new Date(value);
+    const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Dubai',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23'
+    }).formatToParts(source);
+    const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    return {
+        year: Number(values.year),
+        month: Number(values.month),
+        day: Number(values.day),
+        hour: Number(values.hour),
+        minute: Number(values.minute)
+    };
 }
 
-function parseDubaiDateTime(value) {
-    const normalized = normalizeEnglishDigits(value).trim();
-    if (!/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}$/.test(normalized)) return null;
-    const date = new Date(`${normalized.replace(' ', 'T')}:00+04:00`);
-    return Number.isNaN(date.getTime()) ? null : date;
+function numberOptions(start, end, placeholder, pad = 0) {
+    let options = `<option value="">${t(placeholder)}</option>`;
+    for (let value = start; value <= end; value += 1) {
+        const label = pad ? String(value).padStart(pad, '0') : String(value);
+        options += `<option value="${value}">${label}</option>`;
+    }
+    return options;
 }
 
-function toDubaiDateTimeText(value) {
-    const source = value && typeof value.toDate === 'function' ? value.toDate() : new Date(value || Date.now());
-    const time = source.getTime() + (4 * 60 * 60 * 1000);
-    return new Date(time).toISOString().slice(0, 16).replace('T', ' ');
+function renderViolationDateTimeFields() {
+    const currentYear = getDubaiDateTimeParts().year;
+    let yearOptions = `<option value="">${t('Year')}</option>`;
+    for (let year = currentYear; year >= 1900; year -= 1) {
+        yearOptions += `<option value="${year}">${year}</option>`;
+    }
+
+    return `
+        <div class="violation-datetime-grid" aria-label="Violation occurrence date and time in UAE time">
+            <select id="violation-year" required aria-label="Year">${yearOptions}</select>
+            <select id="violation-month" required aria-label="${t('Month')}">
+                <option value="">${t('Month')}</option>
+                <option value="1">Jan</option><option value="2">Feb</option><option value="3">Mar</option>
+                <option value="4">Apr</option><option value="5">May</option><option value="6">Jun</option>
+                <option value="7">Jul</option><option value="8">Aug</option><option value="9">Sep</option>
+                <option value="10">Oct</option><option value="11">Nov</option><option value="12">Dec</option>
+            </select>
+            <select id="violation-day" required aria-label="Day">${numberOptions(1, 31, 'Day', 2)}</select>
+            <select id="violation-hour" required aria-label="Hour">${numberOptions(1, 12, 'Hour', 2)}</select>
+            <select id="violation-minute" required aria-label="Minute">${numberOptions(0, 59, 'Minute', 2)}</select>
+            <select id="violation-meridiem" required aria-label="AM or PM">
+                <option value="">AM/PM</option>
+                <option value="AM">AM</option>
+                <option value="PM">PM</option>
+            </select>
+        </div>
+        <small class="input-help">Select the actual occurrence date and time. Earlier dates are allowed; future dates are not allowed.</small>
+    `;
+}
+
+function updateViolationDayOptions() {
+    const yearSelect = document.getElementById('violation-year');
+    const monthSelect = document.getElementById('violation-month');
+    const daySelect = document.getElementById('violation-day');
+    if (!yearSelect || !monthSelect || !daySelect) return;
+
+    const year = Number(yearSelect.value);
+    const month = Number(monthSelect.value);
+    if (!year || !month) return;
+
+    const selectedDay = Number(daySelect.value);
+    const maximumDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    daySelect.innerHTML = numberOptions(1, maximumDay, 'Day', 2);
+    if (selectedDay && selectedDay <= maximumDay) daySelect.value = String(selectedDay);
+}
+
+function resetViolationForm() {
+    const form = document.getElementById('add-violation-form');
+    const daySelect = document.getElementById('violation-day');
+    const contextMessage = document.getElementById('violation-context-message');
+    if (form) form.reset();
+    if (daySelect) daySelect.innerHTML = numberOptions(1, 31, 'Day', 2);
+    if (contextMessage) {
+        contextMessage.textContent = '';
+        contextMessage.hidden = true;
+    }
+}
+
+function parseDubaiDateTime() {
+    const yearValue = document.getElementById('violation-year')?.value || '';
+    const monthValue = document.getElementById('violation-month')?.value || '';
+    const dayValue = document.getElementById('violation-day')?.value || '';
+    const hourValue = document.getElementById('violation-hour')?.value || '';
+    const minuteValue = document.getElementById('violation-minute')?.value || '';
+    const meridiem = document.getElementById('violation-meridiem')?.value || '';
+    const year = Number(yearValue);
+    const month = Number(monthValue);
+    const day = Number(dayValue);
+    const hour12 = Number(hourValue);
+    const minute = Number(minuteValue);
+
+    if (!yearValue || !monthValue || !dayValue || !hourValue || !minuteValue || !meridiem ||
+        !year || !month || !day || !hour12 || !Number.isInteger(minute)) return null;
+    const hour24 = meridiem === 'PM' ? (hour12 % 12) + 12 : hour12 % 12;
+    const date = new Date(Date.UTC(year, month - 1, day, hour24 - 4, minute));
+    const actual = getDubaiDateTimeParts(date);
+    if (actual.year !== year || actual.month !== month || actual.day !== day ||
+        actual.hour !== hour24 || actual.minute !== minute) return null;
+    return date;
 }
 
 function isAssignmentActiveAt(assignment, violationAt) {
@@ -98,11 +186,11 @@ function matchStatusLabel(status) {
         NO_ASSIGNMENT: 'No Assignment at This Time',
         REVIEW_REQUIRED: 'Review Required'
     };
-    return labels[status] || 'Unknown Status';
+    return t(labels[status] || 'Unknown Status');
 }
 
 function settlementStatusLabel(status) {
-    return status === 'SETTLED' ? 'Settled' : 'Unsettled';
+    return t(status === 'SETTLED' ? 'Settled' : 'Unsettled');
 }
 
 function settlementMethodLabel(method) {
@@ -111,7 +199,7 @@ function settlementMethodLabel(method) {
         OFFICIAL_OBJECTION: 'Official Objection',
         OTHER: 'Other Official Settlement'
     };
-    return labels[method] || 'Not specified';
+    return t(labels[method] || 'Not specified');
 }
 
 function statusClass(status) {
@@ -135,8 +223,8 @@ function safeNumber(value) {
 
 function formatAmount(value) {
     const amount = safeNumber(value);
-    if (amount === 0) return 'Not specified';
-    return amount.toLocaleString('en-AE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    if (amount === 0) return t('Not specified');
+    return formatNumber(amount, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 function getAreaId(prefix, token) {
@@ -183,24 +271,23 @@ export function renderViolationsView() {
     const formWrapper = document.getElementById('violation-form-wrapper');
     const toggleButton = document.getElementById('toggle-violation-form');
     const form = document.getElementById('add-violation-form');
+    const cancelButton = document.getElementById('cancel-violation-form');
+    const yearSelect = document.getElementById('violation-year');
+    const monthSelect = document.getElementById('violation-month');
 
     if (toggleButton && formWrapper) {
         toggleButton.addEventListener('click', () => {
             formWrapper.classList.toggle('hidden-form');
-            if (!formWrapper.classList.contains('hidden-form')) {
-                const timeInput = document.getElementById('violation-at');
-                if (timeInput && !timeInput.value) timeInput.value = toDubaiDateTimeText(new Date());
-            }
         });
     }
 
     if (form) form.addEventListener('submit', handleAddViolation);
-
-    const violationTimeInput = document.getElementById('violation-at');
-    if (violationTimeInput) {
-        violationTimeInput.addEventListener('input', () => {
-            const normalized = normalizeEnglishDigits(violationTimeInput.value);
-            if (normalized !== violationTimeInput.value) violationTimeInput.value = normalized;
+    if (yearSelect) yearSelect.addEventListener('change', updateViolationDayOptions);
+    if (monthSelect) monthSelect.addEventListener('change', updateViolationDayOptions);
+    if (cancelButton && formWrapper && form) {
+        cancelButton.addEventListener('click', () => {
+            resetViolationForm();
+            formWrapper.classList.add('hidden-form');
         });
     }
 
@@ -246,9 +333,9 @@ function renderViolationFormHtml() {
                     <option value="Other">Other</option>
                 </select>
             </div>
-            <div class="form-group">
-                <label for="violation-at">Violation Date & Time (UAE, GMT+4)</label>
-                <input type="text" id="violation-at" class="english-datetime-input" required inputmode="numeric" autocomplete="off" spellcheck="false" dir="ltr" maxlength="16" placeholder="YYYY-MM-DD HH:MM">
+            <div class="form-group full-width">
+                <label>Violation Date & Time (UAE, GMT+4)</label>
+                ${renderViolationDateTimeFields()}
             </div>
             <div class="form-group">
                 <label for="violation-type">Violation Type</label>
@@ -282,7 +369,7 @@ function readViolationForm() {
     const plateNumber = sanitizePlainText(document.getElementById('violation-plate-number')?.value || '', 6);
     const plateCode = sanitizePlainText(document.getElementById('violation-plate-code')?.value || '', 3).toUpperCase();
     const emirate = document.getElementById('violation-emirate')?.value || '';
-    const violationAt = parseDubaiDateTime(document.getElementById('violation-at')?.value || '');
+    const violationAt = parseDubaiDateTime();
     const violationType = sanitizePlainText(document.getElementById('violation-type')?.value || '', 80);
     const referenceNumber = sanitizePlainText(document.getElementById('violation-reference')?.value || '', 80);
     const location = sanitizePlainText(document.getElementById('violation-location')?.value || '', 160);
@@ -292,7 +379,8 @@ function readViolationForm() {
 
     if (!/^\d{1,6}$/.test(plateNumber)) throw new Error('Enter a valid plate number using digits only.');
     if (!plateCode || plateCode.length > 3) throw new Error('Enter a valid plate code.');
-    if (!violationAt) throw new Error('Enter a valid violation date and time in UAE time.');
+    if (!violationAt) throw new Error('Select a valid violation date and time in UAE time.');
+    if (violationAt.getTime() > Date.now()) throw new Error('A violation date and time cannot be in the future.');
     if (!violationType || violationType.length < 2) throw new Error('Enter a violation type with at least two characters.');
     if (!Number.isFinite(amount) || amount < 0 || amount > 1000000) throw new Error('Enter a valid amount or leave it blank.');
 
@@ -431,8 +519,7 @@ async function handleAddViolation(event) {
             text: `Created violation ${result.violationId}: ${matchStatusLabel(result.matchStatus)}.${assignmentDetails}`
         });
 
-        const form = document.getElementById('add-violation-form');
-        if (form) form.reset();
+        resetViolationForm();
         const wrapper = document.getElementById('violation-form-wrapper');
         if (wrapper) wrapper.classList.add('hidden-form');
         showMessage(`Violation ${result.violationId} saved: ${matchStatusLabel(result.matchStatus)}.`, result.matchStatus === 'AUTO_LINKED' ? 'success' : 'warning', 'dashboard');

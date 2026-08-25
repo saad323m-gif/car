@@ -22,10 +22,12 @@ import { renderSearchView, setSearchCurrentUser } from "./search.js";
 import { renderStatsView, setStatsCurrentUser } from "./stats.js";
 import { renderViolationsView, renderMyViolationsView, setViolationsCurrentUser } from "./violations.js";
 import { showMessage, handleFirebaseError, clearMessage } from "./utils.js";
+import { initializeI18n, attachLanguageSwitcher, formatDate, formatNumber } from "./i18n.js";
 
 function updateDateTime() {
-    const now = new Date();
-    const options = {
+    const el = document.getElementById('datetime');
+    if (!el) return;
+    el.textContent = formatDate(new Date(), {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
@@ -33,23 +35,20 @@ function updateDateTime() {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        hour12: true,
-        timeZone: 'Asia/Dubai'
-    };
-    const el = document.getElementById('datetime');
-    if (el) {
-        el.textContent = now.toLocaleString('en-GB', options).replace(',', ' -');
-    }
+        hour12: true
+    }).replace(',', ' -').replace('،', ' -');
 }
 
 function updateCopyrightYear() {
     const yearEl = document.getElementById('copyright-year');
     if (yearEl) {
-        yearEl.textContent = new Date().getFullYear();
+        yearEl.textContent = formatNumber(new Date().getFullYear(), { useGrouping: false });
     }
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+    initializeI18n();
+    attachLanguageSwitcher();
     updateDateTime();
     updateCopyrightYear();
     setInterval(updateDateTime, 1000);
@@ -70,6 +69,15 @@ window.addEventListener('DOMContentLoaded', () => {
             window.location.reload();
         });
     }
+
+    document.addEventListener('app-language-change', () => {
+        updateDateTime();
+        updateCopyrightYear();
+        const dashboardVisible = document.getElementById('dashboard-view')?.style.display !== 'none';
+        const activeTab = document.querySelector('.tab-btn.active');
+        if (dashboardVisible && activeTab) activeTab.click();
+        else renderLoginForm();
+    });
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {

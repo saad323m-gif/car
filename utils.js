@@ -3,6 +3,8 @@
  * Dynamic values must be escaped before insertion into HTML templates.
  */
 
+import { formatDate, formatLatinText, t, translateText } from "./i18n.js";
+
 let messageTimeout = null;
 
 export function showMessage(text, type = 'error', target = 'auth') {
@@ -15,11 +17,12 @@ export function showMessage(text, type = 'error', target = 'auth') {
         messageTimeout = null;
     }
 
-    box.textContent = String(text || '');
+    const localizedText = formatLatinText(translateText(text));
+    box.textContent = localizedText;
     box.className = `message-box ${type}`;
     box.style.opacity = '1';
 
-    const duration = String(text || '').length > 80 ? 7000 : 5500;
+    const duration = localizedText.length > 80 ? 7000 : 5500;
     messageTimeout = setTimeout(() => {
         box.classList.add('fade-out');
         setTimeout(() => {
@@ -110,19 +113,18 @@ export function escapeAttribute(value) {
 }
 
 export function sanitizePlainText(value, maxLength = 500) {
-    return String(value ?? '')
+    return formatLatinText(String(value ?? ''))
         .replace(/[\u0000-\u001F\u007F]/g, ' ')
         .trim()
         .slice(0, maxLength);
 }
 
 export function formatDateTime(ts) {
-    if (!ts) return 'N/A';
+    if (!ts) return t('N/A');
     const date = ts.toDate ? ts.toDate() : new Date(ts);
-    if (Number.isNaN(date.getTime())) return 'N/A';
+    if (Number.isNaN(date.getTime())) return t('N/A');
 
-    return date.toLocaleString('en-GB', {
-        timeZone: 'Asia/Dubai',
+    return formatDate(date, {
         day: '2-digit',
         month: 'short',
         year: 'numeric',
@@ -134,12 +136,11 @@ export function formatDateTime(ts) {
 }
 
 export function formatDateOnly(ts) {
-    if (!ts) return 'N/A';
+    if (!ts) return t('N/A');
     const date = ts.toDate ? ts.toDate() : new Date(ts);
-    if (Number.isNaN(date.getTime())) return 'N/A';
+    if (Number.isNaN(date.getTime())) return t('N/A');
 
-    return date.toLocaleDateString('en-GB', {
-        timeZone: 'Asia/Dubai',
+    return formatDate(date, {
         day: '2-digit',
         month: 'short',
         year: 'numeric'
@@ -148,15 +149,15 @@ export function formatDateOnly(ts) {
 
 export function formatPeriod(start, end) {
     const startStr = formatDateTime(start);
-    return end ? `From ${startStr} to ${formatDateTime(end)}` : `From ${startStr} to Now`;
+    return end ? `${t('From')} ${startStr} ${t('to')} ${formatDateTime(end)}` : `${t('From')} ${startStr} ${t('to')} ${t('Now')}`;
 }
 
 export function formatCarLabel(carData) {
-    if (!carData) return 'Unknown Car';
-    const id = carData.carId || 'N/A';
-    const number = carData.plateNumber || '';
-    const code = carData.plateCode || '';
-    const emirate = carData.emirate || '';
+    if (!carData) return t('Unknown Car');
+    const id = formatLatinText(carData.carId || t('N/A'));
+    const number = formatLatinText(carData.plateNumber || '');
+    const code = formatLatinText(carData.plateCode || '');
+    const emirate = translateText(carData.emirate || '');
     return `${id} | ${number} ${code} (${emirate})`;
 }
 
@@ -221,14 +222,14 @@ export function emirateOptionsHtml(selected = '') {
 
     return emirates.map(emirate => {
         const isSelected = emirate === selected ? ' selected' : '';
-        return `<option value="${escapeAttribute(emirate)}"${isSelected}>${escapeHtml(emirate)}</option>`;
+        return `<option value="${escapeAttribute(emirate)}"${isSelected}>${escapeHtml(translateText(emirate))}</option>`;
     }).join('');
 }
 
 export function emptyStateHtml(text) {
-    return `<p class="empty-state">${escapeHtml(text)}</p>`;
+    return `<p class="empty-state">${escapeHtml(formatLatinText(translateText(text)))}</p>`;
 }
 
 export function loadingHtml(text = 'Loading...') {
-    return `<p class="loading-text">${escapeHtml(text)}</p>`;
+    return `<p class="loading-text">${escapeHtml(formatLatinText(translateText(text)))}</p>`;
 }

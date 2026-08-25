@@ -9,6 +9,7 @@ import {
 import {
     isAdmin, renderAccessDenied, formatDateTime, escapeHtml, sanitizePlainText
 } from "./utils.js";
+import { isArabic, t, translateLogAction, translateText } from "./i18n.js";
 
 let lastVisibleLog = null;
 let currentUserData = null;
@@ -108,18 +109,20 @@ function renderLogTimelineItem(container, data) {
     item.className = 'timeline-item';
 
     const date = escapeHtml(formatDateTime(data.timestamp));
-    const action = escapeHtml(data.actionType || 'Activity');
-    const actor = escapeHtml(data.actorName || 'System');
+    const action = escapeHtml(translateLogAction(data.actionType));
+    const actor = escapeHtml(data.actorName || t('System'));
     const target = data.targetName
-        ? `<br><strong>Target:</strong> ${escapeHtml(data.targetName)}`
+        ? `<br><strong>${escapeHtml(t('Target:'))}</strong> ${escapeHtml(data.targetName)}`
         : '';
-    const details = data.details ? `<br>${escapeHtml(data.details)}` : '';
+    const details = data.details && !isArabic()
+        ? `<br>${escapeHtml(translateText(data.details))}`
+        : '';
 
     item.innerHTML = `
         <div class="timeline-dot" aria-hidden="true"></div>
         <div class="timeline-content">
             <div class="timeline-date">${date}</div>
-            <div class="timeline-text"><strong>${action}</strong> by ${actor}${target}${details}</div>
+            <div class="timeline-text"><strong>${action}</strong> ${escapeHtml(t('by'))} ${actor}${target}${details}</div>
         </div>
     `;
     container.appendChild(item);

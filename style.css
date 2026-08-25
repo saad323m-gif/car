@@ -33,6 +33,39 @@ header {
 .header-logo { width: 40px; height: 40px; object-fit: contain; }
 #datetime { font-size: 1rem; font-weight: bold; color: #1976d2; }
 
+.language-switcher {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid #bbdefb;
+    border-radius: 7px;
+    background: #f7fbff;
+    direction: ltr;
+}
+
+.language-option {
+    min-width: 68px;
+    padding: 6px 9px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: #36556f;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.language-option.active {
+    background: #1976d2;
+    color: #fff;
+}
+
+.language-option:focus-visible {
+    outline: 3px solid rgba(25, 118, 210, 0.3);
+    outline-offset: 2px;
+}
+
 .btn-logout {
     padding: 8px 20px;
     font-size: 0.9rem;
@@ -98,6 +131,66 @@ main {
     border-radius: 8px;
     background-color: #ffffff;
     box-shadow: 0 4px 6px rgba(25, 118, 210, 0.05);
+}
+
+html[dir="rtl"] body {
+    font-family: Tahoma, Arial, sans-serif;
+}
+
+html[dir="rtl"] .card,
+html[dir="rtl"] .stat-card,
+html[dir="rtl"] .dashboard-box,
+html[dir="rtl"] .form-box,
+html[dir="rtl"] .violation-card,
+html[dir="rtl"] .request-card,
+html[dir="rtl"] .member-card {
+    text-align: center;
+}
+
+html[dir="rtl"] .card-header,
+html[dir="rtl"] .car-card-header,
+html[dir="rtl"] .card-header-top,
+html[dir="rtl"] .card-header-plates,
+html[dir="rtl"] .card-title,
+html[dir="rtl"] .detail-item,
+html[dir="rtl"] .detail-row,
+html[dir="rtl"] .summary-item,
+html[dir="rtl"] .violation-card-header,
+html[dir="rtl"] .request-card-header {
+    text-align: center;
+    align-items: center;
+    justify-content: center;
+}
+
+html[dir="rtl"] .card-title,
+html[dir="rtl"] .card-header-plates {
+    margin-inline: auto;
+}
+
+html[dir="rtl"] .plate-wrapper,
+html[dir="rtl"] .plate-container,
+html[dir="rtl"] .plate-number,
+html[dir="rtl"] .plate-code,
+html[dir="rtl"] .plate-emirate,
+html[dir="rtl"] .mini-plate,
+html[dir="rtl"] .mini-plate-number,
+html[dir="rtl"] .mini-plate-code,
+html[dir="rtl"] .mini-plate-emirate,
+html[dir="rtl"] .car-summary-id,
+html[dir="rtl"] input[type="email"],
+html[dir="rtl"] input[type="tel"],
+html[dir="rtl"] input[type="number"],
+html[dir="rtl"] input[inputmode="numeric"],
+html[dir="rtl"] input[type="date"] {
+    direction: ltr;
+    text-align: center;
+    unicode-bidi: plaintext;
+}
+
+@media (max-width: 760px) {
+    .language-switcher {
+        margin: 2px auto;
+    }
 }
 
 /* ========== Tabs ========== */
@@ -1293,6 +1386,43 @@ h4 {
 
 .violation-form-intro strong {
     color: #15335b;
+}
+
+.violation-datetime-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(78px, 1fr));
+    gap: 8px;
+    direction: ltr;
+}
+
+.violation-datetime-grid select {
+    min-width: 0;
+    height: 42px;
+    padding: 0 8px;
+    direction: ltr;
+    text-align: center;
+    font-family: "Courier New", Courier, monospace;
+    font-variant-numeric: tabular-nums;
+}
+
+.input-help {
+    display: block;
+    margin-top: 7px;
+    color: #56677f;
+    font-size: 0.82rem;
+    line-height: 1.35;
+}
+
+@media (max-width: 700px) {
+    .violation-datetime-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 420px) {
+    .violation-datetime-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 .violation-form-actions,
