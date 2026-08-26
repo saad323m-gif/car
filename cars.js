@@ -86,6 +86,10 @@ export function renderCarsView() {
                         <input type="text" id="car-owner" required>
                     </div>
                     <div class="form-group">
+                        <label>Owner Traffic Code (Optional)</label>
+                        <input type="text" id="car-owner-traffic-code" maxlength="60" inputmode="text">
+                    </div>
+                    <div class="form-group">
                         <label>VIN</label>
                         <input type="text" id="car-vin" required placeholder="Vehicle Identification Number">
                     </div>
@@ -225,6 +229,7 @@ async function handleAddCar(e) {
     const emirateSelect = document.getElementById('car-emirate');
     const typeEl = document.getElementById('car-type');
     const ownerEl = document.getElementById('car-owner');
+    const ownerTrafficCodeEl = document.getElementById('car-owner-traffic-code');
     const vinEl = document.getElementById('car-vin');
     const yearEl = document.getElementById('car-year');
     const licenseExpEl = document.getElementById('car-license-exp');
@@ -245,6 +250,7 @@ async function handleAddCar(e) {
     const emirate = emirateSelect.value;
     const type = sanitizePlainText(typeEl.value, 80);
     const owner = sanitizePlainText(ownerEl.value, 80);
+    const ownerTrafficCode = sanitizePlainText(ownerTrafficCodeEl?.value, 60);
     const vin = sanitizePlainText(vinEl.value, 40).toUpperCase();
     const manufactureYear = parseInt(yearEl.value);
     const licenseExp = licenseExpEl.value;
@@ -282,6 +288,7 @@ async function handleAddCar(e) {
             plateIdentifier,
             type,
             ownerName: owner,
+            ownerTrafficCode,
             vin,
             manufactureYear,
             licenseExpiry: new Date(licenseExp),
@@ -488,6 +495,7 @@ function renderCarCard(id, data, isUserView = false) {
                 <div class="detail-item"><span class="detail-label">Emirate</span><span class="detail-value">${escapeHtml(data.emirate || 'N/A')}</span></div>
                 <div class="detail-item"><span class="detail-label">Type</span><span class="detail-value">${escapeHtml(data.type || 'N/A')}</span></div>
                 <div class="detail-item"><span class="detail-label">Owner Name</span><span class="detail-value">${escapeHtml(data.ownerName || 'N/A')}</span></div>
+                <div class="detail-item"><span class="detail-label">Owner Traffic Code</span><span class="detail-value" dir="ltr">${escapeHtml(data.ownerTrafficCode || 'N/A')}</span></div>
                 <div class="detail-item"><span class="detail-label">VIN</span><span class="detail-value">${escapeHtml(data.vin || 'N/A')}</span></div>
                 <div class="detail-item"><span class="detail-label">Manufacture Year</span><span class="detail-value">${escapeHtml(data.manufactureYear || 'N/A')}</span></div>
                 <div class="detail-item"><span class="detail-label">License Expiry</span><span class="detail-value ${licClass}">${escapeHtml(formatDateOnly(data.licenseExpiry))} (${formatNumber(licDiff)} ${t('days left')})</span></div>
@@ -621,6 +629,10 @@ function renderEditCarForm(carId, data) {
                 <input type="text" id="edit-owner-${carId}" value="${escapeAttribute(data.ownerName)}" required maxlength="80">
             </div>
             <div class="form-group">
+                <label>Owner Traffic Code (Optional)</label>
+                <input type="text" id="edit-owner-traffic-code-${carId}" value="${escapeAttribute(data.ownerTrafficCode || '')}" maxlength="60" inputmode="text">
+            </div>
+            <div class="form-group">
                 <label>VIN</label>
                 <input type="text" id="edit-vin-${carId}" value="${escapeAttribute(data.vin)}" required maxlength="40">
             </div>
@@ -672,6 +684,7 @@ async function handleSaveEditCar(carId, originalData) {
     const emirate = document.getElementById(`edit-emirate-${carId}`).value;
     const type = sanitizePlainText(document.getElementById(`edit-type-${carId}`).value, 80);
     const owner = sanitizePlainText(document.getElementById(`edit-owner-${carId}`).value, 80);
+    const ownerTrafficCode = sanitizePlainText(document.getElementById(`edit-owner-traffic-code-${carId}`)?.value, 60);
     const vin = sanitizePlainText(document.getElementById(`edit-vin-${carId}`).value, 40).toUpperCase();
     const year = parseInt(document.getElementById(`edit-year-${carId}`).value);
     const licExp = document.getElementById(`edit-lic-${carId}`).value;
@@ -706,6 +719,7 @@ async function handleSaveEditCar(carId, originalData) {
             plateIdentifier,
             type,
             ownerName: owner,
+            ownerTrafficCode,
             vin,
             manufactureYear: year,
             licenseExpiry: new Date(licExp),
@@ -740,6 +754,8 @@ function handlePrintCard(data) {
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+        const logoUrl = new URL('icon.png', window.location.href).href;
+        const printDirection = document.documentElement.dir === 'rtl' ? 'rtl' : 'ltr';
 
         const html = `<!DOCTYPE html>
 <html>
@@ -748,7 +764,9 @@ function handlePrintCard(data) {
     <title>Car Card - ${safe(data.carId)}</title>
     <style>
         @page { margin: 12mm; }
-        body { font-family: Arial, sans-serif; padding: 16px; text-align: center; color: #222; }
+        body { position: relative; isolation: isolate; font-family: Arial, sans-serif; padding: 16px; text-align: center; color: #222; }
+        .print-watermark { position: fixed; top: 50%; left: 50%; width: min(76vw, 460px); max-height: 68vh; object-fit: contain; transform: translate(-50%, -50%); opacity: 0.055; z-index: 0; pointer-events: none; }
+        .print-content { position: relative; z-index: 1; }
         .print-header { border-bottom: 2px solid #1976d2; margin-bottom: 16px; padding-bottom: 10px; }
         .print-header h2 { margin: 0; color: #1565c0; font-size: 18px; }
         h3 { margin: 12px 0; font-size: 15px; word-break: break-word; }
@@ -762,9 +780,11 @@ function handlePrintCard(data) {
         .detail-value { font-size: 15px; color: #333; }
     </style>
 </head>
-<body>
+<body dir="${printDirection}">
+    <img class="print-watermark" src="${safe(logoUrl)}" alt="" aria-hidden="true">
+    <main class="print-content">
     <div class="print-header">
-        <h2>Car Management System</h2>
+        <h2>${safe(t('Car Management System'))}</h2>
     </div>
     <h3>${safe(label)}</h3>
     <div class="plate-container">
@@ -773,15 +793,17 @@ function handlePrintCard(data) {
         <span class="plate-code">${safe(data.plateCode)}</span>
     </div>
     <div class="details">
-        <div class="detail-row"><span class="detail-label">Owner Name:</span> <span class="detail-value">${safe(data.ownerName)}</span></div>
-        <div class="detail-row"><span class="detail-label">Type:</span> <span class="detail-value">${safe(data.type)}</span></div>
+        <div class="detail-row"><span class="detail-label">${safe(t('Owner Name'))}:</span> <span class="detail-value">${safe(data.ownerName)}</span></div>
+        <div class="detail-row"><span class="detail-label">${safe(t('Owner Traffic Code'))}:</span> <span class="detail-value" dir="ltr">${safe(data.ownerTrafficCode || t('N/A'))}</span></div>
+        <div class="detail-row"><span class="detail-label">${safe(t('Type'))}:</span> <span class="detail-value">${safe(data.type)}</span></div>
         <div class="detail-row"><span class="detail-label">VIN:</span> <span class="detail-value">${safe(data.vin)}</span></div>
-        <div class="detail-row"><span class="detail-label">Manufacture Year:</span> <span class="detail-value">${safe(data.manufactureYear || 'N/A')}</span></div>
-        <div class="detail-row"><span class="detail-label">License Expiry:</span> <span class="detail-value">${safe(licStr)}</span></div>
-        <div class="detail-row"><span class="detail-label">Insurance Expiry:</span> <span class="detail-value">${safe(insStr)}</span></div>
-        <div class="detail-row"><span class="detail-label">Current Assignee:</span> <span class="detail-value">${safe(data.currentUserName || 'Unassigned')}</span></div>
-        <div class="detail-row"><span class="detail-label">Notes:</span> <span class="detail-value">${safe(data.notes || 'N/A')}</span></div>
+        <div class="detail-row"><span class="detail-label">${safe(t('Manufacture Year'))}:</span> <span class="detail-value">${safe(data.manufactureYear || t('N/A'))}</span></div>
+        <div class="detail-row"><span class="detail-label">${safe(t('License Expiry'))}:</span> <span class="detail-value">${safe(licStr)}</span></div>
+        <div class="detail-row"><span class="detail-label">${safe(t('Insurance Expiry'))}:</span> <span class="detail-value">${safe(insStr)}</span></div>
+        <div class="detail-row"><span class="detail-label">${safe(t('Current Assignee'))}:</span> <span class="detail-value">${safe(data.currentUserName || t('Unassigned'))}</span></div>
+        <div class="detail-row"><span class="detail-label">${safe(t('Notes'))}:</span> <span class="detail-value">${safe(data.notes || t('N/A'))}</span></div>
     </div>
+    </main>
 </body>
 </html>`;
 

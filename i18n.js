@@ -192,6 +192,9 @@ const translations = {
         'Emirate': 'الإمارة',
         'Type (Make)': 'النوع (الشركة/الطراز)',
         'Owner Name': 'اسم المالك',
+        'Owner Traffic Code (Optional)': 'الرمز المروري للمالك (اختياري)',
+        'Owner Traffic Code': 'الرمز المروري للمالك',
+        'Current Assignee': 'المستخدم الحالي للعهدة',
         'VIN': 'رقم الهيكل VIN',
         'Manufacture Year': 'سنة الصنع',
         'License Expiry': 'انتهاء الترخيص',
@@ -466,7 +469,9 @@ Object.assign(translations.ar, {
     'No cars match the current filter.': 'لا توجد مركبات مطابقة للتصفية الحالية.',
     'No cars assigned to you currently.': 'لا توجد مركبات مسندة إليك حالياً.',
     'Unable to load cars. Please try again.': 'تعذر تحميل المركبات. يرجى إعادة المحاولة.',
-    'Unable to load your cars. Please try again.': 'تعذر تحميل مركباتك. يرجى إعادة المحاولة.'
+    'Unable to load your cars. Please try again.': 'تعذر تحميل مركباتك. يرجى إعادة المحاولة.',
+    'A pending unlink request already exists for this car. Please wait for the administrator decision.': 'يوجد بالفعل طلب فك عهدة معلق لهذه المركبة. يرجى انتظار قرار المدير.',
+    'Send an unlink request to the administrator? The car remains assigned to you until approval.': 'إرسال طلب فك العهدة إلى المدير؟ ستبقى المركبة بعهدتك حتى اعتماد الطلب.'
 });
 
 let activeLanguage = readStoredLanguage();

@@ -166,6 +166,9 @@ async function approveUnlink(requestRef, reqId, reqData) {
         });
     }
     batch.update(requestRef, processedRequestFields('APPROVED', reqData.carId));
+    if (reqData.requestId) {
+        batch.delete(doc(db, 'cars', reqData.carId, 'unlinkGuards', reqData.userId));
+    }
     await batch.commit();
 
     await logAction(currentUserData, 'APPROVE_UNLINK', {
@@ -242,6 +245,7 @@ function renderCompleteCarForm(reqId, reqData) {
         <form id="complete-car-${reqId}" class="edit-car-form">
             <div class="form-group"><label>Type (Make)</label><input type="text" id="cc-type-${reqId}" required maxlength="80"></div>
             <div class="form-group"><label>Owner Name</label><input type="text" id="cc-owner-${reqId}" required maxlength="80"></div>
+            <div class="form-group"><label>Owner Traffic Code (Optional)</label><input type="text" id="cc-owner-traffic-code-${reqId}" maxlength="60" inputmode="text"></div>
             <div class="form-group"><label>VIN</label><input type="text" id="cc-vin-${reqId}" required maxlength="40"></div>
             <div class="form-group"><label>Manufacture Year</label><input type="number" id="cc-year-${reqId}" required min="1900" max="2100"></div>
             <div class="form-group"><label>License Expiry</label><input type="date" id="cc-lic-${reqId}" required></div>
@@ -262,6 +266,7 @@ async function handleCompleteAndAssign(reqId, reqData) {
 
     const type = sanitizePlainText(document.getElementById(`cc-type-${reqId}`)?.value, 80);
     const owner = sanitizePlainText(document.getElementById(`cc-owner-${reqId}`)?.value, 80);
+    const ownerTrafficCode = sanitizePlainText(document.getElementById(`cc-owner-traffic-code-${reqId}`)?.value, 60);
     const vin = sanitizePlainText(document.getElementById(`cc-vin-${reqId}`)?.value, 40).toUpperCase();
     const year = Number.parseInt(document.getElementById(`cc-year-${reqId}`)?.value, 10);
     const licenseExpiry = document.getElementById(`cc-lic-${reqId}`)?.value;
@@ -306,6 +311,7 @@ async function handleCompleteAndAssign(reqId, reqData) {
             plateIdentifier,
             type,
             ownerName: owner,
+            ownerTrafficCode,
             vin,
             manufactureYear: year,
             licenseExpiry: new Date(licenseExpiry),
@@ -348,6 +354,9 @@ async function handleReject(reqId, reqData) {
 
         const batch = writeBatch(db);
         batch.update(requestRef, processedRequestFields('REJECTED'));
+        if (reqData.type === 'UNLINK' && reqData.requestId && reqData.carId) {
+            batch.delete(doc(db, 'cars', reqData.carId, 'unlinkGuards', reqData.userId));
+        }
         await batch.commit();
         await logAction(currentUserData, 'REJECT_REQUEST', {
             targetId: reqId,
@@ -478,28 +487,65 @@ export async function createLinkRequest(event) {
     }
 }
 
+async function hasLegacyPendingUnlinkRequest(carId) {
+    const ownRequestsQuery = query(
+        collection(db, 'requests'),
+        where('userId', '==', currentUserData.uid),
+        limit(50)
+    );
+    const snapshot = await getDocs(ownRequestsQuery);
+    return snapshot.docs.some(requestDoc => {
+        const data = requestDoc.data();
+        return data.type === 'UNLINK' && data.status === 'PENDING' && data.carId === carId;
+    });
+}
+
 export async function createUnlinkRequest(carId, carData) {
     if (!isActiveUser(currentUserData)) return;
     if (!confirm('Send an unlink request to the administrator? The car remains assigned to you until approval.')) return;
 
     try {
-        const carSnap = await getDoc(doc(db, 'cars', carId));
-        if (!carSnap.exists() || carSnap.data().currentUserId !== currentUserData.uid) {
-            throw new Error('The car is no longer assigned to you.');
+        if (await hasLegacyPendingUnlinkRequest(carId)) {
+            showMessage('A pending unlink request already exists for this car. Please wait for the administrator decision.', 'warning', 'dashboard');
+            return;
         }
 
+        const requestRef = doc(collection(db, 'requests'));
+        const carRef = doc(db, 'cars', carId);
+        const guardRef = doc(db, 'cars', carId, 'unlinkGuards', currentUserData.uid);
         const label = formatCarLabel(carData);
-        await addDoc(collection(db, 'requests'), {
-            type: 'UNLINK',
-            userId: currentUserData.uid,
-            userName: currentUserData.username,
-            carId,
-            plateNumber: sanitizePlainText(carData.plateNumber, 6),
-            plateCode: sanitizePlainText(carData.plateCode, 3).toUpperCase(),
-            emirate: carData.emirate,
-            status: 'PENDING',
-            timestamp: serverTimestamp()
+
+        await runTransaction(db, async transaction => {
+            const carSnap = await transaction.get(carRef);
+            const guardSnap = await transaction.get(guardRef);
+            if (!carSnap.exists() || carSnap.data().currentUserId !== currentUserData.uid) {
+                throw new Error('The car is no longer assigned to you.');
+            }
+            if (guardSnap.exists() && guardSnap.data().status === 'PENDING') {
+                throw new Error('A pending unlink request already exists for this car. Please wait for the administrator decision.');
+            }
+
+            transaction.set(guardRef, {
+                userId: currentUserData.uid,
+                requestId: requestRef.id,
+                status: 'PENDING',
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            });
+            transaction.set(requestRef, {
+                requestId: requestRef.id,
+                type: 'UNLINK',
+                userId: currentUserData.uid,
+                userName: currentUserData.username,
+                carId,
+                plateNumber: sanitizePlainText(carData.plateNumber, 6),
+                plateCode: sanitizePlainText(carData.plateCode, 3).toUpperCase(),
+                emirate: carData.emirate,
+                status: 'PENDING',
+                timestamp: serverTimestamp()
+            });
         });
+
         await logAction(currentUserData, 'REQUEST_UNLINK', {
             targetId: carId,
             targetName: label,
@@ -509,7 +555,10 @@ export async function createUnlinkRequest(carId, carData) {
         await updateRequestsBadge();
     } catch (error) {
         console.error('Unlink request failed:', error);
-        showMessage('Unable to create the unlink request. Please try again.', 'error', 'dashboard');
+        const message = error?.message === 'A pending unlink request already exists for this car. Please wait for the administrator decision.'
+            ? error.message
+            : 'Unable to create the unlink request. Please try again.';
+        showMessage(message, 'error', 'dashboard');
     }
 }
 

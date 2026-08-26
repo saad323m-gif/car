@@ -19,17 +19,30 @@ body {
 /* ========== Header ========== */
 header {
     width: 100%;
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 2fr) minmax(0, 1fr);
     align-items: center;
-    padding: 15px 25px;
-    border-bottom: 1px solid #e3f2fd;
-    min-height: 70px;
+    gap: 12px;
+    padding: 14px 22px;
+    border-bottom: 1px solid #d9eaf8;
+    min-height: 78px;
     flex-shrink: 0;
 }
-.header-left { flex: 1; }
-.header-center { flex: 2; text-align: center; }
-.header-right { flex: 1; display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+.header-left { min-width: 0; }
+.header-center { min-width: 0; text-align: center; }
+.header-right {
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 7px;
+    padding: 6px;
+    border: 1px solid #d6e8f7;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #fbfdff, #f4f9fd);
+    box-shadow: 0 2px 8px rgba(25, 118, 210, 0.08);
+}
 .header-logo { width: 40px; height: 40px; object-fit: contain; }
 #datetime { font-size: 1rem; font-weight: bold; color: #1976d2; }
 
@@ -66,31 +79,55 @@ header {
     outline-offset: 2px;
 }
 
+.btn-logout,
+.btn-change-password,
+.btn-refresh {
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 8px 13px;
+    font-size: 0.84rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(34, 70, 100, 0.16);
+    transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
 .btn-logout {
-    padding: 8px 20px;
-    font-size: 0.9rem;
     background-color: #d32f2f;
     color: #ffffff;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
-    transition: background-color 0.3s;
+    border: 1px solid #b71c1c;
 }
 .btn-logout:hover { background-color: #b71c1c; }
 
 .btn-change-password {
-    padding: 8px 16px;
-    font-size: 0.9rem;
     background-color: #1976d2;
     color: #ffffff;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
-    transition: background-color 0.3s;
+    border: 1px solid #1565c0;
 }
 .btn-change-password:hover { background-color: #1565c0; }
+
+.btn-refresh {
+    min-width: 40px;
+    padding-inline: 10px;
+    font-size: 1.1rem;
+    background-color: #455a64;
+    color: #ffffff;
+    border: 1px solid #37474f;
+    line-height: 1;
+}
+.btn-refresh:hover { background-color: #37474f; }
+
+.btn-logout:hover,
+.btn-change-password:hover,
+.btn-refresh:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(34, 70, 100, 0.22);
+}
 
 /* ========== Layout ========== */
 main {
@@ -883,18 +920,22 @@ h4 {
     .view-container { max-width: 100%; }
     #datetime { font-size: 0.8rem; }
     header {
-        flex-direction: column;
-        gap: 10px;
+        grid-template-columns: 1fr;
+        gap: 9px;
         padding: 10px;
     }
     .header-left,
     .header-center,
     .header-right {
-        flex: none;
         width: 100%;
         text-align: center;
     }
+    .header-left { display: none; }
     .header-right { justify-content: center; }
+    .language-switcher { flex: 0 0 auto; }
+    .btn-logout,
+    .btn-change-password,
+    .btn-refresh { min-height: 36px; }
     .tab-btn {
         padding: 8px 15px;
         font-size: 0.9rem;
@@ -937,21 +978,19 @@ h4 {
         grid-template-columns: 1fr;
     }
 }
-/* ========== Refresh Button ========== */
-.btn-refresh {
-    padding: 8px 14px;
-    font-size: 1.15rem;
-    background-color: #455a64;
-    color: #ffffff;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
-    transition: background-color 0.3s;
-    line-height: 1;
-}
-.btn-refresh:hover {
-    background-color: #37474f;
+@media (max-width: 480px) {
+    .header-right {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+    }
+    .language-switcher { grid-column: 1 / -1; justify-self: center; }
+    .btn-refresh,
+    .btn-change-password,
+    .btn-logout { width: 100%; }
+    .btn-refresh { grid-column: 1; }
+    .btn-change-password { grid-column: 2; }
+    .btn-logout { grid-column: 1 / -1; }
 }
 
 /* ========== Requests Badge ========== */
