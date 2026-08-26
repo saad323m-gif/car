@@ -18,10 +18,25 @@ service cloud.firestore {
       return get(userPath(request.auth.uid)).data;
     }
 
-    function isActiveUser() {
+    function termsAcceptancePath(userId) {
+      return /databases/$(database)/documents/termsAcceptances/$(userId)_v1.0.0;
+    }
+
+    function isRegisteredActiveUser() {
       return signedIn() &&
         exists(userPath(request.auth.uid)) &&
         userData().status == 'active';
+    }
+
+    function hasAcceptedCurrentTerms(userId) {
+      return exists(termsAcceptancePath(userId)) &&
+        get(termsAcceptancePath(userId)).data.userId == userId &&
+        get(termsAcceptancePath(userId)).data.termsVersion == 'v1.0.0' &&
+        get(termsAcceptancePath(userId)).data.termsFingerprint == 'cms-terms-v1-2026-08-26';
+    }
+
+    function isActiveUser() {
+      return isRegisteredActiveUser() && hasAcceptedCurrentTerms(request.auth.uid);
     }
 
     function isAdmin() {
@@ -86,7 +101,7 @@ service cloud.firestore {
     function validCarShape(data) {
       return data.keys().hasOnly([
         'carId', 'plateNumber', 'plateCode', 'emirate', 'plateIdentifier',
-        'type', 'ownerName', 'vin', 'manufactureYear', 'licenseExpiry',
+        'type', 'ownerName', 'ownerTrafficCode', 'vin', 'manufactureYear', 'licenseExpiry',
         'insuranceExpiry', 'notes', 'currentUserId', 'currentUserName',
         'status', 'createdAt', 'updatedAt'
       ]) &&
@@ -103,6 +118,7 @@ service cloud.firestore {
         isText(data.plateIdentifier, 5, 80) &&
         isText(data.type, 1, 80) &&
         isText(data.ownerName, 1, 80) &&
+        (!data.keys().hasAny(['ownerTrafficCode']) || isText(data.ownerTrafficCode, 0, 60)) &&
         isText(data.vin, 5, 40) &&
         data.manufactureYear is int &&
         data.manufactureYear >= 1900 && data.manufactureYear <= 2100 &&
@@ -134,13 +150,14 @@ service cloud.firestore {
 
     function validRequestShape(data) {
       return data.keys().hasOnly([
-        'type', 'userId', 'userName', 'carId', 'plateNumber', 'plateCode',
+        'requestId', 'type', 'userId', 'userName', 'carId', 'plateNumber', 'plateCode',
         'emirate', 'status', 'timestamp', 'processedAt', 'processedBy'
       ]) &&
         data.keys().hasAll([
           'type', 'userId', 'userName', 'plateNumber', 'plateCode',
           'emirate', 'status', 'timestamp'
         ]) &&
+        (!data.keys().hasAny(['requestId']) || data.requestId == null || isText(data.requestId, 1, 128)) &&
         data.type in ['LINK', 'UNLINK'] &&
         isText(data.userId, 1, 128) &&
         isText(data.userName, 1, 40) &&
@@ -154,7 +171,7 @@ service cloud.firestore {
         (!data.keys().hasAny(['processedBy']) || isText(data.processedBy, 1, 128));
     }
 
-    function validUserRequest() {
+    function validUserRequest(requestId) {
       return validRequestShape(request.resource.data) &&
         request.resource.data.status == 'PENDING' &&
         request.resource.data.userId == request.auth.uid &&
@@ -164,10 +181,12 @@ service cloud.firestore {
           (request.resource.data.type == 'LINK' &&
             (!request.resource.data.keys().hasAny(['carId']) || request.resource.data.carId == null)) ||
           (request.resource.data.type == 'UNLINK' &&
+            request.resource.data.requestId == requestId &&
             request.resource.data.keys().hasAny(['carId']) &&
             request.resource.data.carId is string &&
             exists(/databases/$(database)/documents/cars/$(request.resource.data.carId)) &&
-            get(/databases/$(database)/documents/cars/$(request.resource.data.carId)).data.currentUserId == request.auth.uid)
+            get(/databases/$(database)/documents/cars/$(request.resource.data.carId)).data.currentUserId == request.auth.uid &&
+            getAfter(/databases/$(database)/documents/cars/$(request.resource.data.carId)/unlinkGuards/$(request.auth.uid)).data.requestId == requestId)
         );
     }
 
@@ -178,6 +197,9 @@ service cloud.firestore {
         request.resource.data.userId == resource.data.userId &&
         request.resource.data.userName == resource.data.userName &&
         request.resource.data.type == resource.data.type &&
+        ((!resource.data.keys().hasAny(['requestId']) && !request.resource.data.keys().hasAny(['requestId'])) ||
+          (resource.data.keys().hasAny(['requestId']) && request.resource.data.keys().hasAny(['requestId']) &&
+            request.resource.data.requestId == resource.data.requestId)) &&
         request.resource.data.plateNumber == resource.data.plateNumber &&
         request.resource.data.plateCode == resource.data.plateCode &&
         request.resource.data.emirate == resource.data.emirate &&
@@ -200,6 +222,122 @@ service cloud.firestore {
         (data.targetName == null || isText(data.targetName, 1, 160)) &&
         (data.assigneeId == null || isText(data.assigneeId, 1, 128)) &&
         isText(data.details, 0, 500);
+    }
+
+    function validNotificationType(value) {
+      return value in ['ASSIGNMENT', 'UNLINK_APPROVED', 'REASSIGNED', 'VIOLATION', 'MESSAGE'];
+    }
+
+    function validNotificationShape(data) {
+      return data.keys().hasOnly([
+        'recipientId', 'type', 'titleEn', 'titleAr', 'bodyEn', 'bodyAr',
+        'relatedCarId', 'relatedViolationId', 'relatedMessageId',
+        'createdBy', 'createdByName', 'createdAt', 'readAt', 'acknowledgedAt'
+      ]) &&
+        data.keys().hasAll([
+          'recipientId', 'type', 'titleEn', 'titleAr', 'bodyEn', 'bodyAr',
+          'relatedCarId', 'relatedViolationId', 'relatedMessageId',
+          'createdBy', 'createdByName', 'createdAt', 'readAt', 'acknowledgedAt'
+        ]) &&
+        isText(data.recipientId, 1, 128) &&
+        validNotificationType(data.type) &&
+        isText(data.titleEn, 1, 120) && isText(data.titleAr, 1, 120) &&
+        isText(data.bodyEn, 1, 500) && isText(data.bodyAr, 1, 500) &&
+        (data.relatedCarId == null || isText(data.relatedCarId, 1, 128)) &&
+        (data.relatedViolationId == null || isText(data.relatedViolationId, 1, 128)) &&
+        (data.relatedMessageId == null || isText(data.relatedMessageId, 1, 128)) &&
+        isText(data.createdBy, 1, 128) && isText(data.createdByName, 1, 40) &&
+        data.createdAt is timestamp && data.readAt == null && data.acknowledgedAt == null;
+    }
+
+    function validNotificationCreate() {
+      return validNotificationShape(request.resource.data) &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.createdByName == userData().username &&
+        request.resource.data.createdAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            request.resource.data.type == 'ASSIGNMENT' &&
+            request.resource.data.recipientId == request.auth.uid &&
+            request.resource.data.relatedCarId != null &&
+            getAfter(/databases/$(database)/documents/cars/$(request.resource.data.relatedCarId)).data.currentUserId == request.auth.uid
+          ) ||
+          (
+            request.resource.data.type == 'REASSIGNED' &&
+            request.resource.data.recipientId != request.auth.uid &&
+            request.resource.data.relatedCarId != null &&
+            get(/databases/$(database)/documents/cars/$(request.resource.data.relatedCarId)).data.currentUserId == request.resource.data.recipientId &&
+            getAfter(/databases/$(database)/documents/cars/$(request.resource.data.relatedCarId)).data.currentUserId == request.auth.uid
+          )
+        );
+    }
+
+    function validNotificationUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'acknowledgedAt']) &&
+        request.resource.data.recipientId == request.auth.uid &&
+        (
+          (resource.data.readAt == null && resource.data.acknowledgedAt == null &&
+            request.resource.data.readAt == request.time && request.resource.data.acknowledgedAt == null) ||
+          (resource.data.readAt != null && resource.data.acknowledgedAt == null &&
+            request.resource.data.readAt == resource.data.readAt && request.resource.data.acknowledgedAt == request.time) ||
+          (resource.data.readAt == null && resource.data.acknowledgedAt == null &&
+            request.resource.data.readAt == request.time && request.resource.data.acknowledgedAt == request.time)
+        );
+    }
+
+    function validMessageRole(value) {
+      return value == 'admin' || value == 'user';
+    }
+
+    function validMessageShape(data) {
+      return data.keys().hasOnly([
+        'senderId', 'senderName', 'senderRole', 'recipientId', 'recipientName',
+        'recipientRole', 'participantIds', 'body', 'relatedType', 'relatedId', 'createdAt', 'readAt'
+      ]) &&
+        data.keys().hasAll([
+          'senderId', 'senderName', 'senderRole', 'recipientId', 'recipientName',
+          'recipientRole', 'participantIds', 'body', 'relatedType', 'relatedId', 'createdAt', 'readAt'
+        ]) &&
+        isText(data.senderId, 1, 128) && isText(data.senderName, 1, 40) && validMessageRole(data.senderRole) &&
+        isText(data.recipientId, 1, 128) && isText(data.recipientName, 1, 40) && validMessageRole(data.recipientRole) &&
+        data.participantIds is list && data.participantIds.size() == 2 &&
+        data.participantIds[0] == data.senderId && data.participantIds[1] == data.recipientId &&
+        isText(data.body, 1, 1000) &&
+        data.relatedType in ['GENERAL', 'ASSIGNMENT', 'UNLINK_APPROVED', 'REASSIGNED', 'VIOLATION'] &&
+        (data.relatedId == null || isText(data.relatedId, 1, 128)) &&
+        data.createdAt is timestamp && data.readAt == null;
+    }
+
+    function validMessageCreate() {
+      return validMessageShape(request.resource.data) &&
+        request.resource.data.senderId == request.auth.uid &&
+        request.resource.data.senderName == userData().username &&
+        request.resource.data.senderRole == userData().role &&
+        request.resource.data.createdAt == request.time &&
+        (
+          (isAdmin() && request.resource.data.recipientId != 'MANAGEMENT' &&
+            exists(userPath(request.resource.data.recipientId)) &&
+            get(userPath(request.resource.data.recipientId)).data.status == 'active' &&
+            request.resource.data.recipientName == get(userPath(request.resource.data.recipientId)).data.username &&
+            request.resource.data.recipientRole == get(userPath(request.resource.data.recipientId)).data.role) ||
+          (!isAdmin() && request.resource.data.recipientId == 'MANAGEMENT' &&
+            request.resource.data.recipientName == 'Management' && request.resource.data.recipientRole == 'admin')
+        );
+    }
+
+    function canReadMessage(data) {
+      return isAdmin() || (isActiveUser() &&
+        (data.senderId == request.auth.uid || data.recipientId == request.auth.uid));
+    }
+
+    function validMessageReadUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']) &&
+        resource.data.readAt == null && request.resource.data.readAt == request.time &&
+        (
+          resource.data.recipientId == request.auth.uid ||
+          (isAdmin() && resource.data.recipientId == 'MANAGEMENT' && resource.data.recipientRole == 'admin')
+        );
     }
 
     function validViolationStatus(value) {
@@ -268,7 +406,10 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/cars/$(data.carId)) &&
           exists(/databases/$(database)/documents/cars/$(data.carId)/assignments/$(data.assignmentId)) &&
           get(/databases/$(database)/documents/cars/$(data.carId)/assignments/$(data.assignmentId)).data.userId == data.userId &&
-          get(/databases/$(database)/documents/cars/$(data.carId)/assignments/$(data.assignmentId)).data.userName == data.userName) ||
+          get(/databases/$(database)/documents/cars/$(data.carId)/assignments/$(data.assignmentId)).data.userName == data.userName &&
+          get(/databases/$(database)/documents/cars/$(data.carId)/assignments/$(data.assignmentId)).data.startTime <= data.violationAt &&
+          (get(/databases/$(database)/documents/cars/$(data.carId)/assignments/$(data.assignmentId)).data.endTime == null ||
+            get(/databases/$(database)/documents/cars/$(data.carId)/assignments/$(data.assignmentId)).data.endTime > data.violationAt)) ||
         (data.matchStatus == 'NO_CAR' &&
           data.carId == null && data.carLabel == '' &&
           data.assignmentId == null && data.userId == null && data.userName == null) ||
@@ -329,6 +470,26 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /termsAcceptances/{acceptanceId} {
+      allow get: if isAdmin() || (isRegisteredActiveUser() && acceptanceId == request.auth.uid + '_v1.0.0');
+      allow list: if isAdmin();
+      allow create: if isRegisteredActiveUser() &&
+        acceptanceId == request.auth.uid + '_v1.0.0' &&
+        request.resource.data.keys().hasOnly([
+          'userId', 'usernameSnapshot', 'termsVersion', 'termsFingerprint', 'acceptedLocale', 'acceptedAt'
+        ]) &&
+        request.resource.data.keys().hasAll([
+          'userId', 'usernameSnapshot', 'termsVersion', 'termsFingerprint', 'acceptedLocale', 'acceptedAt'
+        ]) &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.usernameSnapshot == userData().username &&
+        request.resource.data.termsVersion == 'v1.0.0' &&
+        request.resource.data.termsFingerprint == 'cms-terms-v1-2026-08-26' &&
+        request.resource.data.acceptedLocale in ['ar', 'en'] &&
+        request.resource.data.acceptedAt == request.time;
+      allow update, delete: if false;
+    }
+
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
@@ -361,6 +522,24 @@ service cloud.firestore {
       allow update: if (isAdmin() && validCarShape(request.resource.data)) || onlyValidSelfAssignment();
       allow delete: if false;
 
+      match /unlinkGuards/{userId} {
+        allow get: if isAdmin() || (isActiveUser() && userId == request.auth.uid);
+        allow list: if false;
+        allow create: if isActiveUser() && userId == request.auth.uid &&
+          request.resource.data.keys().hasOnly(['userId', 'requestId', 'status', 'createdAt', 'updatedAt']) &&
+          request.resource.data.userId == request.auth.uid &&
+          isText(request.resource.data.requestId, 1, 128) &&
+          request.resource.data.status == 'PENDING' &&
+          request.resource.data.createdAt == request.time &&
+          request.resource.data.updatedAt == request.time &&
+          getAfter(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.type == 'UNLINK' &&
+          getAfter(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'PENDING' &&
+          getAfter(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.userId == request.auth.uid &&
+          getAfter(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.carId == carId;
+        allow update: if false;
+        allow delete: if isAdmin();
+      }
+
       match /assignments/{assignmentId} {
         allow get: if isAdmin() || (isActiveUser() && resource.data.userId == request.auth.uid);
         allow list: if isAdmin() || isActiveUser();
@@ -383,8 +562,8 @@ service cloud.firestore {
 
     match /requests/{requestId} {
       allow get: if isAdmin() || (isActiveUser() && resource.data.userId == request.auth.uid);
-      allow list: if isAdmin();
-      allow create: if isActiveUser() && validUserRequest();
+      allow list: if isAdmin() || (isActiveUser() && resource.data.userId == request.auth.uid);
+      allow create: if isActiveUser() && validUserRequest(requestId);
       allow update: if isAdmin() && validAdminRequestTransition();
       allow delete: if false;
     }
@@ -410,6 +589,21 @@ service cloud.firestore {
         resource.data.matchStatus == 'AUTO_LINKED');
       allow create: if isAdmin() && validViolationCreate(request.resource.data);
       allow update: if isAdmin() && validViolationSettlementUpdate();
+      allow delete: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow get: if isAdmin() || (isActiveUser() && resource.data.recipientId == request.auth.uid);
+      allow list: if isAdmin() || (isActiveUser() && resource.data.recipientId == request.auth.uid);
+      allow create: if isActiveUser() && validNotificationCreate();
+      allow update: if isActiveUser() && validNotificationUpdate();
+      allow delete: if false;
+    }
+
+    match /messages/{messageId} {
+      allow get, list: if canReadMessage(resource.data);
+      allow create: if isActiveUser() && validMessageCreate();
+      allow update: if isActiveUser() && validMessageReadUpdate();
       allow delete: if false;
     }
 

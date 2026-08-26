@@ -17,6 +17,7 @@ import {
     daysUntil, expiryClass, toDateInputValue, escapeHtml, escapeAttribute, sanitizePlainText
 } from "./utils.js";
 import { formatNumber, t } from "./i18n.js";
+import { addNotificationToBatch, createAssignmentNotification, createUnlinkNotification } from "./notifications.js";
 
 let currentUserData = null;
 let lastVisibleCar = null;
@@ -1070,6 +1071,12 @@ async function renderAssignUserUI(carId) {
                     startTime: serverTimestamp(),
                     endTime: null
                 });
+                addNotificationToBatch(batch, createAssignmentNotification({
+                    recipientId: userId,
+                    carData: { ...carData, carId },
+                    actorId: currentUserData.uid,
+                    actorName: currentUserData.username
+                }));
                 await batch.commit();
 
                 await logAction(currentUserData, 'CAR_ASSIGN', {
@@ -1121,6 +1128,12 @@ async function handleUnassignUser(carId, data) {
                 endTime: serverTimestamp()
             });
         }
+        addNotificationToBatch(batch, createUnlinkNotification({
+            recipientId: data.currentUserId,
+            carData: { ...data, carId },
+            actorId: currentUserData.uid,
+            actorName: currentUserData.username
+        }));
         await batch.commit();
 
         await logAction(currentUserData, 'CAR_UNASSIGN', {

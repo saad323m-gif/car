@@ -9,6 +9,7 @@ import {
     renderAccessDenied, escapeHtml, escapeAttribute, sanitizePlainText
 } from "./utils.js";
 import { formatNumber, t } from "./i18n.js";
+import { addNotificationToTransaction, createViolationNotification } from "./notifications.js";
 
 let currentUserData = null;
 let activeAdminFilter = 'all';
@@ -506,6 +507,18 @@ async function handleAddViolation(event) {
                 updatedAt: serverTimestamp(),
                 reviewNote: ''
             });
+            if (matchStatus === 'AUTO_LINKED' && userId) {
+                addNotificationToTransaction(transaction, createViolationNotification({
+                    recipientId: userId,
+                    violationId,
+                    carLabel,
+                    violationType: data.violationType,
+                    violationAt: data.violationAt,
+                    amount: data.amount,
+                    actorId: currentUserData.uid,
+                    actorName: currentUserData.username
+                }));
+            }
 
             return { violationId, carId, carLabel, assignmentId, userId, userName, matchStatus };
         });

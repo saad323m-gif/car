@@ -21,8 +21,13 @@ import { renderRequestsView, setRequestsCurrentUser } from "./requests.js";
 import { renderSearchView, setSearchCurrentUser } from "./search.js";
 import { renderStatsView, setStatsCurrentUser } from "./stats.js";
 import { renderViolationsView, renderMyViolationsView, setViolationsCurrentUser } from "./violations.js";
+import { renderNotificationsView, setNotificationsCurrentUser, updateNotificationsBadge } from "./notifications.js";
+import { openMessagesForContext, renderMessagesView, setMessagesCurrentUser, updateMessagesBadge } from "./messages.js";
 import { showMessage, handleFirebaseError, clearMessage } from "./utils.js";
 import { initializeI18n, attachLanguageSwitcher, formatDate, formatNumber } from "./i18n.js";
+import { hasAcceptedCurrentTerms, renderTermsAgreement } from "./legal.js";
+
+let termsGateUser = null;
 
 function updateDateTime() {
     const el = document.getElementById('datetime');
@@ -73,10 +78,18 @@ window.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('app-language-change', () => {
         updateDateTime();
         updateCopyrightYear();
+        if (termsGateUser) {
+            renderTermsAgreement(termsGateUser, () => activateDashboard(termsGateUser));
+            return;
+        }
         const dashboardVisible = document.getElementById('dashboard-view')?.style.display !== 'none';
         const activeTab = document.querySelector('.tab-btn.active');
         if (dashboardVisible && activeTab) activeTab.click();
         else renderLoginForm();
+    });
+
+    document.addEventListener('open-management-message', event => {
+        openMessagesForContext(event.detail || {});
     });
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -98,6 +111,8 @@ window.addEventListener('DOMContentLoaded', () => {
             else if (tab === 'violations') renderViolationsView();
             else if (tab === 'my-violations') renderMyViolationsView();
             else if (tab === 'my-activity') renderMyActivityView();
+            else if (tab === 'notifications') renderNotificationsView();
+            else if (tab === 'messages') renderMessagesView();
         });
     });
 
@@ -127,24 +142,19 @@ window.addEventListener('DOMContentLoaded', () => {
                 setSearchCurrentUser(userData);
                 setStatsCurrentUser(userData);
                 setViolationsCurrentUser(userData);
+                setNotificationsCurrentUser(userData);
+                setMessagesCurrentUser(userData);
 
-                document.querySelectorAll('.tab-btn').forEach(tab => {
-                    const publicUserTabs = ['cars', 'my-activity', 'my-violations'];
-                    tab.style.display = userData.role === 'admin' || publicUserTabs.includes(tab.dataset.tab)
-                        ? 'block'
-                        : 'none';
-                });
-
-                const myActivityTab = document.getElementById('my-activity-tab');
-                if (myActivityTab) {
-                    myActivityTab.style.display = 'block';
+                if (!await hasAcceptedCurrentTerms(user.uid)) {
+                    showTermsGate(userData);
+                    return;
                 }
 
-                showDashboard();
-                updateRequestsBadge();
+                activateDashboard(userData);
                 return;
             }
 
+            termsGateUser = null;
             setCurrentUser(null);
             showAuthView();
             await checkSystemState();
@@ -172,6 +182,59 @@ function showAuthView() {
     if (headerLogo) headerLogo.style.display = 'none';
     if (mainLogo) mainLogo.style.display = 'block';
     if (refreshBtn) refreshBtn.style.display = 'none';
+}
+
+function configureTabsForUser(userData) {
+    document.querySelectorAll('.tab-btn').forEach(tab => {
+        const publicUserTabs = ['cars', 'my-activity', 'my-violations', 'notifications', 'messages'];
+        tab.style.display = userData.role === 'admin' || publicUserTabs.includes(tab.dataset.tab)
+            ? 'block'
+            : 'none';
+    });
+    const myActivityTab = document.getElementById('my-activity-tab');
+    if (myActivityTab) myActivityTab.style.display = 'block';
+}
+
+function setDashboardShellVisible() {
+    const authView = document.getElementById('auth-view');
+    const dashView = document.getElementById('dashboard-view');
+    const logoutBtn = document.getElementById('logout-btn');
+    const changePassBtn = document.getElementById('change-password-btn');
+    const headerLogo = document.getElementById('header-logo');
+    const mainLogo = document.getElementById('main-logo');
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (authView) authView.style.display = 'none';
+    if (dashView) dashView.style.display = 'flex';
+    if (logoutBtn) logoutBtn.style.display = 'block';
+    if (changePassBtn) changePassBtn.style.display = 'block';
+    if (headerLogo) headerLogo.style.display = 'block';
+    if (mainLogo) mainLogo.style.display = 'none';
+    if (refreshBtn) refreshBtn.style.display = 'block';
+}
+
+function showTermsGate(userData) {
+    termsGateUser = userData;
+    setDashboardShellVisible();
+    const tabsNav = document.querySelector('.tabs-nav');
+    if (tabsNav) {
+        tabsNav.style.display = 'none';
+        tabsNav.setAttribute('aria-hidden', 'true');
+    }
+    renderTermsAgreement(userData, () => activateDashboard(userData));
+}
+
+function activateDashboard(userData) {
+    termsGateUser = null;
+    configureTabsForUser(userData);
+    const tabsNav = document.querySelector('.tabs-nav');
+    if (tabsNav) {
+        tabsNav.style.display = '';
+        tabsNav.removeAttribute('aria-hidden');
+    }
+    showDashboard();
+    updateRequestsBadge();
+    updateNotificationsBadge();
+    updateMessagesBadge();
 }
 
 function showDashboard() {
@@ -267,7 +330,9 @@ async function handleLogin(e) {
             return;
         }
 
-        await logAction({ ...userData, uid }, 'LOGIN', { text: 'User logged in' });
+        if (await hasAcceptedCurrentTerms(uid)) {
+            await logAction({ ...userData, uid }, 'LOGIN', { text: 'User logged in' });
+        }
     } catch (error) {
         handleFirebaseError(error);
     }

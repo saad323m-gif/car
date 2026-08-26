@@ -14,6 +14,10 @@ import {
     formatDateTime, formatCarLabel, escapeHtml, sanitizePlainText
 } from "./utils.js";
 import { updateRequestsBadge } from "./app.js";
+import {
+    addNotificationToBatch, createAssignmentNotification, createReassignmentNotification,
+    createUnlinkNotification
+} from "./notifications.js";
 
 let currentUserData = null;
 export const setRequestsCurrentUser = data => {
@@ -169,6 +173,12 @@ async function approveUnlink(requestRef, reqId, reqData) {
     if (reqData.requestId) {
         batch.delete(doc(db, 'cars', reqData.carId, 'unlinkGuards', reqData.userId));
     }
+    addNotificationToBatch(batch, createUnlinkNotification({
+        recipientId: reqData.userId,
+        carData,
+        actorId: currentUserData.uid,
+        actorName: currentUserData.username
+    }));
     await batch.commit();
 
     await logAction(currentUserData, 'APPROVE_UNLINK', {
@@ -196,8 +206,9 @@ async function approveLink(requestRef, reqId, reqData) {
     const label = formatCarLabel(carData);
     const carRef = doc(db, 'cars', carDoc.id);
     const batch = writeBatch(db);
+    const previousUserId = carData.currentUserId || null;
 
-    if (carData.currentUserId) {
+    if (previousUserId) {
         const previousAssignmentQuery = query(
             collection(db, 'cars', carDoc.id, 'assignments'),
             where('userId', '==', carData.currentUserId),
@@ -224,6 +235,20 @@ async function approveLink(requestRef, reqId, reqData) {
         endTime: null
     });
     batch.update(requestRef, processedRequestFields('APPROVED', carDoc.id));
+    if (previousUserId && previousUserId !== reqData.userId) {
+        addNotificationToBatch(batch, createReassignmentNotification({
+            recipientId: previousUserId,
+            carData,
+            actorId: currentUserData.uid,
+            actorName: currentUserData.username
+        }));
+    }
+    addNotificationToBatch(batch, createAssignmentNotification({
+        recipientId: reqData.userId,
+        carData,
+        actorId: currentUserData.uid,
+        actorName: currentUserData.username
+    }));
     await batch.commit();
 
     await logAction(currentUserData, 'APPROVE_LINK', {
@@ -330,6 +355,12 @@ async function handleCompleteAndAssign(reqId, reqData) {
             endTime: null
         });
         batch.update(requestRef, processedRequestFields('APPROVED', carId));
+        addNotificationToBatch(batch, createAssignmentNotification({
+            recipientId: reqData.userId,
+            carData: { carId, plateNumber, plateCode, emirate: reqData.emirate },
+            actorId: currentUserData.uid,
+            actorName: currentUserData.username
+        }));
         await batch.commit();
 
         const label = formatCarLabel({ carId, plateNumber, plateCode, emirate: reqData.emirate });
@@ -440,7 +471,9 @@ export async function createLinkRequest(event) {
 
         const carRef = doc(db, 'cars', carDoc.id);
         const batch = writeBatch(db);
-        if (carData.currentUserId) {
+        const previousUserId = carData.currentUserId || null;
+        const notificationCarData = { ...carData, carId: carDoc.id };
+        if (previousUserId) {
             const previousAssignmentQuery = query(
                 collection(db, 'cars', carDoc.id, 'assignments'),
                 where('userId', '==', carData.currentUserId),
@@ -465,6 +498,20 @@ export async function createLinkRequest(event) {
             startTime: serverTimestamp(),
             endTime: null
         });
+        if (previousUserId) {
+            addNotificationToBatch(batch, createReassignmentNotification({
+                recipientId: previousUserId,
+                carData: notificationCarData,
+                actorId: currentUserData.uid,
+                actorName: currentUserData.username
+            }));
+        }
+        addNotificationToBatch(batch, createAssignmentNotification({
+            recipientId: currentUserData.uid,
+            carData: notificationCarData,
+            actorId: currentUserData.uid,
+            actorName: currentUserData.username
+        }));
         await batch.commit();
 
         await logAction(currentUserData, 'AUTO_LINK_CONFIRMED', {
