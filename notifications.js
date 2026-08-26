@@ -56,10 +56,10 @@ export function createAssignmentNotification({ recipientId, carData, actorId, ac
     return createPayload({
         recipientId,
         type: 'ASSIGNMENT',
-        titleEn: 'Vehicle Assignment',
-        titleAr: 'تعيين مركبة',
-        bodyEn: `${actorName} assigned you to ${carLabel}. Your custody starts at the recorded assignment time.`,
-        bodyAr: `قام ${actorName} بتعيينك على المركبة ${carLabel}. تبدأ عهدتك من وقت التعيين المسجل في النظام.`,
+        titleEn: 'Vehicle Assigned',
+        titleAr: 'تم إسناد مركبة لك',
+        bodyEn: `${actorName} assigned ${carLabel} to you. Please review the vehicle details.`,
+        bodyAr: `قام ${actorName} بإسناد المركبة ${carLabel} لك. يرجى مراجعة بيانات المركبة.`,
         relatedCarId: carData?.carId || null,
         createdBy: actorId,
         createdByName: actorName
@@ -71,10 +71,10 @@ export function createUnlinkNotification({ recipientId, carData, actorId, actorN
     return createPayload({
         recipientId,
         type: 'UNLINK_APPROVED',
-        titleEn: 'Custody Release Approved',
-        titleAr: 'تم اعتماد فك العهدة',
-        bodyEn: `${actorName} approved the custody release for ${carLabel}. Your recorded custody has ended at the recorded time.`,
-        bodyAr: `قام ${actorName} باعتماد فك العهدة عن المركبة ${carLabel}. انتهت عهدتك المسجلة في وقت الإنهاء المدون بالنظام.`,
+        titleEn: 'Vehicle Unassigned',
+        titleAr: 'انتهت عهدتك على المركبة',
+        bodyEn: `${actorName} ended your custody for ${carLabel}.`,
+        bodyAr: `قام ${actorName} بإنهاء عهدتك على المركبة ${carLabel}.`,
         relatedCarId: carData?.carId || null,
         createdBy: actorId,
         createdByName: actorName
@@ -86,10 +86,10 @@ export function createReassignmentNotification({ recipientId, carData, actorId, 
     return createPayload({
         recipientId,
         type: 'REASSIGNED',
-        titleEn: 'Vehicle Reassigned',
-        titleAr: 'تم نقل عهدة المركبة',
-        bodyEn: `${actorName} linked ${carLabel} to a new user. Your recorded custody has ended at the recorded reassignment time.`,
-        bodyAr: `قام ${actorName} بربط المركبة ${carLabel} بمستخدم جديد. انتهت عهدتك المسجلة في وقت النقل المدون بالنظام.`,
+        titleEn: 'Vehicle Assigned to Another User',
+        titleAr: 'تم نقل المركبة لمستخدم آخر',
+        bodyEn: `${actorName} assigned ${carLabel} to another user.`,
+        bodyAr: `قام ${actorName} بنقل المركبة ${carLabel} إلى مستخدم آخر.`,
         relatedCarId: carData?.carId || null,
         createdBy: actorId,
         createdByName: actorName
@@ -106,10 +106,10 @@ export function createViolationNotification({ recipientId, violationId, carLabel
     return createPayload({
         recipientId,
         type: 'VIOLATION',
-        titleEn: 'Violation Linked to Your Record',
-        titleAr: 'مخالفة مرتبطة بسجلك',
-        bodyEn: `Violation ${violationId} was linked to your record for ${safeCarLabel}. Type: ${safeType}. Occurred: ${dateText}.${amountText}`,
-        bodyAr: `تم ربط المخالفة ${violationId} بسجلك للمركبة ${safeCarLabel}. النوع: ${safeType}. وقت الوقوع: ${dateText}.${amountTextAr}`,
+        titleEn: 'Violation Added',
+        titleAr: 'تمت إضافة مخالفة إلى سجلك',
+        bodyEn: `Violation ${violationId} was added to your record for ${safeCarLabel}. Type: ${safeType}. Date: ${dateText}.${amountText}`,
+        bodyAr: `تمت إضافة المخالفة ${violationId} إلى سجلك للمركبة ${safeCarLabel}. النوع: ${safeType}. التاريخ: ${dateText}.${amountTextAr}`,
         relatedViolationId: violationId,
         createdBy: actorId,
         createdByName: actorName
@@ -269,7 +269,14 @@ function renderNotificationCard(record) {
     const recordId = escapeAttribute(record.id);
     const detailsId = `notification-details-${recordId}`;
     const status = unread(record) ? t('New') : t('Read');
+    const isRecipient = record.recipientId === currentUserData?.uid;
+    const canAcknowledge = isRecipient && !record.acknowledgedAt;
+    const canContactManagement = isRecipient && !isAdmin(currentUserData) &&
+        ['ASSIGNMENT', 'UNLINK_APPROVED', 'REASSIGNED', 'VIOLATION'].includes(record.type);
     const userLabel = isAdmin(currentUserData) ? `<span class="notification-recipient">${escapeHtml(record.recipientId || '')}</span>` : '';
+    const acknowledgement = record.acknowledgedAt
+        ? `<span class="notification-acknowledged">${escapeHtml(t('Acknowledged'))}: ${escapeHtml(formatDateTime(record.acknowledgedAt))}</span>`
+        : '';
     return `
         <article class="notification-card ${unread(record) ? 'notification-unread' : ''}" id="notification-${recordId}">
             <button type="button" class="notification-card-summary" data-toggle-notification="${recordId}" aria-expanded="false" aria-controls="${detailsId}">
@@ -286,8 +293,9 @@ function renderNotificationCard(record) {
                     <span>${escapeHtml(t('Issued'))}: <strong>${escapeHtml(formatDateTime(record.createdAt))}</strong></span>
                 </div>
                 <div class="notification-actions">
-                    ${record.acknowledgedAt ? `<span class="notification-acknowledged">${escapeHtml(t('Acknowledged'))}: ${escapeHtml(formatDateTime(record.acknowledgedAt))}</span>` : `<button type="button" class="action-btn action-btn-acknowledge" data-acknowledge-notification="${recordId}">${escapeHtml(t('Acknowledge'))}</button>`}
-                    ${['ASSIGNMENT', 'UNLINK_APPROVED', 'REASSIGNED', 'VIOLATION'].includes(record.type) ? `<button type="button" class="action-btn action-btn-message" data-message-notification="${recordId}">${escapeHtml(t('Message Management'))}</button>` : ''}
+                    ${acknowledgement}
+                    ${canAcknowledge ? `<button type="button" class="action-btn action-btn-acknowledge" data-acknowledge-notification="${recordId}">${escapeHtml(t('Acknowledge'))}</button>` : ''}
+                    ${canContactManagement ? `<button type="button" class="action-btn action-btn-message" data-message-notification="${recordId}">${escapeHtml(t('Contact Management'))}</button>` : ''}
                 </div>
             </div>
         </article>

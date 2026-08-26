@@ -447,17 +447,23 @@ service cloud.firestore {
         data.createdAt == request.time && data.updatedAt == request.time;
     }
 
+    // Settlement never changes the original violation. This also supports
+    // historical records that predate the settlement metadata fields.
     function validViolationSettlementUpdate() {
-      return validViolationShape(request.resource.data) &&
-        resource.data.settlementStatus == 'UNSETTLED' &&
+      return
+        (!resource.data.keys().hasAny(['settlementStatus']) ||
+          resource.data.settlementStatus == 'UNSETTLED') &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'settlementStatus', 'settlementMethod', 'settlementNotes', 'settledAt',
           'settledBy', 'settledByName', 'updatedAt'
         ]) &&
-        request.resource.data.updatedAt == request.time &&
+        request.resource.data.settlementStatus == 'SETTLED' &&
+        request.resource.data.settlementMethod in ['PAYMENT', 'OFFICIAL_OBJECTION', 'OTHER'] &&
+        isText(request.resource.data.settlementNotes, 1, 500) &&
+        request.resource.data.settledAt == request.time &&
         request.resource.data.settledBy == request.auth.uid &&
         request.resource.data.settledByName == userData().username &&
-        validViolationLink(request.resource.data) && validSettledViolation(request.resource.data);
+        request.resource.data.updatedAt == request.time;
     }
 
     match /system/status {

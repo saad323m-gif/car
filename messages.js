@@ -110,14 +110,14 @@ function composeFormHtml() {
         : '';
     const recipient = isAdmin(currentUserData)
         ? composeRecipientOptions()
-        : `<div class="message-management-recipient"><strong>${escapeHtml(t('Recipient'))}:</strong> ${escapeHtml(t('Management'))}</div>`;
+        : `<div class="message-management-recipient"><strong>${escapeHtml(t('Recipient'))}:</strong> ${escapeHtml(t('Management'))}<br><small>${escapeHtml(t('Your message will be sent directly to management.'))}</small></div>`;
     return `
         <div class="message-compose-wrapper">
             <button type="button" class="btn-add-toggle" id="toggle-message-form">+ ${escapeHtml(t('New Message'))}</button>
             <div id="message-form-wrapper" class="hidden-form">
                 <form id="message-form" class="message-form" novalidate>
                     <h3>${escapeHtml(t('Send Internal Message'))}</h3>
-                    <p>${escapeHtml(t('Messages may be viewed and answered by all authorised administrators.'))}</p>
+                    <p>${escapeHtml(t('Management can view and reply to these messages.'))}</p>
                     ${relatedLabel}
                     ${recipient}
                     <div class="form-group full-width">
@@ -156,7 +156,7 @@ export async function renderMessagesView(context = null) {
             <div class="messages-page-heading">
                 <div>
                     <h2>${escapeHtml(t('Messages'))}</h2>
-                    <p>${escapeHtml(isAdmin(currentUserData) ? t('Administrators can view and reply to all internal messages.') : t('Send messages only to management. All authorised administrators may review and reply.'))}</p>
+                    <p>${escapeHtml(isAdmin(currentUserData) ? t('Administrators can view and reply to all internal messages.') : t('Send messages directly to management.'))}</p>
                 </div>
             </div>
             <div class="divider"></div>
@@ -442,5 +442,12 @@ export function openMessagesForContext(context = {}) {
         relatedId: context.relatedId ? cleanText(context.relatedId, 128) : null
     };
     const tab = document.querySelector('.tab-btn[data-tab="messages"]');
-    if (tab) tab.click();
+    if (!tab) return;
+    tab.click();
+    window.setTimeout(() => {
+        const wrapper = document.getElementById('message-form-wrapper');
+        const body = document.getElementById('message-body');
+        if (wrapper) wrapper.classList.remove('hidden-form');
+        if (body) body.focus();
+    }, 0);
 }
