@@ -19,7 +19,7 @@ service cloud.firestore {
     }
 
     function termsAcceptancePath(userId) {
-      return /databases/$(database)/documents/termsAcceptances/$(userId)_v1.0.0;
+      return /databases/$(database)/documents/termsAcceptances/$(userId)/versions/v1.0.0;
     }
 
     function isRegisteredActiveUser() {
@@ -470,11 +470,11 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    match /termsAcceptances/{acceptanceId} {
-      allow get: if isAdmin() || (isRegisteredActiveUser() && acceptanceId == request.auth.uid + '_v1.0.0');
+    match /termsAcceptances/{userId}/versions/{termsVersion} {
+      allow get: if isAdmin() || (isRegisteredActiveUser() && userId == request.auth.uid && termsVersion == 'v1.0.0');
       allow list: if isAdmin();
       allow create: if isRegisteredActiveUser() &&
-        acceptanceId == request.auth.uid + '_v1.0.0' &&
+        userId == request.auth.uid && termsVersion == 'v1.0.0' &&
         request.resource.data.keys().hasOnly([
           'userId', 'usernameSnapshot', 'termsVersion', 'termsFingerprint', 'acceptedLocale', 'acceptedAt'
         ]) &&

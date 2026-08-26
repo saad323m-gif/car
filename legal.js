@@ -49,8 +49,8 @@ const termsContent = {
     }
 };
 
-function acceptanceId(userId) {
-    return `${userId}_${TERMS_VERSION}`;
+function acceptanceRef(userId) {
+    return doc(db, 'termsAcceptances', userId, 'versions', TERMS_VERSION);
 }
 
 function currentContent() {
@@ -59,7 +59,7 @@ function currentContent() {
 
 export async function hasAcceptedCurrentTerms(userId) {
     if (!userId) return false;
-    const snapshot = await getDoc(doc(db, 'termsAcceptances', acceptanceId(userId)));
+    const snapshot = await getDoc(acceptanceRef(userId));
     const data = snapshot.exists() ? snapshot.data() : null;
     return Boolean(data && data.userId === userId && data.termsVersion === TERMS_VERSION && data.termsFingerprint === TERMS_FINGERPRINT);
 }
@@ -106,7 +106,7 @@ export function renderTermsAgreement(userData, onAccepted) {
         submit.disabled = true;
         submit.textContent = liveContent.saving;
         try {
-            await setDoc(doc(db, 'termsAcceptances', acceptanceId(userData.uid)), {
+            await setDoc(acceptanceRef(userData.uid), {
                 userId: userData.uid,
                 usernameSnapshot: String(userData.username || '').slice(0, 40),
                 termsVersion: TERMS_VERSION,
