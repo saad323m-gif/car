@@ -414,16 +414,34 @@ html[dir="rtl"] .tab-btn { direction: rtl; }
 
 .search-bar {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     margin-bottom: 20px;
     flex-wrap: wrap;
+    background: #f4f8fd;
+    border: 1px solid #d5e6f7;
+    border-radius: 10px;
+    padding: 16px;
 }
-.search-bar input { flex: 3; min-width: 180px; }
-.search-bar select { flex: 1; min-width: 120px; }
+.search-bar input {
+    flex: 3;
+    min-width: 180px;
+    font-size: 1.05rem;
+    padding: 14px 16px;
+    border-radius: 8px;
+}
+.search-bar select {
+    flex: 1;
+    min-width: 140px;
+    font-size: 1.05rem;
+    padding: 14px 12px;
+    border-radius: 8px;
+    font-weight: 600;
+}
 .search-bar button {
     flex: 1;
     min-width: 100px;
-    padding: 10px;
+    padding: 14px;
+    font-size: 1.05rem;
 }
 
 .message-box {

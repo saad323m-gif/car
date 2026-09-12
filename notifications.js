@@ -11,6 +11,33 @@ const NOTIFICATION_TYPES = new Set(['ASSIGNMENT', 'UNLINK_APPROVED', 'REASSIGNED
 
 let currentUserData = null;
 let pageState = { records: [], lastDoc: null, visibleCount: 0, hasMore: false };
+// Admin-only display cache: maps a recipient's uid to their username so the
+// notifications list can show a readable name instead of the raw Firebase
+// UID. Built once per session from a read the admin already has permission
+// for (the users collection) — no new fields are written to notifications,
+// so this has zero effect on the notification schema or security rules.
+let recipientNameCache = null;
+
+async function loadRecipientNames() {
+    if (recipientNameCache) return recipientNameCache;
+    const map = new Map();
+    try {
+        const snap = await getDocs(collection(db, 'users'));
+        snap.forEach(userDoc => {
+            const data = userDoc.data();
+            map.set(userDoc.id, data?.username || userDoc.id);
+        });
+    } catch (error) {
+        console.error('Load recipient names failed:', error);
+    }
+    recipientNameCache = map;
+    return recipientNameCache;
+}
+
+function recipientDisplayName(uid) {
+    if (!uid) return '';
+    return recipientNameCache?.get(uid) || uid;
+}
 
 export function setNotificationsCurrentUser(data) {
     currentUserData = data;
@@ -231,6 +258,7 @@ export async function loadNotifications(append = false) {
     try {
         const snapshot = await getNotificationSnapshot(append);
         if (!snapshot) return;
+        if (isAdmin(currentUserData)) await loadRecipientNames();
         if (isAdmin(currentUserData)) {
             const pageDocs = snapshot.docs.slice(0, NOTIFICATIONS_PAGE_SIZE);
             const pageRecords = pageDocs.map(item => ({ id: item.id, ...item.data() }));
@@ -280,7 +308,7 @@ function renderNotificationCard(record) {
     const canContactManagement = isRecipient && !isAdmin(currentUserData) &&
         ['ASSIGNMENT', 'UNLINK_APPROVED', 'REASSIGNED', 'VIOLATION'].includes(record.type);
     const canViewCar = Boolean(record.relatedCarId);
-    const userLabel = isAdmin(currentUserData) ? `<span class="notification-recipient">${escapeHtml(record.recipientId || '')}</span>` : '';
+    const userLabel = isAdmin(currentUserData) ? `<span class="notification-recipient">${escapeHtml(recipientDisplayName(record.recipientId))}</span>` : '';
     const acknowledgement = record.acknowledgedAt
         ? `<span class="notification-acknowledged">${escapeHtml(t('Acknowledged'))}: ${escapeHtml(formatDateTime(record.acknowledgedAt))}</span>`
         : '';
