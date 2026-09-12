@@ -285,6 +285,7 @@ function renderUserCard(data) {
                 <span class="role-${escapeHtml(data.role)}">${escapeHtml(data.role)}</span>
                 <span class="status-${escapeHtml(data.status)}">${escapeHtml(data.status)}</span>
                 <span class="match-badge">Matched: ${escapeHtml(data._match)}</span>
+                <button type="button" class="action-btn action-btn-open-result" data-open-result title="Open this member in the Members tab">Open →</button>
             </div>
         </div>
         <div class="card-body">
@@ -306,6 +307,14 @@ function renderUserCard(data) {
         </div>
     `;
     list.appendChild(card);
+
+    const openBtn = card.querySelector('[data-open-result]');
+    if (openBtn) {
+        openBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            document.dispatchEvent(new CustomEvent('navigate-to-user', { detail: { uid: data.id } }));
+        });
+    }
 }
 
 function renderCarCard(data) {
@@ -328,6 +337,7 @@ function renderCarCard(data) {
             <div class="card-meta">
                 <span>${escapeHtml(data.carId || '')}</span>
                 <span class="match-badge">Matched: ${escapeHtml(data._match)}</span>
+                <button type="button" class="action-btn action-btn-open-result" data-open-result title="Open this car in the Cars tab">Open →</button>
             </div>
         </div>
         <div class="card-body">
@@ -352,6 +362,14 @@ function renderCarCard(data) {
         </div>
     `;
     list.appendChild(card);
+
+    const openBtn = card.querySelector('[data-open-result]');
+    if (openBtn) {
+        openBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            document.dispatchEvent(new CustomEvent('navigate-to-car', { detail: { carId: data.id } }));
+        });
+    }
 }
 
 function renderLogCard(data) {

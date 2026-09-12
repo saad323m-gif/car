@@ -96,20 +96,26 @@ export function createReassignmentNotification({ recipientId, carData, actorId, 
     });
 }
 
-export function createViolationNotification({ recipientId, violationId, carLabel, violationType, violationAt, amount, actorId, actorName }) {
+export function createViolationNotification({ recipientId, violationId, referenceNumber, carLabel, violationType, violationAt, amount, actorId, actorName }) {
     const value = Number(amount || 0);
     const amountText = Number.isFinite(value) && value > 0 ? ` Amount: ${value}.` : '';
     const amountTextAr = Number.isFinite(value) && value > 0 ? ` المبلغ: ${value}.` : '';
     const safeCarLabel = cleanText(carLabel, 160);
     const safeType = cleanText(violationType, 80);
     const dateText = formatDateTime(violationAt);
+    // The internal system ID (VIO-000123) means nothing to the recipient, so
+    // the body leads with the readable facts and only mentions the official
+    // reference number (if the admin entered one) for correspondence purposes.
+    const safeReference = cleanText(referenceNumber, 80);
+    const referenceText = safeReference ? ` Reference No.: ${safeReference}.` : '';
+    const referenceTextAr = safeReference ? ` الرقم المرجعي: ${safeReference}.` : '';
     return createPayload({
         recipientId,
         type: 'VIOLATION',
-        titleEn: 'Violation Added',
-        titleAr: 'تمت إضافة مخالفة إلى سجلك',
-        bodyEn: `Violation ${violationId} was added to your record for ${safeCarLabel}. Type: ${safeType}. Date: ${dateText}.${amountText}`,
-        bodyAr: `تمت إضافة المخالفة ${violationId} إلى سجلك للمركبة ${safeCarLabel}. النوع: ${safeType}. التاريخ: ${dateText}.${amountTextAr}`,
+        titleEn: `Violation — ${safeCarLabel || 'Vehicle details unavailable'}`,
+        titleAr: `مخالفة — ${safeCarLabel || 'بيانات المركبة غير متاحة'}`,
+        bodyEn: `A new violation was recorded for ${safeCarLabel}. Type: ${safeType}. Date: ${dateText}.${amountText}${referenceText}`,
+        bodyAr: `تم تسجيل مخالفة جديدة على المركبة ${safeCarLabel}. النوع: ${safeType}. التاريخ: ${dateText}.${amountTextAr}${referenceTextAr}`,
         relatedViolationId: violationId,
         createdBy: actorId,
         createdByName: actorName
@@ -273,6 +279,7 @@ function renderNotificationCard(record) {
     const canAcknowledge = isRecipient && !record.acknowledgedAt;
     const canContactManagement = isRecipient && !isAdmin(currentUserData) &&
         ['ASSIGNMENT', 'UNLINK_APPROVED', 'REASSIGNED', 'VIOLATION'].includes(record.type);
+    const canViewCar = Boolean(record.relatedCarId);
     const userLabel = isAdmin(currentUserData) ? `<span class="notification-recipient">${escapeHtml(record.recipientId || '')}</span>` : '';
     const acknowledgement = record.acknowledgedAt
         ? `<span class="notification-acknowledged">${escapeHtml(t('Acknowledged'))}: ${escapeHtml(formatDateTime(record.acknowledgedAt))}</span>`
@@ -294,6 +301,7 @@ function renderNotificationCard(record) {
                 </div>
                 <div class="notification-actions">
                     ${acknowledgement}
+                    ${canViewCar ? `<button type="button" class="action-btn action-btn-view-car" data-view-car-notification="${recordId}">${escapeHtml(t('View Vehicle'))}</button>` : ''}
                     ${canAcknowledge ? `<button type="button" class="action-btn action-btn-acknowledge" data-acknowledge-notification="${recordId}">${escapeHtml(t('Acknowledge'))}</button>` : ''}
                     ${canContactManagement ? `<button type="button" class="action-btn action-btn-message" data-message-notification="${recordId}">${escapeHtml(t('Contact Management'))}</button>` : ''}
                 </div>
@@ -313,6 +321,13 @@ function bindNotificationCard(record, container) {
             toggle.setAttribute('aria-expanded', String(willOpen));
             card.classList.toggle('open', willOpen);
             if (willOpen && unread(record)) await markNotificationRead(record);
+        });
+    }
+    const viewCar = card?.querySelector(`[data-view-car-notification="${CSS.escape(record.id)}"]`);
+    if (viewCar) {
+        viewCar.addEventListener('click', (event) => {
+            event.stopPropagation();
+            document.dispatchEvent(new CustomEvent('navigate-to-car', { detail: { carId: record.relatedCarId } }));
         });
     }
     const acknowledge = card?.querySelector(`[data-acknowledge-notification="${CSS.escape(record.id)}"]`);

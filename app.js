@@ -14,9 +14,9 @@ import {
     serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-import { renderDashboard, setCurrentUser, getCurrentUser } from "./members.js";
+import { renderDashboard, setCurrentUser, getCurrentUser, revealUserById } from "./members.js";
 import { renderLogsView, logAction, setLogsCurrentUser } from "./logs.js";
-import { renderCarsView, setCarsCurrentUser } from "./cars.js";
+import { renderCarsView, setCarsCurrentUser, revealCarById } from "./cars.js";
 import { renderRequestsView, setRequestsCurrentUser } from "./requests.js";
 import { renderSearchView, setSearchCurrentUser } from "./search.js";
 import { renderStatsView, setStatsCurrentUser } from "./stats.js";
@@ -28,6 +28,7 @@ import { initializeI18n, attachLanguageSwitcher, formatDate, formatNumber } from
 import { hasAcceptedCurrentTerms, renderTermsAgreement } from "./legal.js";
 
 let termsGateUser = null;
+let passwordGateUser = null;
 
 function updateDateTime() {
     const el = document.getElementById('datetime');
@@ -79,7 +80,11 @@ window.addEventListener('DOMContentLoaded', () => {
         updateDateTime();
         updateCopyrightYear();
         if (termsGateUser) {
-            renderTermsAgreement(termsGateUser, () => activateDashboard(termsGateUser));
+            renderTermsAgreement(termsGateUser, () => continueAfterTerms(termsGateUser));
+            return;
+        }
+        if (passwordGateUser) {
+            renderChangePasswordForm(true);
             return;
         }
         const dashboardVisible = document.getElementById('dashboard-view')?.style.display !== 'none';
@@ -90,6 +95,29 @@ window.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('open-management-message', event => {
         openMessagesForContext(event.detail || {});
+    });
+
+    // Bridge used by Search results and Notification actions to jump straight
+    // to the matching record's card in its own tab, instead of leaving the
+    // user to search for it manually.
+    document.addEventListener('navigate-to-car', event => {
+        const carId = event.detail?.carId;
+        if (!carId) return;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        const tabBtn = document.querySelector('.tab-btn[data-tab="cars"]');
+        if (tabBtn) tabBtn.classList.add('active');
+        renderCarsView();
+        revealCarById(carId);
+    });
+
+    document.addEventListener('navigate-to-user', event => {
+        const uid = event.detail?.uid;
+        if (!uid) return;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        const tabBtn = document.querySelector('.tab-btn[data-tab="members"]');
+        if (tabBtn) tabBtn.classList.add('active');
+        renderDashboard();
+        revealUserById(uid);
     });
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -145,8 +173,13 @@ window.addEventListener('DOMContentLoaded', () => {
                 setNotificationsCurrentUser(userData);
                 setMessagesCurrentUser(userData);
 
-                if (!await hasAcceptedCurrentTerms(user.uid)) {
+                        if (!await hasAcceptedCurrentTerms(user.uid)) {
                     showTermsGate(userData);
+                    return;
+                }
+
+                if (userData.mustChangePassword === true) {
+                    showPasswordGate(userData);
                     return;
                 }
 
@@ -220,7 +253,27 @@ function showTermsGate(userData) {
         tabsNav.style.display = 'none';
         tabsNav.setAttribute('aria-hidden', 'true');
     }
-    renderTermsAgreement(userData, () => activateDashboard(userData));
+    renderTermsAgreement(userData, () => continueAfterTerms(userData));
+}
+
+function continueAfterTerms(userData) {
+    termsGateUser = null;
+    if (userData.mustChangePassword === true) {
+        showPasswordGate(userData);
+        return;
+    }
+    activateDashboard(userData);
+}
+
+function showPasswordGate(userData) {
+    passwordGateUser = userData;
+    setDashboardShellVisible();
+    const tabsNav = document.querySelector('.tabs-nav');
+    if (tabsNav) {
+        tabsNav.style.display = 'none';
+        tabsNav.setAttribute('aria-hidden', 'true');
+    }
+    renderChangePasswordForm(true);
 }
 
 function activateDashboard(userData) {
@@ -355,7 +408,7 @@ async function handleLogout() {
     }
 }
 
-function renderChangePasswordForm() {
+function renderChangePasswordForm(forced = false) {
     const userData = getCurrentUser();
     if (!userData || !auth.currentUser) {
         showMessage('You must be logged in to change password.', 'error', 'dashboard');
@@ -368,9 +421,9 @@ function renderChangePasswordForm() {
     clearMessage('dashboard');
 
     container.innerHTML = `
-        <h2>Change Password</h2>
+        <h2>${forced ? 'Create Your New Password' : 'Change Password'}</h2>
         <p style="color:#666; margin-bottom:20px; text-align:center;">
-            Enter your current password, then choose a new one.
+            ${forced ? 'For security, you must change the password created by the administrator before using the system.' : 'Enter your current password, then choose a new one.'}
         </p>
         <form id="change-password-form" style="max-width:500px; margin:0 auto;">
             <div class="form-group">
@@ -385,14 +438,14 @@ function renderChangePasswordForm() {
                 <label>Confirm New Password</label>
                 <input type="password" id="cp-confirm" required minlength="6" autocomplete="new-password">
             </div>
-            <button type="submit" class="btn" id="cp-submit">Update Password</button>
-            <button type="button" class="btn btn-secondary" id="cp-cancel" style="margin-top:10px;">Cancel</button>
+            <button type="submit" class="btn" id="cp-submit">${forced ? 'Save New Password' : 'Update Password'}</button>
+            ${forced ? '' : '<button type="button" class="btn btn-secondary" id="cp-cancel" style="margin-top:10px;">Cancel</button>'}
         </form>
     `;
 
     const form = document.getElementById('change-password-form');
     const cancelBtn = document.getElementById('cp-cancel');
-    if (form) form.addEventListener('submit', handleChangePassword);
+    if (form) form.addEventListener('submit', (event) => handleChangePassword(event, forced));
     if (cancelBtn) {
         cancelBtn.addEventListener('click', () => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -403,7 +456,7 @@ function renderChangePasswordForm() {
     }
 }
 
-async function handleChangePassword(e) {
+async function handleChangePassword(e, forced = false) {
     e.preventDefault();
     const userData = getCurrentUser();
     if (!userData || !auth.currentUser) return;
@@ -440,6 +493,14 @@ async function handleChangePassword(e) {
         const credential = EmailAuthProvider.credential(userData.email, currentPassword);
         await reauthenticateWithCredential(auth.currentUser, credential);
         await updatePassword(auth.currentUser, newPassword);
+        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+            mustChangePassword: false,
+            passwordChangedAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        });
+        userData.mustChangePassword = false;
+        userData.passwordChangedAt = new Date();
+        passwordGateUser = null;
 
         await logAction(userData, 'CHANGE_PASSWORD', {
             targetId: userData.uid,
@@ -447,10 +508,15 @@ async function handleChangePassword(e) {
             text: `Password changed by ${userData.username}`
         });
 
-        showMessage('Password updated successfully. You can continue using the system with the new password.', 'success', 'dashboard');
+        showMessage(forced ? 'Password changed successfully. Your account is now ready to use.' : 'Password updated successfully. You can continue using the system with the new password.', 'success', 'dashboard');
         currentEl.value = '';
         newEl.value = '';
         confirmEl.value = '';
+
+        if (forced) {
+            activateDashboard(userData);
+            return;
+        }
 
         setTimeout(() => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));

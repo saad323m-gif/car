@@ -497,6 +497,48 @@ h4 {
 .stat-card.danger { border-left: 5px solid #d32f2f; }
 .stat-card.success { border-left: 5px solid #388e3c; }
 
+/* Group the existing stat cards into labeled sections (Members / Fleet /
+   Activity). Purely visual: #stats-grid now stacks <section> blocks instead
+   of holding the stat cards directly, and each section lays its own cards
+   out with the same grid rule the cards used before grouping. */
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 25px;
+}
+.stats-section-title {
+    margin: 0 0 12px;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1976d2;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.stats-section-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+}
+
+/* ========== Search / Notifications "jump to record" bridge ========== */
+.action-btn-open-result,
+.action-btn-view-car {
+    background: #1976d2;
+    color: #fff;
+    border: none;
+}
+.action-btn-open-result:hover,
+.action-btn-view-car:hover {
+    background: #145ea8;
+}
+.search-jump-highlight {
+    animation: search-jump-pulse 2.5s ease-out 1;
+}
+@keyframes search-jump-pulse {
+    0% { box-shadow: 0 0 0 4px rgba(25, 118, 210, 0.45); }
+    100% { box-shadow: 0 0 0 0 rgba(25, 118, 210, 0); }
+}
+
 /* ========== Cards ========== */
 .card-list {
     display: flex;

@@ -151,6 +151,8 @@ async function handleAddUser(e) {
                 isProtected: false,
                 securityPin: null,
                 rememberSession: false,
+                mustChangePassword: true,
+                passwordChangedAt: null,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
             });
@@ -869,4 +871,58 @@ async function loadMyPersonalActivity() {
         console.error('Load personal activity failed:', error);
         timeline.innerHTML = '<p class="error">Unable to load activity.</p>';
     }
+}
+
+/* -------------------- Reveal a specific member (Search bridge) -------------------- */
+
+/**
+ * Opens the Members view (already rendered by the caller) and reveals the
+ * card for a specific member, even if they are not part of the currently
+ * loaded page. Used by the "Open" action in Search results.
+ */
+export function revealUserById(uid) {
+    if (!isAdmin(currentUserData) || !uid) return;
+    revealUserCard(uid);
+}
+
+async function revealUserCard(uid) {
+    const targetId = `card-${uid}`;
+
+    for (let attempt = 0; attempt < 12; attempt++) {
+        const existing = document.getElementById(targetId);
+        if (existing) {
+            openRevealedMemberCard(existing);
+            return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    try {
+        const snap = await getDoc(doc(db, 'users', uid));
+        if (!snap.exists()) {
+            showMessage('This member could not be found.', 'error', 'dashboard');
+            return;
+        }
+
+        const listContainer = document.getElementById('users-card-list');
+        if (!listContainer) return;
+
+        renderUserCard(snap.id, snap.data());
+        const newCard = document.getElementById(targetId);
+        if (newCard) {
+            listContainer.insertBefore(newCard, listContainer.firstChild);
+            openRevealedMemberCard(newCard);
+        }
+    } catch (error) {
+        console.error('Reveal member failed:', error);
+        showMessage('Unable to open this member. Please try again.', 'error', 'dashboard');
+    }
+}
+
+function openRevealedMemberCard(cardEl) {
+    const header = cardEl.querySelector('.card-header');
+    if (header && !cardEl.classList.contains('open')) header.click();
+    cardEl.classList.add('search-jump-highlight');
+    cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => cardEl.classList.remove('search-jump-highlight'), 2500);
 }

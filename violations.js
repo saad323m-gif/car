@@ -511,6 +511,7 @@ async function handleAddViolation(event) {
                 addNotificationToTransaction(transaction, createViolationNotification({
                     recipientId: userId,
                     violationId,
+                    referenceNumber: data.referenceNumber,
                     carLabel,
                     violationType: data.violationType,
                     violationAt: data.violationAt,
@@ -766,6 +767,7 @@ function renderViolationRecordHtml(record, scope) {
         : '';
     const assignee = record.userName || 'No linked driver';
     const car = record.carLabel || `${record.plateNumber || ''} ${record.plateCode || ''} ${record.emirate || ''}`.trim();
+    const vehicleTitle = car || 'Vehicle details unavailable';
     const settlementAction = canSettle
         ? `<button type="button" class="action-btn action-btn-settle" data-settle-violation="${recordId}">Mark as Settled</button>`
         : '';
@@ -773,7 +775,7 @@ function renderViolationRecordHtml(record, scope) {
     return `
         <article class="violation-record violation-card" id="violation-${recordId}">
             <button type="button" class="violation-card-summary" data-toggle-violation="${recordId}" aria-expanded="false" aria-controls="${detailsId}">
-                <span class="violation-summary-id">${escapeHtml(record.violationId || record.id)}</span>
+                <span class="violation-summary-id">${escapeHtml(vehicleTitle)}</span>
                 <span class="violation-summary-type">${escapeHtml(record.violationType || 'Violation')}</span>
                 <span class="violation-summary-time">${escapeHtml(formatDateTime(record.violationAt))}</span>
                 <span class="violation-status ${statusClass(record.matchStatus)}">${escapeHtml(matchStatusLabel(record.matchStatus))}</span>

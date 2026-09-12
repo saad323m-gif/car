@@ -61,42 +61,59 @@ export async function renderStatsView() {
         });
 
         grid.innerHTML = `
-            <div class="stat-card clickable" data-nav="members" title="View all members">
-                <div class="stat-value">${usersSnap.size}</div>
-                <div class="stat-label">Total Users</div>
-            </div>
-            <div class="stat-card success clickable" data-nav="members" title="View members">
-                <div class="stat-value">${activeUsers}</div>
-                <div class="stat-label">Active Users</div>
-            </div>
-            <div class="stat-card danger clickable" data-nav="members" title="View members">
-                <div class="stat-value">${suspendedUsers}</div>
-                <div class="stat-label">Suspended Users</div>
-            </div>
-            <div class="stat-card clickable" data-nav="cars" data-filter="all" title="View all cars">
-                <div class="stat-value">${carsSnap.size}</div>
-                <div class="stat-label">Total Cars</div>
-            </div>
-            <div class="stat-card success clickable" data-nav="cars" data-filter="assigned" title="View assigned cars">
-                <div class="stat-value">${assignedCars}</div>
-                <div class="stat-label">Assigned Cars</div>
-            </div>
-            <div class="stat-card danger clickable" data-nav="cars" data-filter="expired" title="View expired cars">
-                <div class="stat-value">${expiredCars}</div>
-                <div class="stat-label">Expired Cars</div>
-            </div>
-            <div class="stat-card warning clickable" data-nav="cars" data-filter="warning" title="View cars expiring soon">
-                <div class="stat-value">${warningCars}</div>
-                <div class="stat-label">Expiring Soon</div>
-            </div>
-            <div class="stat-card warning clickable" data-nav="requests" title="View pending requests">
-                <div class="stat-value">${requestsCountSnap.data().count}</div>
-                <div class="stat-label">Pending Requests</div>
-            </div>
-            <div class="stat-card clickable" data-nav="logs" title="View system logs">
-                <div class="stat-value">${logsCountSnap.data().count}</div>
-                <div class="stat-label">Total Log Entries</div>
-            </div>
+            <section class="stats-section">
+                <h3 class="stats-section-title">Members</h3>
+                <div class="stats-section-grid">
+                    <div class="stat-card clickable" data-nav="members" title="View all members">
+                        <div class="stat-value">${usersSnap.size}</div>
+                        <div class="stat-label">Total Users</div>
+                    </div>
+                    <div class="stat-card success clickable" data-nav="members" title="View members">
+                        <div class="stat-value">${activeUsers}</div>
+                        <div class="stat-label">Active Users</div>
+                    </div>
+                    <div class="stat-card danger clickable" data-nav="members" title="View members">
+                        <div class="stat-value">${suspendedUsers}</div>
+                        <div class="stat-label">Suspended Users</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="stats-section">
+                <h3 class="stats-section-title">Fleet</h3>
+                <div class="stats-section-grid">
+                    <div class="stat-card clickable" data-nav="cars" data-filter="all" title="View all cars">
+                        <div class="stat-value">${carsSnap.size}</div>
+                        <div class="stat-label">Total Cars</div>
+                    </div>
+                    <div class="stat-card success clickable" data-nav="cars" data-filter="assigned" title="View assigned cars">
+                        <div class="stat-value">${assignedCars}</div>
+                        <div class="stat-label">Assigned Cars</div>
+                    </div>
+                    <div class="stat-card danger clickable" data-nav="cars" data-filter="expired" title="View expired cars">
+                        <div class="stat-value">${expiredCars}</div>
+                        <div class="stat-label">Expired Cars</div>
+                    </div>
+                    <div class="stat-card warning clickable" data-nav="cars" data-filter="warning" title="View cars expiring soon">
+                        <div class="stat-value">${warningCars}</div>
+                        <div class="stat-label">Expiring Soon</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="stats-section">
+                <h3 class="stats-section-title">Activity</h3>
+                <div class="stats-section-grid">
+                    <div class="stat-card warning clickable" data-nav="requests" title="View pending requests">
+                        <div class="stat-value">${requestsCountSnap.data().count}</div>
+                        <div class="stat-label">Pending Requests</div>
+                    </div>
+                    <div class="stat-card clickable" data-nav="logs" title="View system logs">
+                        <div class="stat-value">${logsCountSnap.data().count}</div>
+                        <div class="stat-label">Total Log Entries</div>
+                    </div>
+                </div>
+            </section>
         `;
 
         grid.querySelectorAll('.stat-card.clickable').forEach(card => {

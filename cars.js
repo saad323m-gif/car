@@ -1151,3 +1151,61 @@ async function handleUnassignUser(carId, data) {
         showMessage('Could not unassign this car. Please try again.', 'error', 'dashboard');
     }
 }
+
+/* -------------------- Reveal a specific car (Search / Notifications bridge) -------------------- */
+
+/**
+ * Opens the Cars view (already rendered by the caller) and reveals the card
+ * for a specific car, even if it is not part of the currently loaded page.
+ * Used by the "Open" action in Search results and the "View Vehicle" action
+ * in Notifications, so the user lands directly on the matching record
+ * instead of having to scroll through pages manually.
+ */
+export function revealCarById(carId) {
+    if (!carId) return;
+    revealCarCard(carId, isAdmin(currentUserData));
+}
+
+async function revealCarCard(carId, adminView) {
+    const targetId = `card-${carId}`;
+
+    // The freshly-rendered list is already fetching its first page; give it
+    // a short window to land in the DOM before falling back to a direct read.
+    for (let attempt = 0; attempt < 12; attempt++) {
+        const existing = document.getElementById(targetId);
+        if (existing) {
+            openRevealedCard(existing);
+            return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    try {
+        const snap = await getDoc(doc(db, 'cars', carId));
+        if (!snap.exists()) {
+            showMessage('This car could not be found.', 'error', 'dashboard');
+            return;
+        }
+
+        const listContainer = document.getElementById('cars-card-list');
+        if (!listContainer) return;
+
+        renderCarCard(snap.id, snap.data(), !adminView);
+        const newCard = document.getElementById(targetId);
+        if (newCard) {
+            listContainer.insertBefore(newCard, listContainer.firstChild);
+            openRevealedCard(newCard);
+        }
+    } catch (error) {
+        console.error('Reveal car failed:', error);
+        showMessage('Unable to open this car. It may no longer be linked to your account.', 'error', 'dashboard');
+    }
+}
+
+function openRevealedCard(cardEl) {
+    const header = cardEl.querySelector('.card-header');
+    if (header && !cardEl.classList.contains('open')) header.click();
+    cardEl.classList.add('search-jump-highlight');
+    cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => cardEl.classList.remove('search-jump-highlight'), 2500);
+}
