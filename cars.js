@@ -771,7 +771,7 @@ function handlePrintCard(data) {
         .print-header { border-bottom: 2px solid #1976d2; margin-bottom: 16px; padding-bottom: 10px; }
         .print-header h2 { margin: 0; color: #1565c0; font-size: 18px; }
         h3 { margin: 12px 0; font-size: 15px; word-break: break-word; }
-        .plate-container { display: inline-grid; grid-template-columns: 76px 1fr auto; align-items: center; gap: 14px; min-width: 300px; border: 2px solid #d9262e; border-radius: 8px; padding: 10px 18px; margin: 16px 0; }
+        .plate-container { display: inline-grid; grid-template-columns: auto 76px 1fr; align-items: center; gap: 14px; min-width: 300px; border: 2px solid #d9262e; border-radius: 8px; padding: 10px 18px; margin: 16px 0; }
         .plate-emirate { color: #1c5c98; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-align: center; text-transform: uppercase; white-space: nowrap; }
         .plate-number { font-family: 'Courier New', monospace; font-size: 28px; font-weight: bold; letter-spacing: 3px; font-variant-numeric: tabular-nums; text-align: center; display: inline-block; white-space: nowrap; }
         .plate-code { font-family: 'Courier New', monospace; font-size: 22px; font-weight: bold; color: #fff; background: #d9262e; padding: 2px 8px; border-radius: 4px; letter-spacing: 2px; white-space: nowrap; }
@@ -789,9 +789,9 @@ function handlePrintCard(data) {
     </div>
     <h3>${safe(label)}</h3>
     <div class="plate-container">
+        <span class="plate-code">${safe(data.plateCode)}</span>
         <span class="plate-emirate">${safe(data.emirate || 'UAE')}</span>
         <span class="plate-number">${safe(data.plateNumber)}</span>
-        <span class="plate-code">${safe(data.plateCode)}</span>
     </div>
     <div class="details">
         <div class="detail-row"><span class="detail-label">${safe(t('Owner Name'))}:</span> <span class="detail-value">${safe(data.ownerName)}</span></div>
